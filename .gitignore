@@ -30,8 +30,16 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files (never commit secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# FCM / Firebase private keys (google-services.json is OK to commit)
+*-firebase-adminsdk*.json
+fcm-service-account*.json
 
 # typescript
 *.tsbuildinfo

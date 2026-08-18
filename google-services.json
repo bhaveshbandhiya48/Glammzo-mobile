@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "590501994176",
+    "project_id": "glammzo-mobile",
+    "storage_bucket": "glammzo-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:590501994176:android:d357adb0da9ef6b3cf9725",
+        "android_client_info": {
+          "package_name": "com.glammzo.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBkAFREbUF-c655k905r8NePJm58z-7UI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -9,7 +9,6 @@ export const BUSINESS_TYPES = [
   "Unisex Salon",
   "Beauty Parlour",
   "Spa",
-  "Barber Shop",
   "Nail Art Studio",
   "Yoga Center",
 ] as const
@@ -26,7 +25,6 @@ export const BUSINESS_TYPE_ITEMS: BusinessTypeItem[] = [
   { label: "Unisex Salon", icon: "people-outline" },
   { label: "Beauty Parlour", icon: "sparkles-outline" },
   { label: "Spa", icon: "leaf-outline" },
-  { label: "Barber Shop", icon: "man-outline" },
   { label: "Nail Art Studio", icon: "hand-left-outline" },
   { label: "Yoga Center", icon: "body-outline" },
 ]

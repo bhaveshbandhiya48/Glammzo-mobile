@@ -353,7 +353,7 @@ export const mockSalons: Salon[] = [
     rating: 4.7,
     reviews: 128,
     distanceKm: 3.4,
-    businessType: "Barber Shop",
+    businessType: "Unisex Salon",
     isOpenNow: true,
     priceFrom: 299,
     shortDescription: "Fades, beard work, and quick chair turns.",

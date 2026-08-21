@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   imageCard: {
-    borderRadius: radii.xl,
+    borderRadius: radii.md,
     overflow: "hidden",
     backgroundColor: colors.muted,
     borderWidth: StyleSheet.hairlineWidth,

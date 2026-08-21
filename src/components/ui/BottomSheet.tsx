@@ -10,6 +10,8 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -37,6 +39,8 @@ type Props = {
 }
 
 const WINDOW_HEIGHT = Dimensions.get("window").height
+const DISMISS_DISTANCE = 80
+const DISMISS_VELOCITY = 0.9
 
 function CloseButton({ onPress }: { onPress: () => void }) {
   return (
@@ -67,6 +71,8 @@ export function BottomSheet({
   const insets = useSafeAreaInsets()
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const dragY = useRef(new Animated.Value(0)).current
+  const scrollOffsetRef = useRef(0)
+  const closingRef = useRef(false)
 
   useEffect(() => {
     if (!visible) {
@@ -106,46 +112,103 @@ export function BottomSheet({
 
   useEffect(() => {
     if (!visible) {
+      closingRef.current = false
+      scrollOffsetRef.current = 0
       dragY.setValue(0)
     }
   }, [dragY, visible])
 
-  const panResponder = useMemo(
+  function finishClose() {
+    if (closingRef.current) return
+    closingRef.current = true
+    onClose()
+  }
+
+  function snapBack() {
+    Animated.spring(dragY, {
+      toValue: 0,
+      bounciness: 0,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  function dismissWithDrag(currentY: number) {
+    Animated.timing(dragY, {
+      toValue: Math.max(currentY, WINDOW_HEIGHT * 0.35),
+      duration: 160,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        dragY.setValue(0)
+        finishClose()
+      }
+    })
+  }
+
+  // Drag from the handle — capture immediately so the sheet feels swipeable.
+  const handlePanResponder = useMemo(
     () =>
       PanResponder.create({
+        onStartShouldSetPanResponder: () => !keyboardOpen,
         onMoveShouldSetPanResponder: (_event, gesture) =>
-          Math.abs(gesture.dy) > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+          !keyboardOpen &&
+          gesture.dy > 4 &&
+          Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_event, gesture) => {
           dragY.setValue(Math.max(0, gesture.dy))
         },
         onPanResponderRelease: (_event, gesture) => {
-          if (gesture.dy > 90 || gesture.vy > 1.1) {
-            Animated.timing(dragY, {
-              toValue: Math.max(gesture.dy, 180),
-              duration: 140,
-              useNativeDriver: true,
-            }).start(() => {
-              dragY.setValue(0)
-              onClose()
-            })
+          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+            dismissWithDrag(gesture.dy)
             return
           }
-          Animated.spring(dragY, {
-            toValue: 0,
-            bounciness: 0,
-            useNativeDriver: true,
-          }).start()
+          snapBack()
         },
-        onPanResponderTerminate: () => {
-          Animated.spring(dragY, {
-            toValue: 0,
-            bounciness: 0,
-            useNativeDriver: true,
-          }).start()
-        },
+        onPanResponderTerminate: snapBack,
       }),
-    [dragY, onClose],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragY, keyboardOpen, onClose],
   )
+
+  // Drag from the title row (not the close button) or body when scrolled to top.
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) => {
+          if (keyboardOpen || closingRef.current) return false
+          const pullingDown =
+            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+          if (!pullingDown) return false
+          return !scroll || scrollOffsetRef.current <= 0
+        },
+        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+          if (keyboardOpen || closingRef.current) return false
+          const pullingDown =
+            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+          if (!pullingDown) return false
+          return !scroll || scrollOffsetRef.current <= 0
+        },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_event, gesture) => {
+          dragY.setValue(Math.max(0, gesture.dy))
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+            dismissWithDrag(gesture.dy)
+            return
+          }
+          snapBack()
+        },
+        onPanResponderTerminate: snapBack,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragY, keyboardOpen, onClose, scroll],
+  )
+
+  function onBodyScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    scrollOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y)
+  }
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -161,9 +224,12 @@ export function BottomSheet({
               transform: [{ translateY: dragY }],
             },
           ]}
+          {...sheetPanResponder.panHandlers}
         >
-          <View {...panResponder.panHandlers}>
-            <View style={styles.handle} />
+          <View style={styles.chrome}>
+            <View style={styles.handleHit} {...handlePanResponder.panHandlers}>
+              <View style={styles.handle} />
+            </View>
 
             {!searchMode ? (
               <View style={styles.header}>
@@ -194,6 +260,8 @@ export function BottomSheet({
               showsVerticalScrollIndicator={false}
               bounces
               nestedScrollEnabled
+              scrollEventThrottle={16}
+              onScroll={onBodyScroll}
             >
               {children}
             </ScrollView>
@@ -224,15 +292,22 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.sm,
+  },
+  chrome: {
+    paddingBottom: spacing.xs,
+  },
+  handleHit: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
   },
   handle: {
-    alignSelf: "center",
     width: 40,
     height: 4,
     borderRadius: radii.pill,
     backgroundColor: colors.sand,
-    marginBottom: spacing.md,
   },
   header: {
     flexDirection: "row",

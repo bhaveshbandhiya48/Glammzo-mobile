@@ -59,6 +59,9 @@ export default function ServicesScreen() {
           const { salons } = await fetchSalons()
           if (!active) return
           setCounts(countsForLocation(salons, saved))
+        } catch {
+          if (!active) return
+          setCounts(countsForLocation(getCatalogSnapshot(), saved))
         } finally {
           if (active) setLoading(false)
         }

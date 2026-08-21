@@ -15,6 +15,7 @@ export type CreateBookingInput = {
   promoCode?: string
   useWallet?: boolean
   useFreeService?: boolean
+  marketingOptIn?: boolean
 }
 
 export async function fetchBookings(): Promise<Booking[]> {

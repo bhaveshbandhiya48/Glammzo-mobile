@@ -28,6 +28,7 @@ import { SalonCard } from "@/components/ui/SalonCard"
 import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { useCart } from "@/context/CartContext"
+import { useNetwork } from "@/context/NetworkContext"
 import {
   BUSINESS_TYPE_ITEMS,
   countSalonsByBusinessType,
@@ -68,7 +69,7 @@ import {
   reverseGeocode,
   type PlacePrediction,
 } from "@/lib/location-api"
-import { fetchSalons, getCatalogSnapshot, resolveSalonById } from "@/lib/salons-api"
+import { fetchSalons, getCatalogSnapshot, hydrateCatalogFromStorage, resolveSalonById } from "@/lib/salons-api"
 import {
   getPopularSearches,
   getSearchSuggestions,
@@ -109,6 +110,7 @@ export default function ExploreScreen() {
   const insets = useSafeAreaInsets()
   const { category: categoryParam } = useLocalSearchParams<{ category?: string }>()
   const cart = useCart()
+  const { isOffline } = useNetwork()
   const [username, setUsername] = useState("Guest")
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null)
   const [locationMode, setLocationMode] = useState<LocationBrowseMode>("nearby")
@@ -135,7 +137,10 @@ export default function ExploreScreen() {
   const [activeCartSalonId, setActiveCartSalonId] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<Salon[]>([])
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogError, setCatalogError] = useState<string | null>(null)
   const [offerBanners, setOfferBanners] = useState<PromoBannerItem[]>([])
+  const catalogRequest = useRef(0)
+  const wasOffline = useRef(false)
 
   const locationReady = savedLocation != null
   const location = savedLocation?.label ?? "Locating…"
@@ -187,6 +192,43 @@ export default function ExploreScreen() {
     })
   }, [])
 
+  const loadCatalog = useCallback(async (force = false) => {
+    const requestId = ++catalogRequest.current
+    await hydrateCatalogFromStorage()
+    if (requestId !== catalogRequest.current) return
+
+    const cached = getCatalogSnapshot()
+    if (cached.length > 0) {
+      setCatalog(cached)
+      setCatalogLoading(false)
+    } else {
+      setCatalogLoading(true)
+    }
+
+    try {
+      const { salons: next } = await fetchSalons({ force })
+      if (requestId !== catalogRequest.current) return
+      setCatalog(next)
+      setCatalogError(null)
+    } catch (error) {
+      if (requestId !== catalogRequest.current) return
+      console.warn("[Glammzo] explore catalog load failed", error)
+      const fallback = getCatalogSnapshot()
+      if (fallback.length > 0) {
+        setCatalog(fallback)
+        setCatalogError(null)
+        return
+      }
+      setCatalogError(
+        error instanceof ApiError && error.status === 408
+          ? "Connection timed out. Try again."
+          : "Couldn't load salons. Check your connection and try again.",
+      )
+    } finally {
+      if (requestId === catalogRequest.current) setCatalogLoading(false)
+    }
+  }, [])
+
   useFocusEffect(
     useCallback(() => {
       let cancelled = false
@@ -202,32 +244,20 @@ export default function ExploreScreen() {
         if (!cancelled) setUsername(name)
       })()
 
-      // Show cached salons immediately so we don't stick on skeleton.
-      const cached = getCatalogSnapshot()
-      if (cached.length > 0) {
-        setCatalog(cached)
-        setCatalogLoading(false)
-      } else {
-        setCatalogLoading(true)
-      }
-
-      void fetchSalons()
-        .then(({ salons: next }) => {
-          if (cancelled) return
-          setCatalog(next)
-        })
-        .catch((error) => {
-          console.warn("[Glammzo] explore catalog load failed", error)
-        })
-        .finally(() => {
-          if (!cancelled) setCatalogLoading(false)
-        })
+      void loadCatalog()
 
       return () => {
         cancelled = true
       }
-    }, []),
+    }, [loadCatalog]),
   )
+
+  useEffect(() => {
+    if (wasOffline.current && !isOffline) {
+      void loadCatalog(true)
+    }
+    wasOffline.current = isOffline
+  }, [isOffline, loadCatalog])
 
   useEffect(() => {
     let active = true
@@ -887,6 +917,12 @@ export default function ExploreScreen() {
 
           {(catalogLoading && catalog.length === 0) || !locationReady ? (
             <ExploreSalonsSkeleton count={4} />
+          ) : catalogError && catalog.length === 0 ? (
+            <LocationEmptyState
+              variant="network"
+              message={catalogError}
+              onRetry={() => void loadCatalog(true)}
+            />
           ) : showLocationEmpty && locationResult.emptyKind !== "none" ? (
             <LocationEmptyState
               kind={locationResult.emptyKind}

@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  Animated,
   Dimensions,
   Keyboard,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -37,6 +41,8 @@ type Props = {
 const WINDOW_HEIGHT = Dimensions.get("window").height
 const COLLAPSED_HEIGHT = Math.min(WINDOW_HEIGHT * 0.58, 500)
 const TOP_MARGIN = WINDOW_HEIGHT * 0.2
+const DISMISS_DISTANCE = 80
+const DISMISS_VELOCITY = 0.9
 
 /**
  * Search focus: same UI, sheet pulls under a 20% top margin immediately.
@@ -61,11 +67,17 @@ export function LocationPickerSheet({
   const inputRef = useRef<TextInput>(null)
   const [searchFocused, setSearchFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const dragY = useRef(new Animated.Value(0)).current
+  const scrollOffsetRef = useRef(0)
+  const closingRef = useRef(false)
 
   useEffect(() => {
     if (!visible) {
       setSearchFocused(false)
       setKeyboardHeight(0)
+      closingRef.current = false
+      scrollOffsetRef.current = 0
+      dragY.setValue(0)
       return
     }
 
@@ -83,12 +95,100 @@ export function LocationPickerSheet({
       showSub.remove()
       hideSub.remove()
     }
-  }, [visible])
+  }, [dragY, visible])
 
   function handleClose() {
+    if (closingRef.current) return
+    closingRef.current = true
     Keyboard.dismiss()
     setSearchFocused(false)
     onClose()
+  }
+
+  function snapBack() {
+    Animated.spring(dragY, {
+      toValue: 0,
+      bounciness: 0,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  function dismissWithDrag(currentY: number) {
+    Animated.timing(dragY, {
+      toValue: Math.max(currentY, WINDOW_HEIGHT * 0.35),
+      duration: 160,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        dragY.setValue(0)
+        handleClose()
+      }
+    })
+  }
+
+  const keyboardOpen = keyboardHeight > 0
+
+  const handlePanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !keyboardOpen,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          !keyboardOpen &&
+          gesture.dy > 4 &&
+          Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_event, gesture) => {
+          dragY.setValue(Math.max(0, gesture.dy))
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+            dismissWithDrag(gesture.dy)
+            return
+          }
+          snapBack()
+        },
+        onPanResponderTerminate: snapBack,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragY, keyboardOpen, onClose],
+  )
+
+  const sheetPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) => {
+          if (keyboardOpen || closingRef.current) return false
+          const pullingDown =
+            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+          if (!pullingDown) return false
+          return scrollOffsetRef.current <= 0
+        },
+        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
+          if (keyboardOpen || closingRef.current) return false
+          const pullingDown =
+            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
+          if (!pullingDown) return false
+          return scrollOffsetRef.current <= 0
+        },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_event, gesture) => {
+          dragY.setValue(Math.max(0, gesture.dy))
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+            dismissWithDrag(gesture.dy)
+            return
+          }
+          snapBack()
+        },
+        onPanResponderTerminate: snapBack,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dragY, keyboardOpen, onClose],
+  )
+
+  function onBodyScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    scrollOffsetRef.current = Math.max(0, event.nativeEvent.contentOffset.y)
   }
 
   const typing = query.trim().length > 0
@@ -121,7 +221,7 @@ export function LocationPickerSheet({
       >
         <Pressable style={styles.backdrop} onPress={handleClose} />
 
-        <View
+        <Animated.View
           style={[
             styles.sheet,
             pulledUp
@@ -130,23 +230,29 @@ export function LocationPickerSheet({
                   height: COLLAPSED_HEIGHT,
                   paddingBottom: Math.max(insets.bottom, spacing.lg),
                 },
+            { transform: [{ translateY: dragY }] },
           ]}
+          {...sheetPanResponder.panHandlers}
         >
-          <View style={styles.handle} />
+          <View style={styles.chrome}>
+            <View style={styles.handleHit} {...handlePanResponder.panHandlers}>
+              <View style={styles.handle} />
+            </View>
 
-          <View style={styles.header}>
-            <Text variant="heading" style={styles.title}>
-              Select location
-            </Text>
-            <Pressable
-              onPress={handleClose}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-              style={styles.iconBtn}
-            >
-              <Icon name="close" size={22} color={colors.text} />
-            </Pressable>
+            <View style={styles.header}>
+              <Text variant="heading" style={styles.title}>
+                Select location
+              </Text>
+              <Pressable
+                onPress={handleClose}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={styles.iconBtn}
+              >
+                <Icon name="close" size={22} color={colors.text} />
+              </Pressable>
+            </View>
           </View>
 
           <View style={styles.searchField}>
@@ -194,6 +300,8 @@ export function LocationPickerSheet({
             showsVerticalScrollIndicator={false}
             bounces
             nestedScrollEnabled
+            scrollEventThrottle={16}
+            onScroll={onBodyScroll}
           >
             {placesError ? (
               <Text variant="caption" color={colors.destructive} style={styles.error}>
@@ -325,7 +433,7 @@ export function LocationPickerSheet({
               </>
             )}
           </ScrollView>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   )
@@ -352,13 +460,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: spacing.md,
   },
+  chrome: {
+    paddingBottom: spacing.xs,
+  },
+  handleHit: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   handle: {
-    alignSelf: "center",
     width: 40,
     height: 4,
     borderRadius: radii.pill,
     backgroundColor: colors.sand,
-    marginBottom: spacing.md,
   },
   header: {
     flexDirection: "row",

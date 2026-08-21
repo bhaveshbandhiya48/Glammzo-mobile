@@ -1,3 +1,5 @@
+import AsyncStorage from "@react-native-async-storage/async-storage"
+
 import { getSalonById as getMockSalonById, mockSalons } from "@/data/mocks/salons"
 import type {
   Salon,
@@ -7,9 +9,10 @@ import type {
   SalonReview,
   SalonService,
 } from "@/data/types"
-import { apiFetch } from "@/lib/api"
+import { ApiError, apiFetch } from "@/lib/api"
 
 const CACHE_TTL_MS = 60_000
+const CATALOG_STORAGE_KEY = "glammzo_salon_catalog_v1"
 
 type CacheEntry = {
   at: number
@@ -334,13 +337,74 @@ export function mapWebSalonToMobile(raw: WebSalon): Salon | null {
   }
 }
 
-function setCache(salons: Salon[], source: "live" | "mock"): Salon[] {
-  cache = { at: Date.now(), salons, source }
+function setCache(salons: Salon[], source: "live" | "mock", at = Date.now()): Salon[] {
+  cache = { at, salons, source }
   return salons
 }
 
 function cacheFresh(): boolean {
   return cache != null && Date.now() - cache.at < CACHE_TTL_MS
+}
+
+function parseStoredCatalog(raw: string): Salon[] | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!parsed || typeof parsed !== "object") return null
+    const salons = (parsed as { salons?: unknown }).salons
+    if (!Array.isArray(salons) || salons.length === 0) return null
+    const valid = salons.filter((row): row is Salon => {
+      if (!row || typeof row !== "object") return false
+      const salon = row as Salon
+      return (
+        typeof salon.id === "string" &&
+        salon.id.length > 0 &&
+        typeof salon.name === "string" &&
+        Array.isArray(salon.services)
+      )
+    })
+    return valid.length > 0 ? valid : null
+  } catch {
+    return null
+  }
+}
+
+let hydratePromise: Promise<void> | null = null
+
+/** Load last successful live catalog from disk into memory. Does not network. */
+export function hydrateCatalogFromStorage(): Promise<void> {
+  if (cache) return Promise.resolve()
+  if (!hydratePromise) {
+    hydratePromise = (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(CATALOG_STORAGE_KEY)
+        if (!raw || cache) return
+        const salons = parseStoredCatalog(raw)
+        if (!salons) return
+        // `at: 0` so TTL is stale and a live refetch still runs.
+        setCache(salons, "live", 0)
+      } catch (error) {
+        console.warn("[Glammzo] catalog disk hydrate failed", error)
+      } finally {
+        if (!cache) hydratePromise = null
+      }
+    })()
+  }
+  return hydratePromise
+}
+
+async function persistLiveCatalog(salons: Salon[]) {
+  try {
+    if (salons.length === 0) {
+      await AsyncStorage.removeItem(CATALOG_STORAGE_KEY)
+      return
+    }
+    await AsyncStorage.setItem(
+      CATALOG_STORAGE_KEY,
+      JSON.stringify({ savedAt: Date.now(), salons }),
+    )
+  } catch (error) {
+    console.warn("[Glammzo] catalog disk persist failed", error)
+  }
 }
 
 /** Sync resolve: live cache first, then mocks in __DEV__ only (cart strip / sheets). */
@@ -358,19 +422,21 @@ export function getCatalogSnapshot(): Salon[] {
 
 export type FetchSalonsResult = {
   salons: Salon[]
-  source: "live" | "mock"
+  source: "live" | "mock" | "disk"
+  fromCache: boolean
 }
 
 /**
  * Fetch published salons from Glammzo-web `GET /api/salons`.
- * Shared in-memory cache (~60s).
+ * Shared in-memory cache (~60s) plus last-good catalog on disk.
  * Mock fallback is __DEV__ only — production builds never show fake salons.
  */
 export async function fetchSalons(options?: {
   force?: boolean
 }): Promise<FetchSalonsResult> {
+  await hydrateCatalogFromStorage()
   if (!options?.force && cacheFresh() && cache) {
-    return { salons: cache.salons, source: cache.source }
+    return { salons: cache.salons, source: cache.source, fromCache: false }
   }
 
   try {
@@ -383,16 +449,27 @@ export async function fetchSalons(options?: {
       .filter((salon): salon is Salon => salon != null)
     // Empty catalog is still live so UI can show a real empty state
     setCache(salons, "live")
-    return { salons, source: "live" }
+    void persistLiveCatalog(salons)
+    return { salons, source: "live", fromCache: false }
   } catch (error) {
+    if (cache && cache.salons.length > 0) {
+      // Refresh TTL so tab focus does not wait 12s on every visit while offline.
+      setCache(cache.salons, cache.source)
+      console.warn("[Glammzo] salons API failed; using cached catalog", error)
+      return {
+        salons: cache.salons,
+        source: cache.source === "mock" ? "mock" : "disk",
+        fromCache: true,
+      }
+    }
     if (__DEV__) {
       console.warn("[Glammzo] salons API failed; using mocks", error)
       const salons = setCache(mockSalons, "mock")
-      return { salons, source: "mock" }
+      return { salons, source: "mock", fromCache: true }
     }
     console.warn("[Glammzo] salons API failed", error)
-    const salons = setCache([], "live")
-    return { salons, source: "live" }
+    if (error instanceof ApiError) throw error
+    throw new ApiError(0, "Could not load salons. Check your connection and try again.")
   }
 }
 
@@ -401,12 +478,17 @@ export async function fetchSalons(options?: {
  * Mock id fallback is __DEV__ only.
  */
 export async function getSalonByIdLive(id: string): Promise<Salon | undefined> {
+  await hydrateCatalogFromStorage()
   const cached = cache?.salons.find((salon) => salon.id === id)
   if (cached) return cached
 
-  const { salons } = await fetchSalons({ force: !cacheFresh() })
-  const found = salons.find((salon) => salon.id === id)
-  if (found) return found
+  try {
+    const { salons } = await fetchSalons({ force: !cacheFresh() })
+    const found = salons.find((salon) => salon.id === id)
+    if (found) return found
+  } catch (error) {
+    console.warn("[Glammzo] salon lookup failed", error)
+  }
 
   if (__DEV__) {
     return getMockSalonById(id)

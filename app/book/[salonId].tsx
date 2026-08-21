@@ -110,6 +110,7 @@ export default function BookingScreen() {
   const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
   const [walletBalance, setWalletBalance] = useState(0)
   const [phoneMissing, setPhoneMissing] = useState(false)
+  const [marketingOptIn, setMarketingOptIn] = useState(true)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
 
   useEffect(() => {
@@ -549,6 +550,7 @@ export default function BookingScreen() {
         promoCode: appliedPromoCode || undefined,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
+        marketingOptIn,
       })
       // Keep profile in sync when the guest adds/updates email at checkout.
       void syncProfileEmailFromBooking(email)
@@ -654,6 +656,15 @@ export default function BookingScreen() {
                 </Text>
                 <Text variant="bodyStrong">₹{selectedPackage.packagePrice}</Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${selectedPackage.name}`}
+                hitSlop={8}
+                onPress={() => cart.setPackage(salon.id, null)}
+                style={styles.removeBtn}
+              >
+                <Icon name="close" size={16} color={colors.textSubtle} />
+              </Pressable>
             </View>
           ) : null}
 
@@ -672,6 +683,15 @@ export default function BookingScreen() {
                 </Text>
                 <Text variant="bodyStrong">₹{service.price}</Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${service.name}`}
+                hitSlop={8}
+                onPress={() => cart.toggleService(salon.id, service.id)}
+                style={styles.removeBtn}
+              >
+                <Icon name="close" size={16} color={colors.textSubtle} />
+              </Pressable>
             </View>
           ))}
 
@@ -723,6 +743,31 @@ export default function BookingScreen() {
             placeholder="you@email.com"
             hint="We'll send your invoice to this email."
           />
+          <Pressable
+            onPress={() => setMarketingOptIn((value) => !value)}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: marketingOptIn }}
+            accessibilityLabel={`Send me offers and updates from ${salon.name} on WhatsApp`}
+            style={({ pressed }) => [
+              styles.optInRow,
+              marketingOptIn && styles.optInRowActive,
+              pressed && styles.optInPressed,
+            ]}
+          >
+            <Icon
+              name={marketingOptIn ? "checkbox" : "square-outline"}
+              size={22}
+              color={marketingOptIn ? colors.coral : colors.textSubtle}
+            />
+            <View style={styles.optInCopy}>
+              <Text variant="bodyStrong">
+                Send me offers and updates from {salon.name} on WhatsApp
+              </Text>
+              <Text variant="caption" muted>
+                Promotional messages only. Booking confirmations and reminders are always sent when you book.
+              </Text>
+            </View>
+          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -1164,6 +1209,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
     color: colors.textMuted,
   },
+  optInRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  optInRowActive: {
+    borderColor: colors.coral,
+    backgroundColor: "#FFF7F5",
+  },
+  optInPressed: {
+    opacity: 0.94,
+  },
+  optInCopy: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
   card: {
     marginTop: spacing.xl,
     gap: spacing.md,
@@ -1212,6 +1279,14 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     minWidth: 0,
+  },
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.muted,
   },
   chips: {
     flexDirection: "row",

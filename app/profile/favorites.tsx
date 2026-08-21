@@ -9,7 +9,7 @@ import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { useFavorites } from "@/context/FavoritesContext"
 import type { Salon } from "@/data/types"
-import { fetchSalons } from "@/lib/salons-api"
+import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 export default function FavoritesScreen() {
@@ -26,6 +26,10 @@ export default function FavoritesScreen() {
         .then(([, { salons }]) => {
           if (cancelled) return
           setCatalog(salons)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setCatalog(getCatalogSnapshot())
         })
         .finally(() => {
           if (!cancelled) setLoading(false)

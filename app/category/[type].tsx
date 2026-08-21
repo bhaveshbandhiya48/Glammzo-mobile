@@ -82,6 +82,10 @@ export default function CategorySalonsScreen() {
           const { salons } = await fetchSalons()
           if (!active) return
           setCatalog(salons)
+        } catch {
+          if (!active) return
+          const fallback = getCatalogSnapshot()
+          if (fallback.length > 0) setCatalog(fallback)
         } finally {
           if (active) setLoading(false)
         }

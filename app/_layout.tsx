@@ -6,9 +6,11 @@ import { useCallback, useEffect, useState } from "react"
 import { View } from "react-native"
 
 import { AnimatedSplash } from "@/components/brand/AnimatedSplash"
+import { OfflineBanner } from "@/components/layout/OfflineBanner"
 import { ProfileStackHeader } from "@/components/layout/ProfileStackHeader"
 import { CartProvider } from "@/context/CartContext"
 import { FavoritesProvider } from "@/context/FavoritesContext"
+import { NetworkProvider } from "@/context/NetworkContext"
 import { NotificationsProvider } from "@/context/NotificationsContext"
 import { useLaunchPermissions } from "@/hooks/useLaunchPermissions"
 import { usePushRegistration } from "@/hooks/usePushRegistration"
@@ -131,7 +133,12 @@ export default function RootLayout() {
         <CartProvider>
           <FavoritesProvider>
             <NotificationsProvider>
-              <RootNavigator />
+              <NetworkProvider>
+                <View style={{ flex: 1 }}>
+                  <RootNavigator />
+                  <OfflineBanner />
+                </View>
+              </NetworkProvider>
             </NotificationsProvider>
           </FavoritesProvider>
         </CartProvider>

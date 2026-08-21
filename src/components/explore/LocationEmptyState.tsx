@@ -14,6 +14,8 @@ type LocationProps = {
   onBrowseCity?: () => void
   onChangeLocation: () => void
   onClearFilters?: never
+  onRetry?: never
+  message?: never
 }
 
 type FilterProps = {
@@ -23,11 +25,49 @@ type FilterProps = {
   onBrowseCity?: never
   onChangeLocation?: never
   onClearFilters: () => void
+  onRetry?: never
+  message?: never
 }
 
-type Props = LocationProps | FilterProps
+type NetworkProps = {
+  variant: "network"
+  kind?: never
+  cityLabel?: never
+  onBrowseCity?: never
+  onChangeLocation?: never
+  onClearFilters?: never
+  onRetry: () => void
+  message?: string
+}
+
+type Props = LocationProps | FilterProps | NetworkProps
 
 export function LocationEmptyState(props: Props) {
+  if (props.variant === "network") {
+    return (
+      <View style={styles.wrap}>
+        <Image
+          source={EMPTY_MASCOT}
+          style={styles.mascot}
+          resizeMode="contain"
+          accessibilityLabel="Glammzo mascot"
+        />
+
+        <Text variant="heading" style={styles.title}>
+          Couldn&apos;t load salons
+        </Text>
+
+        <Text muted style={styles.body}>
+          {props.message ?? "Check your connection and try again."}
+        </Text>
+
+        <View style={styles.actions}>
+          <Button label="Try again" onPress={props.onRetry} />
+        </View>
+      </View>
+    )
+  }
+
   if (props.variant === "filters") {
     return (
       <View style={styles.wrap}>

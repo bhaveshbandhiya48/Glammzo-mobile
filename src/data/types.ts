@@ -53,6 +53,12 @@ export type SalonAmenities = {
   categories: SalonAmenityCategory[]
 }
 
+export type SalonTaxInfo = {
+  enabled: boolean
+  ratePercent: number
+  gstNumber: string
+}
+
 export type SalonReview = {
   id: string
   authorName: string
@@ -87,6 +93,7 @@ export type Salon = {
   description: string
   address: string
   phone: string
+  whatsappPhone?: string
   hours: string
   services: SalonService[]
   packages: SalonPackage[]
@@ -94,7 +101,9 @@ export type Salon = {
   gallery: string[]
   amenities?: SalonAmenities
   customerReviews?: SalonReview[]
-  team: { id: string; name: string; role: string }[]
+  team: { id: string; name: string; role: string; bio?: string; imageUrl?: string }[]
+  /** Present when salon GST is enabled with a GSTIN. */
+  tax?: SalonTaxInfo | null
 }
 
 export type BookingStatus =

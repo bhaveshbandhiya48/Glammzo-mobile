@@ -42,6 +42,7 @@ import { LEGAL } from "@/lib/legal"
 import { bestOfferForService, formatOfferDiscountBadge } from "@/lib/offer-badges"
 import { resolvePackageBadge } from "@/lib/package-badges"
 import { getSavedLocation } from "@/lib/user"
+import { salonWhatsAppUrl } from "@/lib/whatsapp"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 const PACKAGES_CATEGORY = "Packages"
@@ -208,6 +209,16 @@ export default function SalonDetailScreen() {
     : selectedServices.reduce((sum, service) => sum + service.price, 0)
 
   const slides = useMemo(() => (salon ? getSalonHeroSlides(salon, 5) : []), [salon])
+  const whatsappUrl = useMemo(
+    () =>
+      salon
+        ? salonWhatsAppUrl(
+            salon.whatsappPhone,
+            `Hi ${salon.name}, I found you on Glammzo and would like to enquire.`,
+          )
+        : null,
+    [salon],
+  )
   const amenityRows = useMemo(() => flattenAmenities(salon?.amenities).slice(0, 10), [salon])
   const customerReviews = salon?.customerReviews ?? []
   const serviceGroups = useMemo(() => {
@@ -466,6 +477,16 @@ export default function SalonDetailScreen() {
             >
               <Icon name="call-outline" size={20} color={colors.text} />
             </Pressable>
+            {whatsappUrl ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="WhatsApp"
+                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
+                onPress={() => void Linking.openURL(whatsappUrl)}
+              >
+                <Icon name="logo-whatsapp" size={22} color="#25D366" />
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Directions"
@@ -925,16 +946,30 @@ export default function SalonDetailScreen() {
               </Text>
               {salon.team.map((member) => (
                 <View key={member.id} style={styles.teamCard}>
-                  <View style={styles.teamAvatar}>
-                    <Text variant="bodyStrong" color={colors.primaryFg}>
-                      {member.name.slice(0, 1)}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
+                  {member.imageUrl ? (
+                    <Image
+                      source={{ uri: member.imageUrl }}
+                      style={styles.teamPhoto}
+                      contentFit="cover"
+                      transition={200}
+                    />
+                  ) : (
+                    <View style={styles.teamAvatar}>
+                      <Text variant="bodyStrong" color={colors.primaryFg}>
+                        {member.name.slice(0, 1)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text variant="bodyStrong">{member.name}</Text>
                     <Text variant="caption" muted>
                       {member.role}
                     </Text>
+                    {member.bio ? (
+                      <Text muted style={styles.teamBio}>
+                        {member.bio}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
               ))}
@@ -1697,7 +1732,7 @@ const styles = StyleSheet.create({
   },
   teamCard: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing.md,
     marginBottom: spacing.md,
     padding: spacing.lg,
@@ -1713,6 +1748,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.coral,
     alignItems: "center",
     justifyContent: "center",
+  },
+  teamPhoto: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.pill,
+    backgroundColor: colors.muted,
+  },
+  teamBio: {
+    marginTop: spacing.sm,
+    lineHeight: 20,
   },
   reviewSummary: {
     flexDirection: "row",

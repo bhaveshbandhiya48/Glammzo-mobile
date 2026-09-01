@@ -343,14 +343,26 @@ export default function BookingScreen() {
   const afterPromo = appliedDiscount?.finalTotal ?? subtotal
   const promoDiscount = appliedDiscount?.discountAmount ?? 0
   const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
-  const walletCredit = useWallet
-    ? Math.min(Math.max(0, Math.round(walletBalance)), afterPromo)
-    : 0
   const loyaltyCredit =
     useLoyalty && loyaltyAvailable && !selectedPackage
-      ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(afterPromo - walletCredit, 0))
+      ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(afterPromo, 0))
       : 0
-  const total = Math.max(afterPromo - walletCredit - loyaltyCredit, 0)
+  const taxableAmount = Math.max(0, afterPromo - loyaltyCredit)
+  const salonTax =
+    salon?.tax &&
+    salon.tax.enabled &&
+    salon.tax.gstNumber.trim() &&
+    salon.tax.ratePercent > 0
+      ? salon.tax
+      : null
+  const gstAmount = salonTax
+    ? Math.round(taxableAmount * (salonTax.ratePercent / 100) * 100) / 100
+    : 0
+  const amountBeforeWallet = Math.round((taxableAmount + gstAmount) * 100) / 100
+  const walletCredit = useWallet
+    ? Math.min(Math.max(0, Math.round(walletBalance)), amountBeforeWallet)
+    : 0
+  const total = Math.max(amountBeforeWallet - walletCredit, 0)
 
   async function applyPromo() {
     const code = promoInput.trim().toUpperCase()
@@ -512,11 +524,23 @@ export default function BookingScreen() {
           },
         ]
       : []),
-    ...(walletCredit > 0
-      ? [{ label: "Wallet", value: `−₹${walletCredit}`, success: true }]
-      : []),
     ...(loyaltyCredit > 0
       ? [{ label: "Loyalty", value: `−₹${loyaltyCredit}`, success: true }]
+      : []),
+    ...(gstAmount > 0 && salonTax
+      ? [
+          {
+            label: `GST (${
+              Number.isInteger(salonTax.ratePercent)
+                ? salonTax.ratePercent
+                : salonTax.ratePercent.toFixed(2)
+            }%)`,
+            value: `₹${Math.round(gstAmount)}`,
+          },
+        ]
+      : []),
+    ...(walletCredit > 0
+      ? [{ label: "Wallet", value: `−₹${walletCredit}`, success: true }]
       : []),
   ]
 
@@ -1082,16 +1106,28 @@ export default function BookingScreen() {
               <Text muted>+₹{cashbackClaim.cashbackRupees} later</Text>
             </View>
           ) : null}
-          {walletCredit > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Wallet</Text>
-              <Text color={colors.success}>−₹{walletCredit}</Text>
-            </View>
-          ) : null}
           {loyaltyCredit > 0 ? (
             <View style={styles.summaryRow}>
               <Text muted>Loyalty</Text>
               <Text color={colors.success}>−₹{loyaltyCredit}</Text>
+            </View>
+          ) : null}
+          {gstAmount > 0 && salonTax ? (
+            <View style={styles.summaryRow}>
+              <Text muted>
+                GST (
+                {Number.isInteger(salonTax.ratePercent)
+                  ? salonTax.ratePercent
+                  : salonTax.ratePercent.toFixed(2)}
+                %)
+              </Text>
+              <Text>₹{Math.round(gstAmount)}</Text>
+            </View>
+          ) : null}
+          {walletCredit > 0 ? (
+            <View style={styles.summaryRow}>
+              <Text muted>Wallet</Text>
+              <Text color={colors.success}>−₹{walletCredit}</Text>
             </View>
           ) : null}
           <View style={[styles.summaryRow, styles.summaryTotal]}>

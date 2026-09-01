@@ -8,6 +8,7 @@ import type {
   SalonPackage,
   SalonReview,
   SalonService,
+  SalonTaxInfo,
 } from "@/data/types"
 import { ApiError, apiFetch } from "@/lib/api"
 
@@ -45,6 +46,8 @@ type WebSalon = {
   description?: unknown
   address?: unknown
   phone?: unknown
+  whatsappPhone?: unknown
+  whatsapp_phone?: unknown
   hours?: unknown
   services?: unknown
   packages?: unknown
@@ -53,6 +56,7 @@ type WebSalon = {
   amenities?: unknown
   customerReviews?: unknown
   team?: unknown
+  tax?: unknown
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -70,6 +74,16 @@ function asNumber(value: unknown, fallback = 0): number {
 
 function asBoolean(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback
+}
+
+function mapTax(raw: unknown): SalonTaxInfo | null {
+  if (!raw || typeof raw !== "object") return null
+  const tax = raw as Record<string, unknown>
+  const gstNumber = asString(tax.gstNumber).trim().toUpperCase()
+  const ratePercent = asNumber(tax.ratePercent, 0)
+  const enabled = tax.enabled === true
+  if (!enabled || !gstNumber || !(ratePercent > 0)) return null
+  return { enabled: true, ratePercent, gstNumber }
 }
 
 function mapService(raw: unknown): SalonService | null {
@@ -260,7 +274,15 @@ function mapTeam(raw: unknown): Salon["team"] {
       const id = asString(m.id)
       const name = asString(m.name) || asString(m.full_name) || asString(m.fullName)
       if (!id || !name) return null
-      return { id, name, role: asString(m.role, "Specialist") }
+      const bio = asString(m.bio)
+      const imageUrl = asString(m.imageUrl) || asString(m.image_url)
+      return {
+        id,
+        name,
+        role: asString(m.role, "Specialist"),
+        ...(bio ? { bio } : {}),
+        ...(imageUrl ? { imageUrl } : {}),
+      }
     })
     .filter((member): member is NonNullable<typeof member> => member != null)
 }
@@ -326,6 +348,10 @@ export function mapWebSalonToMobile(raw: WebSalon): Salon | null {
     description: description || shortDescription,
     address: asString(raw.address),
     phone: asString(raw.phone),
+    whatsappPhone: (() => {
+      const value = asString(raw.whatsappPhone) || asString(raw.whatsapp_phone)
+      return value || undefined
+    })(),
     hours: asString(raw.hours, "Hours on request"),
     services,
     packages,
@@ -334,6 +360,7 @@ export function mapWebSalonToMobile(raw: WebSalon): Salon | null {
     amenities: mapAmenities(raw.amenities),
     customerReviews,
     team: mapTeam(raw.team),
+    tax: mapTax(raw.tax),
   }
 }
 

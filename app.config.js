@@ -28,7 +28,6 @@ const config = {
   icon: "./assets/icon.png",
   scheme: "glammzo",
   userInterfaceStyle: "light",
-  newArchEnabled: true,
   splash: {
     // Solid brand color only — logo splash removed; JS shows splash.mp4.
     image: "./assets/splash-blank.png",
@@ -55,7 +54,6 @@ const config = {
       monochromeImage: "./assets/android-icon-monochrome.png",
     },
     package: "com.glammzo.mobile",
-    versionCode: 1,
     ...(googleServicesFile ? { googleServicesFile } : {}),
     ...(mapsApiKeyAndroid
       ? {
@@ -67,20 +65,28 @@ const config = {
         }
       : {}),
   },
-  notification: {
-    // Android status-bar icon (must be white + transparent). Applied at prebuild.
-    icon: "./assets/notification-icon.png",
-    color: "#F95C48",
-  },
   web: {
     favicon: "./assets/favicon.png",
     bundler: "metro",
   },
   plugins: [
     "expo-router",
+    "expo-font",
+    "expo-image",
+    "expo-status-bar",
     "expo-secure-store",
+    "expo-sharing",
     "expo-video",
     "@react-native-community/datetimepicker",
+    [
+      "react-native-maps",
+      {
+        ...(mapsApiKeyAndroid
+          ? { androidGoogleMapsApiKey: mapsApiKeyAndroid }
+          : {}),
+        ...(mapsApiKeyIos ? { iosGoogleMapsApiKey: mapsApiKeyIos } : {}),
+      },
+    ],
     [
       "expo-splash-screen",
       {

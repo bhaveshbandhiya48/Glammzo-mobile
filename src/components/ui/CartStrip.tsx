@@ -41,14 +41,14 @@ function StripCard({
 }) {
   const thumbs = (entry.imageUrls ?? []).slice(0, 3)
   const itemWord = entry.itemCount === 1 ? "item" : "items"
-  const ctaLabel = entry.ctaLabel ?? "View cart"
+  const ctaLabel = entry.ctaLabel ?? "View bag"
 
   return (
     <View style={[styles.slide, { width }]}>
       <View style={styles.bar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`View cart for ${entry.salonName}, ${entry.itemCount} ${itemWord}`}
+          accessibilityLabel={`View bag for ${entry.salonName}, ${entry.itemCount} ${itemWord}`}
           onPress={entry.onPress}
           style={({ pressed }) => [styles.main, pressed && styles.pressed]}
         >
@@ -98,7 +98,7 @@ function StripCard({
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Clear cart for ${entry.salonName}`}
+          accessibilityLabel={`Clear bag for ${entry.salonName}`}
           hitSlop={8}
           onPress={entry.onClear}
           style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}

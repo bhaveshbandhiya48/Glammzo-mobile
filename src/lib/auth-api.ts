@@ -23,6 +23,8 @@ export async function requestOtp(phone: string) {
   return apiFetch<OtpRequestResponse>("/api/mobile/auth/otp/request", {
     method: "POST",
     auth: false,
+    // First hit in local Next compiles the route (~4–20s).
+    timeoutMs: 45_000,
     body: { phone },
   })
 }
@@ -31,6 +33,7 @@ export async function verifyOtp(challengeToken: string, otp: string) {
   const result = await apiFetch<OtpVerifyResponse>("/api/mobile/auth/otp/verify", {
     method: "POST",
     auth: false,
+    timeoutMs: 45_000,
     body: { challengeToken, otp },
   })
   if (result.accessToken) {

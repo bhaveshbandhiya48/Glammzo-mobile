@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
   },
   confettiLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     height: 180,
     zIndex: 2,
   },

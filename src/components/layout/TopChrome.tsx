@@ -8,7 +8,7 @@ import { useNotifications } from "@/context/NotificationsContext"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 type Props = {
-  username: string
+  username: string | null
   locationLabel: string
   searchQuery: string
   onSearchPress: () => void
@@ -52,9 +52,11 @@ export function TopChrome({
             </Text>
             <Icon name="chevron-down" size={16} color={colors.text} />
           </View>
-          <Text variant="caption" muted numberOfLines={1}>
-            Hi {username}
-          </Text>
+          {username ? (
+            <Text variant="caption" muted numberOfLines={1}>
+              Hi {username}
+            </Text>
+          ) : null}
         </Pressable>
 
         <View style={styles.actions}>
@@ -78,7 +80,7 @@ export function TopChrome({
             onPress={onCartPress}
             style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel="Cart"
+            accessibilityLabel="Bag"
           >
             <Icon name="bag-handle-outline" size={22} color={colors.text} />
             {totalItems > 0 ? (

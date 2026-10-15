@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -9,10 +8,18 @@ import {
   type ReactNode,
 } from "react"
 
+import {
+  clampPricingUnitQuantity,
+  parsePricingUnit,
+  pricingUnitUsesQuantity,
+} from "@/lib/pricing-unit"
+
 export type SalonCart = {
   salonId: string
   serviceIds: string[]
   packageId: string | null
+  quantities: Record<string, number>
+  priceOptionIds: Record<string, string>
 }
 
 type CartContextValue = {
@@ -23,7 +30,18 @@ type CartContextValue = {
   itemCountFor: (salonId: string) => number
   isServiceSelected: (salonId: string, serviceId: string) => boolean
   isPackageSelected: (salonId: string, packageId: string) => boolean
-  toggleService: (salonId: string, serviceId: string) => void
+  toggleService: (
+    salonId: string,
+    serviceId: string,
+    meta?: { priceOptionId?: string | null },
+  ) => void
+  setServiceQuantity: (
+    salonId: string,
+    serviceId: string,
+    quantity: number,
+    pricingUnit?: string | null,
+  ) => void
+  setServicePriceOption: (salonId: string, serviceId: string, optionId: string) => void
   setPackage: (salonId: string, packageId: string | null) => void
   clearSalon: (salonId: string) => void
   clearAll: () => void
@@ -32,12 +50,62 @@ type CartContextValue = {
 const CART_KEY = "glammzo_salon_carts"
 const CartContext = createContext<CartContextValue | null>(null)
 
+function emptyCart(salonId: string): SalonCart {
+  return {
+    salonId,
+    serviceIds: [],
+    packageId: null,
+    quantities: {},
+    priceOptionIds: {},
+  }
+}
+
 function cartItemCount(cart: SalonCart) {
   return cart.serviceIds.length + (cart.packageId ? 1 : 0)
 }
 
 function isEmptyCart(cart: SalonCart) {
   return cart.serviceIds.length === 0 && !cart.packageId
+}
+
+function parseStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const next: Record<string, string> = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!key || typeof entry !== "string" || !entry.trim()) continue
+    next[key] = entry.trim()
+  }
+  return next
+}
+
+function parseQuantityRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const next: Record<string, number> = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const parsed =
+      typeof entry === "number"
+        ? entry
+        : typeof entry === "string"
+          ? Number(entry)
+          : NaN
+    if (!key || !Number.isFinite(parsed) || parsed < 1) continue
+    next[key] = Math.floor(parsed)
+  }
+  return next
+}
+
+function pruneCartMeta(
+  serviceIds: string[],
+  quantities: Record<string, number>,
+  priceOptionIds: Record<string, string>,
+) {
+  const nextQuantities: Record<string, number> = {}
+  const nextOptions: Record<string, string> = {}
+  for (const id of serviceIds) {
+    if (quantities[id] != null) nextQuantities[id] = quantities[id]
+    if (priceOptionIds[id]) nextOptions[id] = priceOptionIds[id]
+  }
+  return { quantities: nextQuantities, priceOptionIds: nextOptions }
 }
 
 function parseCarts(raw: string | null): SalonCart[] {
@@ -48,22 +116,35 @@ function parseCarts(raw: string | null): SalonCart[] {
     return parsed
       .map((row) => {
         if (!row || typeof row !== "object") return null
-        const salonId = String((row as SalonCart).salonId ?? "").trim()
+        const source = row as SalonCart
+        const salonId = String(source.salonId ?? "").trim()
         if (!salonId) return null
-        const serviceIds = Array.isArray((row as SalonCart).serviceIds)
-          ? (row as SalonCart).serviceIds.filter((id): id is string => typeof id === "string")
+        const serviceIds = Array.isArray(source.serviceIds)
+          ? source.serviceIds.filter((id): id is string => typeof id === "string")
           : []
-        const packageId =
-          typeof (row as SalonCart).packageId === "string"
-            ? (row as SalonCart).packageId
-            : null
-        const cart: SalonCart = { salonId, serviceIds, packageId }
+        const packageId = typeof source.packageId === "string" ? source.packageId : null
+        const cart: SalonCart = {
+          salonId,
+          serviceIds,
+          packageId,
+          ...pruneCartMeta(
+            serviceIds,
+            parseQuantityRecord(source.quantities),
+            parseStringRecord(source.priceOptionIds),
+          ),
+        }
         return isEmptyCart(cart) ? null : cart
       })
       .filter((cart): cart is SalonCart => cart != null)
   } catch {
     return []
   }
+}
+
+function replaceCart(prev: SalonCart[], next: SalonCart) {
+  const without = prev.filter((cart) => cart.salonId !== next.salonId)
+  if (isEmptyCart(next)) return without
+  return [...without, next]
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
@@ -108,43 +189,101 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const cart = carts.find((entry) => entry.salonId === salonId)
         return cart?.packageId === packageId
       },
-      toggleService: (salonId, serviceId) => {
+      toggleService: (salonId, serviceId, meta) => {
         setCarts((prev) => {
-          const existing = prev.find((cart) => cart.salonId === salonId)
-          const base: SalonCart = existing ?? {
-            salonId,
-            serviceIds: [],
-            packageId: null,
-          }
-          const exists = base.serviceIds.includes(serviceId)
+          const existing = prev.find((cart) => cart.salonId === salonId) ?? emptyCart(salonId)
+          const exists = existing.serviceIds.includes(serviceId)
           const serviceIds = exists
-            ? base.serviceIds.filter((id) => id !== serviceId)
-            : [...base.serviceIds, serviceId]
-          const next: SalonCart = {
-            salonId,
-            packageId: base.packageId,
-            serviceIds,
+            ? existing.serviceIds.filter((id) => id !== serviceId)
+            : [...existing.serviceIds, serviceId]
+          const priceOptionIds = { ...existing.priceOptionIds }
+          const quantities = { ...existing.quantities }
+          if (exists) {
+            delete priceOptionIds[serviceId]
+            delete quantities[serviceId]
+          } else if (meta?.priceOptionId) {
+            priceOptionIds[serviceId] = meta.priceOptionId
           }
-          const without = prev.filter((cart) => cart.salonId !== salonId)
-          if (isEmptyCart(next)) return without
-          return [...without, next]
+          return replaceCart(prev, {
+            salonId,
+            packageId: existing.packageId,
+            serviceIds,
+            ...pruneCartMeta(serviceIds, quantities, priceOptionIds),
+          })
+        })
+      },
+      setServiceQuantity: (salonId, serviceId, quantity, pricingUnit) => {
+        setCarts((prev) => {
+          const existing = prev.find((cart) => cart.salonId === salonId) ?? emptyCart(salonId)
+          const unit = parsePricingUnit(pricingUnit)
+          if (quantity < 1) {
+            const serviceIds = existing.serviceIds.filter((id) => id !== serviceId)
+            return replaceCart(prev, {
+              salonId,
+              packageId: existing.packageId,
+              serviceIds,
+              ...pruneCartMeta(serviceIds, existing.quantities, existing.priceOptionIds),
+            })
+          }
+          if (pricingUnit != null && !pricingUnitUsesQuantity(unit)) {
+            return prev
+          }
+          const clamped = clampPricingUnitQuantity(unit, quantity)
+          const serviceIds = existing.serviceIds.includes(serviceId)
+            ? existing.serviceIds
+            : [...existing.serviceIds, serviceId]
+          return replaceCart(prev, {
+            salonId,
+            packageId: existing.packageId,
+            serviceIds,
+            ...pruneCartMeta(
+              serviceIds,
+              { ...existing.quantities, [serviceId]: clamped },
+              existing.priceOptionIds,
+            ),
+          })
+        })
+      },
+      setServicePriceOption: (salonId, serviceId, optionId) => {
+        const trimmed = optionId.trim()
+        if (!trimmed) return
+        setCarts((prev) => {
+          const existing = prev.find((cart) => cart.salonId === salonId) ?? emptyCart(salonId)
+          const serviceIds = existing.serviceIds.includes(serviceId)
+            ? existing.serviceIds
+            : [...existing.serviceIds, serviceId]
+          return replaceCart(prev, {
+            salonId,
+            packageId: existing.packageId,
+            serviceIds,
+            ...pruneCartMeta(
+              serviceIds,
+              existing.quantities,
+              { ...existing.priceOptionIds, [serviceId]: trimmed },
+            ),
+          })
         })
       },
       setPackage: (salonId, packageId) => {
         setCarts((prev) => {
           const existing = prev.find((cart) => cart.salonId === salonId)
-          const without = prev.filter((cart) => cart.salonId !== salonId)
           if (!packageId) {
             if (!existing) return prev
-            const next: SalonCart = {
+            return replaceCart(prev, {
               salonId,
               serviceIds: existing.serviceIds,
               packageId: null,
-            }
-            if (isEmptyCart(next)) return without
-            return [...without, next]
+              quantities: existing.quantities,
+              priceOptionIds: existing.priceOptionIds,
+            })
           }
-          return [...without, { salonId, serviceIds: [], packageId }]
+          return replaceCart(prev, {
+            salonId,
+            serviceIds: [],
+            packageId,
+            quantities: {},
+            priceOptionIds: {},
+          })
         })
       },
       clearSalon: (salonId) => {

@@ -1,6 +1,5 @@
 import Constants from "expo-constants"
 import { Image } from "expo-image"
-import * as Location from "expo-location"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -24,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
+import { getDeviceCoordinates } from "@/lib/device-location"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { GLAMMZO_MAP_STYLE } from "@/lib/map-styles"
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -102,6 +102,31 @@ function isPinInRegion(pin: MappableSalon, region: Region, padRatio = 0.08) {
 
 function pinsInRegion(pins: MappableSalon[], region: Region) {
   return pins.filter((pin) => isPinInRegion(pin, region))
+}
+
+function isSameRegion(a: Region, b: Region) {
+  const epsilon = 0.00008
+  return (
+    Math.abs(a.latitude - b.latitude) < epsilon &&
+    Math.abs(a.longitude - b.longitude) < epsilon &&
+    Math.abs(a.latitudeDelta - b.latitudeDelta) < epsilon &&
+    Math.abs(a.longitudeDelta - b.longitudeDelta) < epsilon
+  )
+}
+
+/** Keep list order stable and never drop the salon the user just picked. */
+function carouselPinsForRegion(
+  pins: MappableSalon[],
+  region: Region,
+  selectedId: string | null,
+) {
+  const visible = pinsInRegion(pins, region)
+  if (!selectedId || visible.some((item) => item.salon.id === selectedId)) {
+    return visible
+  }
+  const keep = new Set(visible.map((item) => item.salon.id))
+  keep.add(selectedId)
+  return pins.filter((item) => keep.has(item.salon.id))
 }
 
 function salonCoords(salon: Salon): { latitude: number; longitude: number } | null {
@@ -319,6 +344,8 @@ export function MapOverlay({
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView | null>(null)
   const carouselRef = useRef<ScrollView | null>(null)
+  const programmaticCameraUntilRef = useRef(0)
+  const ignoreScrollUntilRef = useRef(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [viewRegion, setViewRegion] = useState<Region | null>(null)
   const [liveUserCoords, setLiveUserCoords] = useState<{
@@ -379,8 +406,12 @@ export function MapOverlay({
 
   /** Airbnb-style: bottom cards follow salons in the visible map camera. */
   const carouselItems = useMemo(
-    () => pinsInRegion(mappable, activeRegion),
-    [activeRegion, mappable],
+    () => carouselPinsForRegion(mappable, activeRegion, selectedId),
+    [activeRegion, mappable, selectedId],
+  )
+  const selectedCarouselIndex = useMemo(
+    () => carouselItems.findIndex((item) => item.salon.id === selectedId),
+    [carouselItems, selectedId],
   )
 
   const showCarousel = carouselItems.length > 0
@@ -408,6 +439,8 @@ export function MapOverlay({
     // Init once per open: fit current area; cards then sync via region changes.
     setViewRegion(initialRegion)
     setSelectedId(areaMappable[0]?.salon.id ?? null)
+    programmaticCameraUntilRef.current = Date.now() + 900
+    ignoreScrollUntilRef.current = Date.now() + 500
     const pins = areaMappable
     const region = initialRegion
     const topPad = insets.top + 72
@@ -442,20 +475,30 @@ export function MapOverlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
 
-  useEffect(() => {
-    if (!visible || !showCarousel) return
-    const index = Math.max(
-      0,
-      carouselItems.findIndex((item) => item.salon.id === selectedId),
-    )
-    const timer = setTimeout(() => {
+  function scrollCarouselToIndex(index: number, animated: boolean) {
+    if (index < 0) return
+    ignoreScrollUntilRef.current = Date.now() + (animated ? 500 : 250)
+    const x = index * SNAP_INTERVAL
+    const run = () =>
       carouselRef.current?.scrollTo({
-        x: index * SNAP_INTERVAL,
-        animated: false,
+        x,
+        animated,
       })
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [visible, showCarousel, carouselItems, selectedId])
+    // Wait until the card press releases the ScrollView, otherwise iOS/Android
+    // apply the offset immediately and the strip looks like it swapped.
+    if (animated) {
+      setTimeout(run, 32)
+      return
+    }
+    run()
+  }
+
+  useEffect(() => {
+    if (!visible || !showCarousel || selectedCarouselIndex < 0) return
+    // A tap/pin press already started an animated scroll. Don't snap over it.
+    if (Date.now() < ignoreScrollUntilRef.current) return
+    scrollCarouselToIndex(selectedCarouselIndex, true)
+  }, [visible, showCarousel, selectedId, selectedCarouselIndex])
 
   useEffect(() => {
     if (!visible) return
@@ -477,7 +520,11 @@ export function MapOverlay({
   }
 
   function handleRegionChangeComplete(region: Region) {
-    setViewRegion(region)
+    setViewRegion((current) => {
+      if (current && isSameRegion(current, region)) return current
+      return region
+    })
+    if (Date.now() < programmaticCameraUntilRef.current) return
     syncSelectionToRegion(region)
   }
 
@@ -492,17 +539,10 @@ export function MapOverlay({
     if (locating) return
     setLocating(true)
     try {
-      const permission = await Location.requestForegroundPermissionsAsync()
-      if (permission.granted) {
-        const position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        })
-        const next = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        }
-        setLiveUserCoords(next)
-        animateToCoords(next.latitude, next.longitude)
+      const coords = await getDeviceCoordinates({ promptIfNeeded: true })
+      if (coords) {
+        setLiveUserCoords(coords)
+        animateToCoords(coords.latitude, coords.longitude)
         return
       }
       if (hasSavedUserCoords) {
@@ -524,21 +564,19 @@ export function MapOverlay({
 
     const index = carouselItems.findIndex((item) => item.salon.id === salonId)
     if (index >= 0) {
-      requestAnimationFrame(() => {
-        carouselRef.current?.scrollTo({
-          x: index * SNAP_INTERVAL,
-          animated: true,
-        })
-      })
+      scrollCarouselToIndex(index, true)
     }
 
     if (animateMap) {
+      // Pan at the current zoom. Tightening zoom reshuffles visible cards and
+      // can bounce selection between the first two listings.
+      programmaticCameraUntilRef.current = Date.now() + 700
       mapRef.current?.animateToRegion(
         {
           latitude: pin.latitude,
           longitude: pin.longitude,
-          latitudeDelta: Math.min(activeRegion.latitudeDelta, 0.04),
-          longitudeDelta: Math.min(activeRegion.longitudeDelta, 0.04),
+          latitudeDelta: activeRegion.latitudeDelta,
+          longitudeDelta: activeRegion.longitudeDelta,
         },
         280,
       )
@@ -546,6 +584,7 @@ export function MapOverlay({
   }
 
   function onCarouselScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (Date.now() < ignoreScrollUntilRef.current) return
     const x = event.nativeEvent.contentOffset.x
     const index = Math.round(x / SNAP_INTERVAL)
     const pin = carouselItems[index]
@@ -563,8 +602,6 @@ export function MapOverlay({
           ref={mapRef}
           style={StyleSheet.absoluteFill}
           provider={provider}
-          // LEGACY renderer is far more reliable for custom view markers on Android 1.20.x
-          {...(Platform.OS === "android" ? { googleRenderer: "LEGACY" as const } : null)}
           customMapStyle={useCustomStyle ? GLAMMZO_MAP_STYLE : undefined}
           initialRegion={initialRegion}
           onMapReady={() => setMapReady(true)}
@@ -572,7 +609,7 @@ export function MapOverlay({
           showsUserLocation={false}
           showsMyLocationButton={false}
           showsCompass={false}
-          showsPointsOfInterest={false}
+          showsPointsOfInterests={false}
           showsBuildings={false}
           rotateEnabled={false}
           pitchEnabled={false}
@@ -701,6 +738,7 @@ export function MapOverlay({
               snapToInterval={SNAP_INTERVAL}
               snapToAlignment="start"
               disableIntervalMomentum
+              directionalLockEnabled
               onMomentumScrollEnd={onCarouselScrollEnd}
               contentContainerStyle={styles.carousel}
             >
@@ -727,7 +765,7 @@ export function MapOverlay({
 
 const styles = StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 100,
     elevation: 100,
   },
@@ -861,7 +899,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   emptyMap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing.xxl,
@@ -878,12 +916,12 @@ const styles = StyleSheet.create({
   carousel: {
     paddingHorizontal: SIDE_PAD,
     paddingTop: spacing.sm,
-    gap: CARD_GAP,
     alignItems: "stretch",
     overflow: "visible",
   },
   cardWrap: {
     width: CARD_WIDTH,
+    marginRight: CARD_GAP,
   },
   listingCard: {
     height: CARD_HEIGHT,
@@ -905,7 +943,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   listingCardActiveRing: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: radii.lg,
     borderWidth: 2,
     borderColor: colors.coral,

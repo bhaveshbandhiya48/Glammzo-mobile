@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/Button"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
-import { clearAccessToken, getAccessToken } from "@/lib/session"
+import { fetchMe } from "@/lib/auth-api"
+import { ApiError } from "@/lib/api"
+import { getAccessToken } from "@/lib/session"
 import { LOYALTY_VISITS_PER_FREE, type LoyaltySummary } from "@/lib/loyalty"
-import { clearConsumerProfile, getDisplayName } from "@/lib/user"
+import { clearLocalSession, getDisplayName } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
@@ -53,6 +55,19 @@ export default function ProfileScreen() {
           })
           return
         }
+        try {
+          await fetchMe()
+        } catch (error) {
+          if (!active) return
+          if (error instanceof ApiError && error.status === 401) {
+            router.replace({
+              pathname: "/login",
+              params: { next: "/(tabs)/profile" },
+            })
+            return
+          }
+        }
+        if (!active) return
         setName(displayName)
         try {
           const [wallet, loyaltyNext] = await Promise.all([
@@ -141,13 +156,27 @@ export default function ProfileScreen() {
         ))}
       </View>
 
+      <View style={[styles.list, styles.supportList]}>
+        <Pressable
+          style={({ pressed }) => [styles.row, styles.rowLast, pressed && styles.pressed]}
+          onPress={() => router.push("/profile/support")}
+        >
+          <View style={styles.rowLeft}>
+            <View style={styles.rowIcon}>
+              <Icon name="help-circle-outline" size={18} color={colors.text} />
+            </View>
+            <Text variant="bodyStrong">Help & support</Text>
+          </View>
+          <Icon name="chevron-forward" size={18} color={colors.textSubtle} />
+        </Pressable>
+      </View>
+
       <Button
         label="Logout"
         variant="secondary"
         style={{ marginTop: spacing.xxl }}
         onPress={async () => {
-          await clearAccessToken()
-          await clearConsumerProfile()
+          await clearLocalSession()
           setWalletRupees(null)
           setLoyalty(null)
           setReady(false)
@@ -214,6 +243,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: colors.surface,
   },
+  supportList: {
+    marginTop: spacing.md,
+  },
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -222,6 +254,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  rowLast: {
+    borderBottomWidth: 0,
   },
   rowLeft: {
     flexDirection: "row",

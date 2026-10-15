@@ -1,3 +1,9 @@
+export type ServicePriceOption = {
+  id: string
+  name: string
+  price: number
+}
+
 export type SalonService = {
   id: string
   name: string
@@ -8,6 +14,12 @@ export type SalonService = {
   imageUrl: string
   description?: string
   includes: string[]
+  /** Nail Art Studio unit pricing: both hands, per hand, or per finger. */
+  pricingUnit?: "both_hands" | "per_hand" | "per_finger"
+  /** Unisex salon catalogs: men or women. Null/undefined = show in both tabs. */
+  genderAudience?: "men" | "women" | null
+  /** Named prices (Regular / Rica). Empty/undefined = single flat price. */
+  priceOptions?: ServicePriceOption[]
 }
 
 export type SalonPackage = {
@@ -22,6 +34,8 @@ export type SalonPackage = {
   badge?: string | null
   isFeatured?: boolean
   showComparePrice?: boolean
+  /** Unisex salon catalogs: men, women, or unisex (both). Null/undefined = infer from included services. */
+  genderAudience?: "men" | "women" | "unisex" | null
 }
 
 export type SalonOffer = {
@@ -120,6 +134,10 @@ export type Booking = {
   salonId: string
   salonName: string
   salonArea: string
+  /** CRM appointment id when booked via Supabase. */
+  crmAppointmentId?: string
+  /** True only when CRM appointment status is `completed`. */
+  isCrmCompleted?: boolean
   services: { id: string; name: string; price: number; durationMin: number }[]
   date: string
   time: string
@@ -135,5 +153,9 @@ export type Booking = {
   declineReason?: string
   hasVerifiedReview?: boolean
   confirmationDeadline?: string
+  /** salon (default) or solo artist booking. */
+  kind?: "salon" | "artist"
+  artistSlug?: string
+  artistPublicToken?: string
 }
 

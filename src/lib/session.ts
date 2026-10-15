@@ -3,7 +3,14 @@ import * as SecureStore from "expo-secure-store"
 const TOKEN_KEY = "glammzo_access_token"
 
 export async function getAccessToken(): Promise<string | null> {
-  return SecureStore.getItemAsync(TOKEN_KEY)
+  try {
+    const raw = await SecureStore.getItemAsync(TOKEN_KEY)
+    const token = raw?.trim()
+    if (!token) return null
+    return token.replace(/^Bearer\s+/i, "").trim() || null
+  } catch {
+    return null
+  }
 }
 
 export async function setAccessToken(token: string): Promise<void> {

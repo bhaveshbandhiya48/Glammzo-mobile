@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { ReactNode, RefObject } from "react"
 import {
   KeyboardAvoidingView,
   Platform,
@@ -22,6 +22,7 @@ type Props = {
   /** Lift content above the keyboard. */
   keyboardAvoiding?: boolean
   keyboardVerticalOffset?: number
+  scrollRef?: RefObject<ScrollView | null>
 }
 
 export function Screen({
@@ -33,11 +34,13 @@ export function Screen({
   contentStyle,
   keyboardAvoiding = false,
   keyboardVerticalOffset = Platform.OS === "ios" ? 64 : 0,
+  scrollRef,
 }: Props) {
   const pad = padded ? styles.padded : null
 
   const body = scroll ? (
     <ScrollView
+      ref={scrollRef}
       contentContainerStyle={[styles.scrollContent, pad, contentStyle]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"

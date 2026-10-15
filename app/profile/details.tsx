@@ -1,6 +1,15 @@
-import { useCallback, useState } from "react"
-import { Modal, StyleSheet, View } from "react-native"
+import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Button } from "@/components/ui/Button"
 import { DateOfBirthField } from "@/components/ui/DateOfBirthField"
@@ -14,9 +23,9 @@ import {
   loadProfilePreferApi,
   patchProfileOnApi,
 } from "@/lib/profile-api"
-import { clearAccessToken, getAccessToken } from "@/lib/session"
+import { getAccessToken } from "@/lib/session"
 import {
-  clearConsumerProfile,
+  clearLocalSession,
   validateConsumerProfileFields,
   type ConsumerProfile,
   type ConsumerProfileFieldErrors,
@@ -27,6 +36,9 @@ const CONFIRM_WORD = "DELETE"
 
 export default function ProfileDetailsScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
+  const scrollRef = useRef<ScrollView>(null)
+  const addressFocusedRef = useRef(false)
   const [profile, setProfile] = useState<ConsumerProfile>({
     name: "",
     email: "",
@@ -85,6 +97,27 @@ export default function ProfileDetailsScreen() {
     }
   }
 
+  function scrollAddressIntoView() {
+    requestAnimationFrame(() => {
+      setTimeout(
+        () => {
+          if (addressFocusedRef.current) {
+            scrollRef.current?.scrollToEnd({ animated: true })
+          }
+        },
+        Platform.OS === "ios" ? 80 : 200,
+      )
+    })
+  }
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
+    const sub = Keyboard.addListener(showEvent, () => {
+      if (addressFocusedRef.current) scrollAddressIntoView()
+    })
+    return () => sub.remove()
+  }, [])
+
   function closeDeleteModal() {
     if (deleting) return
     setDeleteOpen(false)
@@ -93,7 +126,13 @@ export default function ProfileDetailsScreen() {
   }
 
   return (
-    <Screen scroll>
+    <Screen
+      scroll
+      scrollRef={scrollRef}
+      keyboardAvoiding
+      keyboardVerticalOffset={insets.top + 48}
+      contentStyle={styles.scrollContent}
+    >
       <Text variant="title">Profile information</Text>
       <Text muted style={styles.gap}>
         Saved to your Glammzo account. Your name shows as Welcome on Home.
@@ -148,6 +187,13 @@ export default function ProfileDetailsScreen() {
           multiline
           style={styles.address}
           error={fieldErrors.address}
+          onFocus={() => {
+            addressFocusedRef.current = true
+            scrollAddressIntoView()
+          }}
+          onBlur={() => {
+            addressFocusedRef.current = false
+          }}
         />
       </View>
 
@@ -188,24 +234,21 @@ export default function ProfileDetailsScreen() {
         }}
       />
 
-      <View style={styles.deleteCard}>
-        <Text variant="bodyStrong">Delete account</Text>
-        <Text variant="caption" muted style={styles.gap}>
-          Permanently remove your profile, wallet, loyalty, favorites, and push
-          tokens. Booking history may be kept in anonymized form for salons and
-          legal requirements.
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Delete account"
+        hitSlop={8}
+        style={styles.deleteLink}
+        onPress={() => {
+          setDeleteError(null)
+          setDeleteConfirm("")
+          setDeleteOpen(true)
+        }}
+      >
+        <Text variant="body" color={colors.destructive}>
+          Delete account
         </Text>
-        <Button
-          label="Delete account"
-          variant="secondary"
-          style={styles.deleteButton}
-          onPress={() => {
-            setDeleteError(null)
-            setDeleteConfirm("")
-            setDeleteOpen(true)
-          }}
-        />
-      </View>
+      </Pressable>
 
       <Modal
         visible={deleteOpen}
@@ -252,8 +295,7 @@ export default function ProfileDetailsScreen() {
                   setDeleteError(null)
                   try {
                     await deleteAccountOnApi()
-                    await clearAccessToken()
-                    await clearConsumerProfile()
+                    await clearLocalSession()
                     setDeleteOpen(false)
                     router.replace("/login")
                   } catch (err) {
@@ -276,6 +318,9 @@ export default function ProfileDetailsScreen() {
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 140,
+  },
   gap: {
     marginTop: spacing.sm,
   },
@@ -291,18 +336,10 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     paddingTop: spacing.md,
   },
-  deleteCard: {
+  deleteLink: {
     marginTop: spacing.xxxl,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.destructive,
-    backgroundColor: "#FFF8F7",
-    gap: spacing.sm,
-  },
-  deleteButton: {
-    marginTop: spacing.md,
-    borderColor: colors.destructive,
+    alignSelf: "center",
+    paddingVertical: spacing.sm,
   },
   modalBackdrop: {
     flex: 1,

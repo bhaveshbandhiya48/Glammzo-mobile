@@ -2,9 +2,10 @@ import { useCallback, useMemo, useState } from "react"
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
 
+import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
+import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
-import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
 import { Screen } from "@/components/ui/Screen"
@@ -14,10 +15,12 @@ import type { Booking, BookingStatus } from "@/data/types"
 import { ApiError } from "@/lib/api"
 import {
   bookingDurationMin,
+  canDownloadBookingInvoice,
   FILTER_LABELS,
   formatBookingDate,
   formatDuration,
   getBookingStatusLabel,
+  isArtistBooking,
   serviceSummary,
   statusBadgeColors,
 } from "@/lib/booking-display"
@@ -109,6 +112,11 @@ function BookingCard({
             </Text>
             <StatusBadge status={booking.status} />
           </View>
+          {isArtistBooking(booking) ? (
+            <Text variant="caption" color={colors.coral} numberOfLines={1}>
+              Solo artist
+            </Text>
+          ) : null}
           <View style={styles.areaRow}>
             <Icon name="location-outline" size={14} color={colors.textMuted} />
             <Text variant="caption" muted numberOfLines={1}>
@@ -133,7 +141,7 @@ function BookingCard({
           label="Duration"
           value={`~${formatDuration(duration)}`}
         />
-        {booking.staffName ? (
+        {booking.staffName && !isArtistBooking(booking) ? (
           <MetaChip
             icon="person-outline"
             label="Stylist"
@@ -176,6 +184,12 @@ export default function BookingsScreen() {
       const next = await fetchBookings()
       setBookings(next)
     } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setAuthed(false)
+        setBookings([])
+        setLoadError(null)
+        return
+      }
       setBookings([])
       const message =
         error instanceof ApiError
@@ -209,6 +223,12 @@ export default function BookingsScreen() {
           setBookings(next)
         } catch (error) {
           if (cancelled) return
+          if (error instanceof ApiError && error.status === 401) {
+            setAuthed(false)
+            setBookings([])
+            setLoadError(null)
+            return
+          }
           setBookings([])
           const message =
             error instanceof ApiError
@@ -376,8 +396,11 @@ export default function BookingsScreen() {
               <StatusBadge status={selected.status} />
             </View>
             <Text muted>
+              {isArtistBooking(selected) ? "Solo artist · " : ""}
               {selected.salonArea}
-              {selected.id ? ` · #${selected.id.slice(0, 8)}` : ""}
+              {!isArtistBooking(selected) && selected.id
+                ? ` · #${selected.id.slice(0, 8)}`
+                : ""}
             </Text>
 
             <View style={styles.metaGrid}>
@@ -394,8 +417,12 @@ export default function BookingsScreen() {
               />
               <MetaChip
                 icon="person-outline"
-                label="Stylist"
-                value={selected.staffName?.trim() || "Any available"}
+                label={isArtistBooking(selected) ? "Artist" : "Stylist"}
+                value={
+                  isArtistBooking(selected)
+                    ? selected.salonName
+                    : selected.staffName?.trim() || "Any available"
+                }
               />
             </View>
 
@@ -423,96 +450,148 @@ export default function BookingsScreen() {
             ) : null}
             {selected.notes?.trim() ? (
               <Text variant="caption" muted>
-                Note · {selected.notes}
+                {isArtistBooking(selected) ? selected.notes : `Note · ${selected.notes}`}
               </Text>
             ) : null}
 
             <View style={styles.payRow}>
               <Text muted>
-                {selected.status === "completed" ? "Paid at salon" : "Pay at salon"}
+                {isArtistBooking(selected)
+                  ? selected.status === "pending"
+                    ? "Advance pending"
+                    : "Artist booking"
+                  : selected.status === "completed"
+                    ? "Paid at salon"
+                    : "Pay at salon"}
               </Text>
               <Text variant="heading">₹{Math.round(selected.price)}</Text>
             </View>
 
-            <Button
-              label="View salon"
-              onPress={() => {
-                const id = selected.salonId
-                setSelected(null)
-                router.push({ pathname: "/salon/[id]", params: { id } })
-              }}
-            />
-
-            {upcomingStatuses.includes(selected.status) ? (
-              <>
-                {canRescheduleWithNotice(selected.startsAt).allowed ? (
-                  <Button
-                    label="Reschedule"
-                    variant="secondary"
-                    onPress={() => {
-                      const id = selected.id
-                      setSelected(null)
-                      router.push({
-                        pathname: "/bookings/[id]/reschedule",
-                        params: { id },
-                      })
-                    }}
-                  />
-                ) : (
-                  <Text variant="caption" muted>
-                    {getRescheduleBlockedReason(selected.startsAt)}
-                  </Text>
-                )}
-                {canCancelWithNotice(
-                  selected.startsAt,
-                  selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
-                ).allowed ? (
-                  <Button
-                    label="Cancel booking"
-                    variant="ghost"
-                    onPress={() => setCancelOpen(true)}
-                  />
-                ) : (
-                  <Text variant="caption" muted>
-                    {getCancelBlockedReason(
-                      selected.startsAt,
-                      selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
-                    )}
-                  </Text>
-                )}
-              </>
-            ) : null}
-
-            {selected.status === "completed" && !selected.hasVerifiedReview ? (
-              <Button
-                label="Leave a review"
-                variant="secondary"
-                onPress={() => {
-                  const appointmentId = selected.id
-                  const salonName = selected.salonName
-                  const staffName = selected.staffName?.trim() || ""
-                  setSelected(null)
-                  router.push({
-                    pathname: "/review",
-                    params: {
-                      appointmentId,
-                      salonName,
-                      ...(staffName ? { staffName } : {}),
-                    },
-                  })
-                }}
+            {canDownloadBookingInvoice(selected) ? (
+              <DownloadInvoiceButton
+                bookingId={selected.crmAppointmentId ?? selected.id}
               />
             ) : null}
 
-            <Button
-              label="Book again"
-              variant="secondary"
-              onPress={() => {
-                const id = selected.salonId
-                setSelected(null)
-                router.push({ pathname: "/salon/[id]", params: { id } })
-              }}
-            />
+            {isArtistBooking(selected) ? (
+              <>
+                {selected.artistSlug || selected.salonId ? (
+                  <Button
+                    label="View artist"
+                    onPress={() => {
+                      const slug = selected.artistSlug || selected.salonId
+                      setSelected(null)
+                      router.push({
+                        pathname: "/artist/[slug]",
+                        params: { slug },
+                      })
+                    }}
+                  />
+                ) : null}
+                {(selected.artistSlug || selected.salonId) &&
+                upcomingStatuses.includes(selected.status) ? (
+                  <Button
+                    label="Book again"
+                    variant="secondary"
+                    onPress={() => {
+                      const slug = selected.artistSlug || selected.salonId
+                      setSelected(null)
+                      router.push({
+                        pathname: "/artist/book/[slug]",
+                        params: { slug },
+                      })
+                    }}
+                  />
+                ) : null}
+                {upcomingStatuses.includes(selected.status) ? (
+                  <Text variant="caption" muted>
+                    To change or cancel this visit, contact the artist directly.
+                  </Text>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <Button
+                  label="View salon"
+                  onPress={() => {
+                    const id = selected.salonId
+                    setSelected(null)
+                    router.push({ pathname: "/salon/[id]", params: { id } })
+                  }}
+                />
+
+                {upcomingStatuses.includes(selected.status) ? (
+                  <>
+                    {canRescheduleWithNotice(selected.startsAt).allowed ? (
+                      <Button
+                        label="Reschedule"
+                        variant="secondary"
+                        onPress={() => {
+                          const id = selected.id
+                          setSelected(null)
+                          router.push({
+                            pathname: "/bookings/[id]/reschedule",
+                            params: { id },
+                          })
+                        }}
+                      />
+                    ) : (
+                      <Text variant="caption" muted>
+                        {getRescheduleBlockedReason(selected.startsAt)}
+                      </Text>
+                    )}
+                    {canCancelWithNotice(
+                      selected.startsAt,
+                      selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+                    ).allowed ? (
+                      <Button
+                        label="Cancel booking"
+                        variant="ghost"
+                        onPress={() => setCancelOpen(true)}
+                      />
+                    ) : (
+                      <Text variant="caption" muted>
+                        {getCancelBlockedReason(
+                          selected.startsAt,
+                          selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+                        )}
+                      </Text>
+                    )}
+                  </>
+                ) : null}
+
+                {selected.status === "completed" && !selected.hasVerifiedReview ? (
+                  <Button
+                    label="Leave a review"
+                    variant="secondary"
+                    onPress={() => {
+                      const appointmentId = selected.id
+                      const salonName = selected.salonName
+                      const staffName = selected.staffName?.trim() || ""
+                      setSelected(null)
+                      router.push({
+                        pathname: "/review",
+                        params: {
+                          appointmentId,
+                          salonName,
+                          ...(staffName ? { staffName } : {}),
+                        },
+                      })
+                    }}
+                  />
+                ) : null}
+
+                <Button
+                  label="Book again"
+                  variant="secondary"
+                  onPress={() => {
+                    const id = selected.salonId
+                    setSelected(null)
+                    router.push({ pathname: "/salon/[id]", params: { id } })
+                  }}
+                />
+              </>
+            )}
           </View>
         ) : null}
       </BottomSheet>

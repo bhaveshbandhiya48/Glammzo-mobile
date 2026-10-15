@@ -1,0 +1,25 @@
+diff --git a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+index 3e0250f..364f00e 100644
+--- a/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
++++ b/node_modules/react-native-maps/android/src/main/java/com/rnmaps/maps/MapMarker.java
+@@ -821,7 +821,18 @@ public class MapMarker extends MapFeature {
+     @Override
+     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+         super.onLayout(changed, l, t, r, b);
+-        this.height = b - t;
+-        this.width = r - l;
++        int newWidth = r - l;
++        int newHeight = b - t;
++        // Glammzo: keep bitmap size in sync with laid-out dimensions so custom
++        // price badges are not clipped/blank on Android.
++        // See https://github.com/react-native-maps/react-native-maps/issues/5165
++        if (newWidth > 0 && newHeight > 0 && (newWidth != this.width || newHeight != this.height)) {
++            this.width = newWidth;
++            this.height = newHeight;
++            clearDrawableCache();
++            if (marker != null) {
++                update(true);
++            }
++        }
+     }
+ }

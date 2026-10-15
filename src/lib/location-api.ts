@@ -57,17 +57,20 @@ export async function fetchPlaceDetails(input: {
   return data.place
 }
 
-export async function reverseGeocode(input: {
-  latitude: number
-  longitude: number
-}): Promise<ResolvedPlace> {
+export async function reverseGeocode(
+  input: {
+    latitude: number
+    longitude: number
+  },
+  options?: { timeoutMs?: number },
+): Promise<ResolvedPlace> {
   const params = new URLSearchParams({
     lat: String(input.latitude),
     lng: String(input.longitude),
   })
   const data = await apiFetch<{ ok: boolean; place: ResolvedPlace }>(
     `/api/mobile/location/reverse?${params.toString()}`,
-    { auth: false },
+    { auth: false, timeoutMs: options?.timeoutMs ?? 12_000 },
   )
   return data.place
 }

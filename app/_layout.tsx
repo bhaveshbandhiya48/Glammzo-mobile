@@ -15,6 +15,7 @@ import { NotificationsProvider } from "@/context/NotificationsContext"
 import { useLaunchPermissions } from "@/hooks/useLaunchPermissions"
 import { usePushRegistration } from "@/hooks/usePushRegistration"
 import "@/lib/config"
+import { hydrateGreetingCache } from "@/lib/user"
 import { appFonts } from "@/theme/fonts"
 import { colors } from "@/theme/tokens"
 
@@ -84,6 +85,9 @@ function RootNavigator() {
         />
         <Stack.Screen name="services" options={{ title: "Services" }} />
         <Stack.Screen name="category/[type]" options={{ title: "Category" }} />
+        <Stack.Screen name="artists/index" options={{ title: "Artists" }} />
+        <Stack.Screen name="artist/[slug]" options={{ headerShown: false }} />
+        <Stack.Screen name="artist/book/[slug]" options={{ title: "Booking" }} />
         <Stack.Screen name="review" options={{ title: "Leave a review", presentation: "modal" }} />
         <Stack.Screen
           name="bookings/[id]/reschedule"
@@ -110,6 +114,10 @@ function RootNavigator() {
           name="profile/favorites"
           options={profileStackOptions("Saved salons")}
         />
+        <Stack.Screen
+          name="profile/support"
+          options={profileStackOptions("Help & support")}
+        />
       </Stack>
     </>
   )
@@ -123,6 +131,7 @@ export default function RootLayout() {
   useEffect(() => {
     // Native splash is blank cream — hide only if we locked it, then show splash.mp4.
     void hideNativeSplash()
+    void hydrateGreetingCache()
   }, [])
 
   const showApp = fontsLoaded && splashDone

@@ -19,6 +19,12 @@ import { ApiError } from "@/lib/api"
 import { submitSalonReview } from "@/lib/reviews-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
+function firstParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value
+  const trimmed = raw?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : null
+}
+
 const STAND_OUT = [
   "Skill & technique",
   "Professionalism",
@@ -30,15 +36,14 @@ const STAND_OUT = [
 export default function ReviewScreen() {
   const router = useRouter()
   const scrollRef = useRef<ScrollView>(null)
-  const { appointmentId, salonName, staffName } = useLocalSearchParams<{
-    appointmentId?: string
-    salonName?: string
-    staffName?: string
+  const params = useLocalSearchParams<{
+    appointmentId?: string | string[]
+    salonName?: string | string[]
+    staffName?: string | string[]
   }>()
-  const stylist =
-    typeof staffName === "string" && staffName.trim().length > 0
-      ? staffName.trim()
-      : null
+  const appointmentId = firstParam(params.appointmentId)
+  const salonName = firstParam(params.salonName)
+  const stylist = firstParam(params.staffName)
 
   const [rating, setRating] = useState(5)
   const [chip, setChip] = useState(STAND_OUT[0])

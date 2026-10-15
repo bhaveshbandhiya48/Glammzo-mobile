@@ -1,7 +1,8 @@
 import Svg, { Circle, Path, Rect } from "react-native-svg"
+import type { ColorValue } from "react-native"
 
 type Props = {
-  color: string
+  color: ColorValue
   size?: number
   focused?: boolean
 }

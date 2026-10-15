@@ -8,15 +8,15 @@ import {
   View,
 } from "react-native"
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router"
-import * as Location from "expo-location"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { BusinessTypeStrip } from "@/components/explore/BusinessTypeStrip"
 import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
 import { MapOverlay } from "@/components/explore/MapOverlay"
+import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
 import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
-import { FeaturedSalonCarousel } from "@/components/explore/FeaturedSalonCarousel"
+import { SalonCarousel } from "@/components/explore/SalonCarousel"
 import { SearchSuggestionsPanel } from "@/components/explore/SearchSuggestionsPanel"
 import { TopChrome } from "@/components/layout/TopChrome"
 import { BottomSheet } from "@/components/ui/BottomSheet"
@@ -24,7 +24,6 @@ import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
-import { SalonCard } from "@/components/ui/SalonCard"
 import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { useCart } from "@/context/CartContext"
@@ -66,18 +65,24 @@ import {
   fetchNearbyAreas,
   fetchPlaceAutocomplete,
   fetchPlaceDetails,
-  reverseGeocode,
   type PlacePrediction,
 } from "@/lib/location-api"
+import {
+  getDeviceCoordinates,
+  resolvePlaceFromCoordinates,
+} from "@/lib/device-location"
+import { prefetchHomeArtists } from "@/lib/artists-api"
 import { fetchSalons, getCatalogSnapshot, hydrateCatalogFromStorage, resolveSalonById } from "@/lib/salons-api"
+import { cartServicesSubtotal } from "@/lib/service-pricing"
 import {
   getPopularSearches,
   getSearchSuggestions,
 } from "@/lib/search-suggestions"
 import {
   DEFAULT_SAVED_LOCATION,
-  getDisplayName,
+  getSignedInDisplayName,
   getSavedLocation,
+  peekCachedGreeting,
   setSavedLocation,
   type SavedLocation,
 } from "@/lib/user"
@@ -111,7 +116,9 @@ export default function ExploreScreen() {
   const { category: categoryParam } = useLocalSearchParams<{ category?: string }>()
   const cart = useCart()
   const { isOffline } = useNetwork()
-  const [username, setUsername] = useState("Guest")
+  const [username, setUsername] = useState<string | null>(() =>
+    peekCachedGreeting(),
+  )
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null)
   const [locationMode, setLocationMode] = useState<LocationBrowseMode>("nearby")
   const [locationDraft, setLocationDraft] = useState("")
@@ -137,13 +144,16 @@ export default function ExploreScreen() {
   const [activeCartSalonId, setActiveCartSalonId] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<Salon[]>([])
   const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogReady, setCatalogReady] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
+  const [launchSettled, setLaunchSettled] = useState(false)
   const [offerBanners, setOfferBanners] = useState<PromoBannerItem[]>([])
   const catalogRequest = useRef(0)
   const wasOffline = useRef(false)
 
-  const locationReady = savedLocation != null
-  const location = savedLocation?.label ?? "Locating…"
+  const locationReady = savedLocation != null && launchSettled
+  const homeReady = locationReady && catalogReady
+  const location = locationReady ? savedLocation.label : "Locating…"
 
   const tabBarStyle = useMemo(() => {
     const bottomPad = Math.max(insets.bottom, 8)
@@ -225,7 +235,10 @@ export default function ExploreScreen() {
           : "Couldn't load salons. Check your connection and try again.",
       )
     } finally {
-      if (requestId === catalogRequest.current) setCatalogLoading(false)
+      if (requestId === catalogRequest.current) {
+        setCatalogLoading(false)
+        setCatalogReady(true)
+      }
     }
   }, [])
 
@@ -234,23 +247,47 @@ export default function ExploreScreen() {
       let cancelled = false
 
       void (async () => {
+        const name = await getSignedInDisplayName()
+        if (!cancelled) setUsername(name)
+      })()
+
+      void (async () => {
         // First visit: GPS bootstrap. Later visits: keep saved/manual pick for this session.
         await bootstrapLaunchPermissions()
         if (cancelled) return
         const saved = (await getSavedLocation()) ?? DEFAULT_SAVED_LOCATION
-        if (!cancelled) setSavedLocationState(saved)
-
-        const name = await getDisplayName()
-        if (!cancelled) setUsername(name)
+        if (!cancelled) {
+          setSavedLocationState(saved)
+          setLaunchSettled(true)
+        }
       })()
 
       void loadCatalog()
+
+      // Start solo-artists in parallel with salons (don’t wait for catalogReady).
+      void (async () => {
+        const saved = (await getSavedLocation()) ?? DEFAULT_SAVED_LOCATION
+        if (cancelled) return
+        prefetchHomeArtists(saved.latitude ?? undefined, saved.longitude ?? undefined)
+      })()
 
       return () => {
         cancelled = true
       }
     }, [loadCatalog]),
   )
+
+  useEffect(() => {
+    if (!locationReady || !savedLocation) return
+    prefetchHomeArtists(
+      savedLocation.latitude ?? undefined,
+      savedLocation.longitude ?? undefined,
+    )
+  }, [
+    locationReady,
+    savedLocation?.latitude,
+    savedLocation?.longitude,
+  ])
 
   useEffect(() => {
     if (wasOffline.current && !isOffline) {
@@ -332,7 +369,7 @@ export default function ExploreScreen() {
   const draftFilterCount = countActiveExploreFilters(draftFilters)
 
   const showHomeSections =
-    locationReady &&
+    homeReady &&
     !searchQuery.trim() &&
     filters.category === "all" &&
     activeFilterCount === 0 &&
@@ -376,14 +413,14 @@ export default function ExploreScreen() {
   }, [catalog, savedLocation, locationMode])
 
   const showLocationEmpty =
-    locationReady &&
+    homeReady &&
     locationResult.emptyKind !== "none" &&
     !searchQuery.trim() &&
     filters.category === "all" &&
     activeFilterCount === 0
 
   const showFilterEmpty =
-    locationReady &&
+    homeReady &&
     !showLocationEmpty &&
     !catalogLoading &&
     salons.length === 0 &&
@@ -422,9 +459,13 @@ export default function ExploreScreen() {
       const selectedPackage = salonCart.packageId
         ? salon.packages.find((item) => item.id === salonCart.packageId)
         : undefined
-      const total = selectedPackage
-        ? selectedPackage.packagePrice
-        : services.reduce((sum, service) => sum + service.price, 0)
+      const total = cartServicesSubtotal(
+        salon.services,
+        salonCart.serviceIds,
+        selectedPackage ?? null,
+        salonCart.quantities,
+        salonCart.priceOptionIds,
+      )
       const images = [
         ...services.map((service) => service.imageUrl),
         ...(selectedPackage ? [selectedPackage.imageUrl] : []),
@@ -442,7 +483,7 @@ export default function ExploreScreen() {
           salonId: salon.id,
           salonName: salon.name,
           itemCount,
-          totalLabel: `₹${total}`,
+          totalLabel: `₹${Math.round(total)}`,
           imageUrls: images,
           previewLabel: preview,
           onPress: () => {
@@ -525,16 +566,13 @@ export default function ExploreScreen() {
         let lng = savedLocation?.longitude
 
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          const permission = await Location.getForegroundPermissionsAsync()
-          if (!permission.granted) {
+          const coords = await getDeviceCoordinates({ promptIfNeeded: false })
+          if (!coords) {
             if (!cancelled) setNearbyAreas([])
             return
           }
-          const position = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          })
-          lat = position.coords.latitude
-          lng = position.coords.longitude
+          lat = coords.latitude
+          lng = coords.longitude
         }
 
         const areas = await fetchNearbyAreas({
@@ -644,18 +682,12 @@ export default function ExploreScreen() {
     setNearMeLoading(true)
     setPlacesError(null)
     try {
-      const permission = await Location.requestForegroundPermissionsAsync()
-      if (!permission.granted) {
-        setPlacesError("Location permission is required for Near me.")
+      const coords = await getDeviceCoordinates({ promptIfNeeded: true })
+      if (!coords) {
+        setPlacesError("Location permission is required to use current location.")
         return
       }
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      })
-      const place = await reverseGeocode({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      })
+      const place = await resolvePlaceFromCoordinates(coords)
       await commitLocation({
         label: place.label,
         placeId: place.placeId || undefined,
@@ -666,12 +698,8 @@ export default function ExploreScreen() {
         state: place.state,
         formattedAddress: place.formattedAddress,
       })
-    } catch (err) {
-      setPlacesError(
-        err instanceof ApiError
-          ? err.message
-          : "Could not detect your current location.",
-      )
+    } catch {
+      setPlacesError("Could not detect your current location. Try again in a moment.")
     } finally {
       setNearMeLoading(false)
     }
@@ -689,10 +717,8 @@ export default function ExploreScreen() {
         onNotificationsPress={() => router.push("/notifications")}
         onCartPress={() => {
           const first = cart.carts[0]
-          if (first) {
-            setActiveCartSalonId(first.salonId)
-            setCartOpen(true)
-          }
+          setActiveCartSalonId(first?.salonId ?? null)
+          setCartOpen(true)
         }}
       />
 
@@ -715,64 +741,33 @@ export default function ExploreScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.scroll, showCart && styles.scrollWithCart]}
         >
-          <PromoBannerCarousel
-            items={offerBanners}
-            onPressItem={(item) => {
-              if (item.promoCode) {
-                // Keep browse context — offer is applied at booking checkout.
-                return
-              }
-            }}
-          />
-
-          <View style={styles.section}>
-            <BusinessTypeStrip
-              selected={null}
-              availableTypes={availableBusinessTypes}
-              onSelect={(type) => {
-                if (!type) return
-                router.push({
-                  pathname: "/category/[type]",
-                  params: { type },
-                })
+          {homeReady ? (
+            <PromoBannerCarousel
+              items={offerBanners}
+              onPressItem={(item) => {
+                if (item.promoCode) {
+                  // Keep browse context — offer is applied at booking checkout.
+                  return
+                }
               }}
             />
-          </View>
+          ) : null}
 
-          {showHomeSections &&
-          featuredSection.salons.length > 0 &&
-          gridSalons.length === 0 ? null : (
-          <View style={styles.sectionHeader}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="heading">{sectionTitle}</Text>
-              {showHomeSections && nearbyAreaGridSalons.length > 0 && areaName ? (
-                <Text variant="caption" muted style={{ marginTop: 2 }}>
-                  In {areaName}
-                </Text>
-              ) : locationResult.scopeLabel &&
-              !searchQuery.trim() &&
-              filters.category === "all" &&
-              locationResult.emptyKind === "none" ? (
-                <Text variant="caption" muted style={{ marginTop: 2 }}>
-                  {locationResult.scopeLabel}
-                </Text>
-              ) : null}
+          {homeReady && availableBusinessTypes.length > 0 ? (
+            <View style={styles.section}>
+              <BusinessTypeStrip
+                selected={null}
+                availableTypes={availableBusinessTypes}
+                onSelect={(type) => {
+                  if (!type) return
+                  router.push({
+                    pathname: "/category/[type]",
+                    params: { type },
+                  })
+                }}
+              />
             </View>
-            {searchQuery.trim() ? (
-              <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
-                <Text variant="caption" color={colors.coral}>
-                  Clear
-                </Text>
-              </Pressable>
-            ) : showLocationEmpty ? null : (
-              <Pressable onPress={() => router.push("/services")} hitSlop={8}>
-                <Text variant="caption" color={colors.coral}>
-                  See all
-                </Text>
-              </Pressable>
-            )}
-          </View>
-          )}
+          ) : null}
 
           {activeFilterCount > 0 || filters.sort !== "recommended" ? (
             <ScrollView
@@ -872,6 +867,7 @@ export default function ExploreScreen() {
             </ScrollView>
           ) : null}
 
+          {homeReady ? (
           <View style={styles.filterBar}>
             <Pressable style={styles.filterChip} onPress={() => setSortOpen(true)}>
               <Icon name="swap-vertical-outline" size={16} color={colors.text} />
@@ -910,12 +906,9 @@ export default function ExploreScreen() {
               ) : null}
             </Pressable>
           </View>
-
-          {showHomeSections && featuredSection.salons.length > 0 ? (
-            <FeaturedSalonCarousel salons={featuredSection.salons} />
           ) : null}
 
-          {(catalogLoading && catalog.length === 0) || !locationReady ? (
+          {(catalogLoading && catalog.length === 0) || !homeReady ? (
             <ExploreSalonsSkeleton count={4} />
           ) : catalogError && catalog.length === 0 ? (
             <LocationEmptyState
@@ -930,7 +923,8 @@ export default function ExploreScreen() {
               onBrowseCity={() => void browseCity()}
               onChangeLocation={openLocationSheet}
             />
-          ) : showFilterEmpty || (gridSalons.length === 0 && featuredSection.salons.length === 0) ? (
+          ) : showFilterEmpty ||
+            (gridSalons.length === 0 && featuredSection.salons.length === 0) ? (
             <LocationEmptyState
               variant="filters"
               onClearFilters={() => {
@@ -943,41 +937,45 @@ export default function ExploreScreen() {
                 setSearchQuery("")
               }}
             />
-          ) : gridSalons.length === 0 ? null : (
+          ) : (
             <>
-              <View style={styles.grid}>
-                {localGridSalons.map((salon) => (
-                  <SalonCard
-                    key={salon.id}
-                    salon={salon}
-                    onPress={() =>
-                      router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
-                    }
-                  />
-                ))}
-              </View>
-              {nearbyAreaGridSalons.length > 0 ? (
-                <>
-                  <View style={styles.sectionHeader}>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text variant="heading">Nearby areas</Text>
-                      <Text variant="caption" muted style={{ marginTop: 2 }}>
-                        Within {NEARBY_RADIUS_KM} km of {areaName ?? "you"}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.grid}>
-                    {nearbyAreaGridSalons.map((salon) => (
-                      <SalonCard
-                        key={salon.id}
-                        salon={salon}
-                        onPress={() =>
-                          router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
-                        }
-                      />
-                    ))}
-                  </View>
-                </>
+              {showHomeSections && featuredSection.salons.length > 0 ? (
+                <SalonCarousel title="Featured" salons={featuredSection.salons} />
+              ) : null}
+
+              {localGridSalons.length > 0 ? (
+                <SalonCarousel
+                  title={sectionTitle}
+                  subtitle={
+                    showHomeSections && nearbyAreaGridSalons.length > 0 && areaName
+                      ? `In ${areaName}`
+                      : locationResult.scopeLabel &&
+                          !searchQuery.trim() &&
+                          filters.category === "all" &&
+                          locationResult.emptyKind === "none"
+                        ? locationResult.scopeLabel
+                        : undefined
+                  }
+                  salons={localGridSalons}
+                  onSeeAll={
+                    searchQuery.trim() ? undefined : () => router.push("/services")
+                  }
+                />
+              ) : null}
+
+              {showHomeSections && nearbyAreaGridSalons.length > 0 ? (
+                <SalonCarousel
+                  title="Nearby areas"
+                  subtitle={`Within ${NEARBY_RADIUS_KM} km of ${areaName ?? "you"}`}
+                  salons={nearbyAreaGridSalons}
+                />
+              ) : null}
+
+              {showHomeSections ? (
+                <ArtistsCarousel
+                  latitude={savedLocation?.latitude}
+                  longitude={savedLocation?.longitude}
+                />
               ) : null}
             </>
           )}

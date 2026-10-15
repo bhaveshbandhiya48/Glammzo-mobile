@@ -23,8 +23,14 @@ import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
+import { CatalogServiceRow } from "@/components/salon/CatalogServiceRow"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
 import { SalonOffersCarousel } from "@/components/salon/SalonOffersCarousel"
+import {
+  ServiceQuantityStepper,
+  serviceUsesQuantity,
+} from "@/components/salon/ServiceQuantityStepper"
+import { UnisexAudiencePicker } from "@/components/salon/UnisexAudiencePicker"
 import { useCart } from "@/context/CartContext"
 import { useFavorites } from "@/context/FavoritesContext"
 import {
@@ -38,9 +44,22 @@ import {
   type GlammzoOfferCard,
 } from "@/lib/glammzo-offers-api"
 import { withSalonDistanceFromLocation } from "@/lib/explore-location"
+import {
+  filterPackagesByGenderAudience,
+  filterServicesByGenderAudience,
+  isUnisexSalonBusiness,
+  type ServiceGenderAudience,
+} from "@/lib/gender-audience"
 import { LEGAL } from "@/lib/legal"
 import { bestOfferForService, formatOfferDiscountBadge } from "@/lib/offer-badges"
 import { resolvePackageBadge } from "@/lib/package-badges"
+import { quantityForService } from "@/lib/pricing-unit"
+import {
+  cartServicesSubtotal,
+  defaultPriceOptionId,
+  formatServicePriceLabel,
+  serviceHasPriceOptions,
+} from "@/lib/service-pricing"
 import { getSavedLocation } from "@/lib/user"
 import { salonWhatsAppUrl } from "@/lib/whatsapp"
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -146,6 +165,7 @@ export default function SalonDetailScreen() {
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
   const [glammzoOffers, setGlammzoOffers] = useState<GlammzoOfferCard[]>([])
+  const [genderAudience, setGenderAudience] = useState<ServiceGenderAudience>("men")
   const sliderRef = useRef<ScrollView>(null)
   const pageScrollRef = useRef<ScrollView>(null)
   const serviceCategoryOffsets = useRef<Record<string, number>>({})
@@ -190,23 +210,40 @@ export default function SalonDetailScreen() {
     }
   }, [id])
 
-  const selectedServices = useMemo(() => {
+  const isUnisex = isUnisexSalonBusiness(salon?.businessType)
+  const salonCart = salon ? cart.getCart(salon.id) : undefined
+
+  const catalogServices = useMemo(() => {
     if (!salon) return []
-    const salonCart = cart.getCart(salon.id)
-    if (!salonCart) return []
+    if (!isUnisex) return salon.services
+    return filterServicesByGenderAudience(salon.services, genderAudience)
+  }, [genderAudience, isUnisex, salon])
+
+  const catalogPackages = useMemo(() => {
+    if (!salon) return []
+    if (!isUnisex) return salon.packages
+    return filterPackagesByGenderAudience(salon.packages, salon.services, genderAudience)
+  }, [genderAudience, isUnisex, salon])
+
+  const selectedServices = useMemo(() => {
+    if (!salon || !salonCart) return []
     return salon.services.filter((service) => salonCart.serviceIds.includes(service.id))
-  }, [cart, salon])
+  }, [salon, salonCart])
 
   const selectedPackage = useMemo(() => {
-    if (!salon) return undefined
-    const salonCart = cart.getCart(salon.id)
-    if (!salonCart?.packageId) return undefined
+    if (!salon || !salonCart?.packageId) return undefined
     return salon.packages.find((item) => item.id === salonCart.packageId)
-  }, [cart, salon])
+  }, [salon, salonCart])
 
-  const total = selectedPackage
-    ? selectedPackage.packagePrice
-    : selectedServices.reduce((sum, service) => sum + service.price, 0)
+  const total = salon
+    ? cartServicesSubtotal(
+        salon.services,
+        salonCart?.serviceIds ?? [],
+        selectedPackage ?? null,
+        salonCart?.quantities,
+        salonCart?.priceOptionIds,
+      )
+    : 0
 
   const slides = useMemo(() => (salon ? getSalonHeroSlides(salon, 5) : []), [salon])
   const whatsappUrl = useMemo(
@@ -222,9 +259,8 @@ export default function SalonDetailScreen() {
   const amenityRows = useMemo(() => flattenAmenities(salon?.amenities).slice(0, 10), [salon])
   const customerReviews = salon?.customerReviews ?? []
   const serviceGroups = useMemo(() => {
-    if (!salon) return []
     const groups = new Map<string, SalonService[]>()
-    for (const service of salon.services) {
+    for (const service of catalogServices) {
       const category = service.category.trim() || "Services"
       const existing = groups.get(category)
       if (existing) existing.push(service)
@@ -236,13 +272,13 @@ export default function SalonDetailScreen() {
         items: items.sort((a, b) => a.name.localeCompare(b.name)),
       }))
       .sort((a, b) => a.category.localeCompare(b.category))
-  }, [salon])
+  }, [catalogServices])
 
   const catalogCategories = useMemo(() => {
     const categories = serviceGroups.map((group) => group.category)
-    if ((salon?.packages.length ?? 0) > 0) return [PACKAGES_CATEGORY, ...categories]
+    if (catalogPackages.length > 0) return [PACKAGES_CATEGORY, ...categories]
     return categories
-  }, [salon?.packages.length, serviceGroups])
+  }, [catalogPackages.length, serviceGroups])
 
   const serviceOfferLabels = useMemo(() => {
     const labels = new Map<string, string>()
@@ -274,6 +310,27 @@ export default function SalonDetailScreen() {
         ? current.filter((item) => item !== category)
         : [...current, category]
     )
+  }
+
+  function handleToggleService(service: SalonService) {
+    if (!salon) return
+    if (cart.isServiceSelected(salon.id, service.id)) {
+      cart.toggleService(salon.id, service.id)
+      return
+    }
+    cart.toggleService(salon.id, service.id, {
+      priceOptionId: defaultPriceOptionId(service),
+    })
+  }
+
+  function handleServiceQuantity(service: SalonService, quantity: number) {
+    if (!salon) return
+    cart.setServiceQuantity(salon.id, service.id, quantity, service.pricingUnit)
+  }
+
+  function handleServicePriceOption(service: SalonService, optionId: string) {
+    if (!salon) return
+    cart.setServicePriceOption(salon.id, service.id, optionId)
   }
 
   useEffect(() => {
@@ -315,7 +372,7 @@ export default function SalonDetailScreen() {
   const galleryTile = (windowWidth - spacing.xl * 2 - spacing.sm * 2) / 3
   const hasCart = cart.itemCountFor(salon.id) > 0
   const packagesExpanded = expandedServiceCategories.includes(PACKAGES_CATEGORY)
-  const showMenuFab = salon.packages.length > 0 || serviceGroups.length > 1
+  const showMenuFab = catalogPackages.length > 0 || serviceGroups.length > 1
   const cartImages = [
     ...selectedServices.map((service) => service.imageUrl),
     ...(selectedPackage ? [selectedPackage.imageUrl] : []),
@@ -550,6 +607,12 @@ export default function SalonDetailScreen() {
           <Text variant="label" muted style={styles.section}>
             Services
           </Text>
+          {isUnisex ? (
+            <UnisexAudiencePicker
+              value={genderAudience}
+              onSelect={setGenderAudience}
+            />
+          ) : null}
           {catalogCategories.length > 1 ? (
             <ScrollView
               horizontal
@@ -595,7 +658,7 @@ export default function SalonDetailScreen() {
               serviceCategoryBaseOffset.current = event.nativeEvent.layout.y
             }}
           >
-            {salon.packages.length > 0 ? (
+            {catalogPackages.length > 0 ? (
               <View
                 onLayout={(event) => {
                   const y = serviceCategoryBaseOffset.current + event.nativeEvent.layout.y
@@ -612,13 +675,13 @@ export default function SalonDetailScreen() {
                   style={styles.serviceCategoryHeader}
                   accessibilityRole="button"
                   accessibilityState={{ expanded: packagesExpanded }}
-                  accessibilityLabel={`Packages, ${salon.packages.length} ${salon.packages.length === 1 ? "item" : "items"}`}
+                  accessibilityLabel={`Packages, ${catalogPackages.length} ${catalogPackages.length === 1 ? "item" : "items"}`}
                 >
                   <View style={styles.serviceCategoryHeaderCopy}>
                     <Text variant="bodyStrong">{PACKAGES_CATEGORY}</Text>
                     <Text variant="caption" muted>
-                      {salon.packages.length}{" "}
-                      {salon.packages.length === 1 ? "item" : "items"}
+                      {catalogPackages.length}{" "}
+                      {catalogPackages.length === 1 ? "item" : "items"}
                     </Text>
                   </View>
                   <Icon
@@ -636,7 +699,7 @@ export default function SalonDetailScreen() {
                         event.nativeEvent.layout.y
                     }}
                   >
-                    {salon.packages.map((pkg, index) => {
+                    {catalogPackages.map((pkg, index) => {
                       const selected = cart.isPackageSelected(salon.id, pkg.id)
                       const packageBadge = resolvePackageBadge(pkg.badge)
                       const includedCount = pkg.items.reduce(
@@ -655,7 +718,7 @@ export default function SalonDetailScreen() {
                           style={[
                             styles.serviceRow,
                             selected && styles.serviceRowSelected,
-                            index === salon.packages.length - 1 && styles.serviceRowLast,
+                            index === catalogPackages.length - 1 && styles.serviceRowLast,
                           ]}
                         >
                           <Pressable
@@ -718,7 +781,7 @@ export default function SalonDetailScreen() {
                           </Pressable>
                           <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel={selected ? "Remove from cart" : "Add to cart"}
+                            accessibilityLabel={selected ? "Remove from bag" : "Add to bag"}
                             onPress={() => {
                               cart.setPackage(salon.id, selected ? null : pkg.id)
                             }}
@@ -784,91 +847,29 @@ export default function SalonDetailScreen() {
                   {group.items.map((service, index) => {
                     const selected = cart.isServiceSelected(salon.id, service.id)
                     return (
-                      <View
+                      <CatalogServiceRow
                         key={service.id}
+                        service={service}
+                        selected={selected}
+                        quantity={quantityForService(service, salonCart?.quantities)}
+                        selectedOptionId={salonCart?.priceOptionIds[service.id] ?? null}
+                        offerLabel={serviceOfferLabels.get(service.id)}
+                        isLast={index === group.items.length - 1}
                         onLayout={(event) => {
                           serviceItemOffsets.current[service.id] =
                             serviceCategoryOffsets.current[group.category] +
                             (serviceListOffsets.current[group.category] ?? 0) +
                             event.nativeEvent.layout.y
                         }}
-                        style={[
-                          styles.serviceRow,
-                          selected && styles.serviceRowSelected,
-                          index === group.items.length - 1 && styles.serviceRowLast,
-                        ]}
-                      >
-                        <Pressable
-                          style={styles.serviceMain}
-                          onPress={() => setDetailService(service)}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${service.name} details`}
-                        >
-                          <Image
-                            source={{ uri: service.imageUrl }}
-                            style={styles.serviceThumb}
-                            contentFit="cover"
-                          />
-                          <View style={styles.serviceCopy}>
-                            <View style={styles.serviceNameRow}>
-                              <Text variant="bodyStrong" numberOfLines={1} style={{ flexShrink: 1 }}>
-                                {service.name}
-                              </Text>
-                              {serviceOfferLabels.get(service.id) ? (
-                                <View style={styles.serviceOfferBadge}>
-                                  <Text
-                                    variant="caption"
-                                    color={colors.coral}
-                                    style={styles.serviceOfferBadgeLabel}
-                                  >
-                                    {serviceOfferLabels.get(service.id)}
-                                  </Text>
-                                </View>
-                              ) : null}
-                            </View>
-                            {service.description ? (
-                              <Text variant="caption" muted numberOfLines={1}>
-                                {service.description}
-                              </Text>
-                            ) : (
-                              <Text variant="caption" muted numberOfLines={1}>
-                                {service.category}
-                              </Text>
-                            )}
-                            <View style={styles.serviceMeta}>
-                              <Icon name="time-outline" size={13} color={colors.textSubtle} />
-                              <Text variant="caption" muted>
-                                {service.durationMin} min
-                              </Text>
-                              <Text variant="caption" muted>
-                                ·
-                              </Text>
-                              <Text variant="caption" color={colors.text}>
-                                ₹{service.price}
-                              </Text>
-                              {service.compareAtPrice ? (
-                                <Text variant="caption" muted style={styles.strike}>
-                                  ₹{service.compareAtPrice}
-                                </Text>
-                              ) : null}
-                            </View>
-                          </View>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={selected ? "Remove from cart" : "Add to cart"}
-                          onPress={() => cart.toggleService(salon.id, service.id)}
-                          style={[styles.addBtn, selected && styles.addBtnSelected]}
-                        >
-                          <Text
-                            variant="caption"
-                            color={selected ? colors.text : colors.primaryFg}
-                            style={styles.addBtnLabel}
-                          >
-                            {selected ? "Remove" : "Add"}
-                          </Text>
-                        </Pressable>
-                      </View>
+                        onOpenDetail={() => setDetailService(service)}
+                        onToggle={() => handleToggleService(service)}
+                        onQuantityChange={(quantity) =>
+                          handleServiceQuantity(service, quantity)
+                        }
+                        onPriceOptionChange={(optionId) =>
+                          handleServicePriceOption(service, optionId)
+                        }
+                      />
                     )
                   })}
                 </View>
@@ -1005,11 +1006,13 @@ export default function SalonDetailScreen() {
       >
         {detailService ? (
           <View style={styles.sheetBody}>
-            <Image
-              source={{ uri: detailService.imageUrl }}
-              style={styles.sheetImage}
-              contentFit="cover"
-            />
+            {detailService.imageUrl.trim() ? (
+              <Image
+                source={{ uri: detailService.imageUrl }}
+                style={styles.sheetImage}
+                contentFit="cover"
+              />
+            ) : null}
             <View style={styles.serviceNameRow}>
               <Text variant="heading" style={{ flexShrink: 1 }}>
                 {detailService.name}
@@ -1034,7 +1037,17 @@ export default function SalonDetailScreen() {
                 Price
               </Text>
               <View style={styles.sheetPriceRow}>
-                <Text variant="title">₹{detailService.price}</Text>
+                <Text variant="title">
+                  {formatServicePriceLabel(
+                    detailService,
+                    cart.isServiceSelected(salon.id, detailService.id)
+                      ? salonCart?.priceOptionIds[detailService.id]
+                      : undefined,
+                    {
+                      finalPrice: cart.isServiceSelected(salon.id, detailService.id),
+                    },
+                  )}
+                </Text>
                 {detailService.compareAtPrice ? (
                   <Text muted style={styles.strike}>
                     ₹{detailService.compareAtPrice}
@@ -1042,6 +1055,46 @@ export default function SalonDetailScreen() {
                 ) : null}
               </View>
             </View>
+            {serviceHasPriceOptions(detailService) ? (
+              <View style={{ marginTop: spacing.lg, gap: spacing.xs }}>
+                <Text variant="caption" muted>
+                  Choose a price
+                </Text>
+                {detailService.priceOptions!.map((option) => {
+                  const active =
+                    cart.isServiceSelected(salon.id, detailService.id) &&
+                    (salonCart?.priceOptionIds[detailService.id] ??
+                      defaultPriceOptionId(detailService)) === option.id
+                  return (
+                    <Pressable
+                      key={option.id}
+                      onPress={() => handleServicePriceOption(detailService, option.id)}
+                      style={[
+                        styles.sheetOptionChip,
+                        active && styles.sheetOptionChipActive,
+                      ]}
+                    >
+                      <Text variant="bodyStrong">{option.name}</Text>
+                      <Text variant="bodyStrong">₹{Math.round(option.price)}</Text>
+                    </Pressable>
+                  )
+                })}
+              </View>
+            ) : null}
+            {serviceUsesQuantity(detailService) &&
+            cart.isServiceSelected(salon.id, detailService.id) ? (
+              <View style={{ marginTop: spacing.lg }}>
+                <ServiceQuantityStepper
+                  service={detailService}
+                  quantity={quantityForService(detailService, salonCart?.quantities)}
+                  onQuantityChange={(quantity) =>
+                    handleServiceQuantity(detailService, quantity)
+                  }
+                  onRemove={() => handleToggleService(detailService)}
+                  showLabel
+                />
+              </View>
+            ) : null}
             {detailService.includes.length > 0 ? (
               <>
                 <Text variant="label" muted style={{ marginTop: spacing.xl }}>
@@ -1058,8 +1111,8 @@ export default function SalonDetailScreen() {
             <Button
               label={
                 cart.isServiceSelected(salon.id, detailService.id)
-                  ? "Remove from cart"
-                  : "Add to cart"
+                  ? "Remove from bag"
+                  : "Add to bag"
               }
               variant={
                 cart.isServiceSelected(salon.id, detailService.id)
@@ -1068,7 +1121,7 @@ export default function SalonDetailScreen() {
               }
               style={{ marginTop: spacing.xxl }}
               onPress={() => {
-                cart.toggleService(salon.id, detailService.id)
+                handleToggleService(detailService)
                 setDetailService(null)
               }}
             />
@@ -1144,8 +1197,8 @@ export default function SalonDetailScreen() {
             <Button
               label={
                 cart.isPackageSelected(salon.id, detailPackage.id)
-                  ? "Remove from cart"
-                  : "Add to cart"
+                  ? "Remove from bag"
+                  : "Add to bag"
               }
               variant={
                 cart.isPackageSelected(salon.id, detailPackage.id)
@@ -1196,7 +1249,7 @@ export default function SalonDetailScreen() {
         compact
       >
         <View style={styles.menuSheetList}>
-          {salon.packages.length > 0 ? (
+          {catalogPackages.length > 0 ? (
             <View
               style={[
                 styles.menuSection,
@@ -1214,8 +1267,8 @@ export default function SalonDetailScreen() {
                 <View style={styles.menuSheetCopy}>
                   <Text variant="bodyStrong">{PACKAGES_CATEGORY}</Text>
                   <Text variant="caption" muted>
-                    {salon.packages.length}{" "}
-                    {salon.packages.length === 1 ? "item" : "items"}
+                    {catalogPackages.length}{" "}
+                    {catalogPackages.length === 1 ? "item" : "items"}
                   </Text>
                 </View>
                 <Icon
@@ -1228,7 +1281,7 @@ export default function SalonDetailScreen() {
               </Pressable>
 
               {menuExpandedCategory === PACKAGES_CATEGORY
-                ? salon.packages.map((pkg, index) => (
+                ? catalogPackages.map((pkg, index) => (
                     <Pressable
                       key={pkg.id}
                       onPress={() => {
@@ -1245,7 +1298,7 @@ export default function SalonDetailScreen() {
                       }}
                       style={[
                         styles.menuServiceRow,
-                        index === salon.packages.length - 1 && styles.menuServiceRowLast,
+                        index === catalogPackages.length - 1 && styles.menuServiceRowLast,
                       ]}
                     >
                       <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>
@@ -1340,7 +1393,7 @@ export default function SalonDetailScreen() {
               salonId: salon.id,
               salonName: salon.name,
               itemCount: cart.itemCountFor(salon.id),
-              totalLabel: `₹${total}`,
+              totalLabel: `₹${Math.round(total)}`,
               imageUrls: cartImages,
               previewLabel: cartPreviewLabel,
               ctaLabel: "Checkout",
@@ -1708,6 +1761,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+  },
+  sheetOptionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  sheetOptionChipActive: {
+    borderColor: colors.coral,
+    backgroundColor: "#FFF7F5",
   },
   panel: {
     gap: spacing.sm,

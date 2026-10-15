@@ -17,9 +17,13 @@ export function usePushRegistration() {
     let cancelled = false
 
     async function registerIfSignedIn() {
-      const token = await getAccessToken()
-      if (!token || cancelled) return
-      await registerPushTokenWithServer()
+      try {
+        const token = await getAccessToken()
+        if (!token || cancelled) return
+        await registerPushTokenWithServer()
+      } catch {
+        // Permission / token errors must not take down the session.
+      }
     }
 
     void registerIfSignedIn()

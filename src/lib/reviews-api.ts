@@ -13,6 +13,6 @@ export async function submitSalonReview(input: {
     alreadyReviewed?: boolean
   }>("/api/mobile/reviews", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: input,
   })
 }

@@ -30,10 +30,9 @@ export function BusinessTypeStrip({
   onSelect,
   availableTypes,
 }: Props) {
-  const items =
-    availableTypes && availableTypes.length > 0
-      ? BUSINESS_TYPE_ITEMS.filter((item) => availableTypes.includes(item.label))
-      : BUSINESS_TYPE_ITEMS
+  const items = availableTypes
+    ? BUSINESS_TYPE_ITEMS.filter((item) => availableTypes.includes(item.label))
+    : BUSINESS_TYPE_ITEMS
 
   return (
     <View>

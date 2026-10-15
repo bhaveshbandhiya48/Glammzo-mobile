@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter, type Href } from "expo-router"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -39,41 +39,138 @@ export default function LoginScreen() {
   const [debugOtp, setDebugOtp] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resendSeconds, setResendSeconds] = useState(0)
   const verifyingRef = useRef(false)
+  const leavingRef = useRef(false)
+
+  useEffect(() => {
+    if (resendSeconds <= 0) return
+    const timer = setTimeout(() => setResendSeconds((s) => s - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendSeconds])
 
   const phoneDigits = phone.replace(/\D/g, "")
   const canSendCode = phoneDigits.length === 10
   const canVerify = otp.trim().length >= 6
 
-  function goHomeOrNext() {
-    if (typeof next === "string" && next.startsWith("/")) {
-      router.replace(next as Href)
-      return
+  function nextHref(): Href | null {
+    if (typeof next === "string" && next.startsWith("/") && !next.startsWith("/login")) {
+      return next as Href
     }
-    router.replace("/(tabs)/explore")
+    return null
   }
 
-  function finishReturningUser() {
-    if (typeof next === "string" && next.startsWith("/")) {
-      router.replace(next as Href)
-    } else if (router.canGoBack()) {
-      router.back()
-    } else {
-      router.replace("/(tabs)/explore")
+  function syncAfterLogin() {
+    requestAnimationFrame(() => {
+      void registerPushTokenWithServer().catch(() => undefined)
+      void favorites.refresh().catch(() => undefined)
+    })
+  }
+
+  function navigateAfterDismiss(href: Href) {
+    requestAnimationFrame(() => {
+      try {
+        router.navigate(href)
+      } catch {
+        try {
+          router.replace(href)
+        } catch {
+          // Dismiss already landed on a valid screen.
+        }
+      }
+    })
+  }
+
+  /**
+   * Login is a modal. Replacing it with `/(tabs)/explore` remounts Home (and
+   * the map) on top of the existing tab stack and can crash — especially if
+   * a permission prompt is still settling. Dismiss first, then navigate.
+   */
+  function leaveLogin(mode: "home" | "back") {
+    if (leavingRef.current) return
+    leavingRef.current = true
+    Keyboard.dismiss()
+
+    const dest = nextHref()
+    const home = "/(tabs)/explore" as Href
+
+    try {
+      if (typeof router.canDismiss === "function" && router.canDismiss()) {
+        router.dismiss()
+        if (mode === "home") {
+          navigateAfterDismiss(dest ?? home)
+        } else if (dest) {
+          navigateAfterDismiss(dest)
+        }
+      } else if (mode === "home") {
+        router.replace(dest ?? home)
+      } else if (dest) {
+        router.replace(dest)
+      } else if (router.canGoBack()) {
+        router.back()
+      } else {
+        router.replace(home)
+      }
+    } catch {
+      leavingRef.current = false
+      try {
+        router.replace(home)
+      } catch {
+        // Stay on login rather than throw out of the press handler.
+      }
     }
+
+    syncAfterLogin()
   }
 
   function closeLogin() {
     Keyboard.dismiss()
-    if (router.canGoBack()) router.back()
-    else router.replace("/(tabs)/explore")
+    try {
+      if (typeof router.canDismiss === "function" && router.canDismiss()) {
+        router.dismiss()
+      } else if (router.canGoBack()) {
+        router.back()
+      } else {
+        router.replace("/(tabs)/explore")
+      }
+    } catch {
+      router.replace("/(tabs)/explore")
+    }
   }
 
   async function completeReturningUser(existingName: string) {
     await setDisplayName(existingName)
-    void registerPushTokenWithServer()
-    void favorites.refresh()
-    finishReturningUser()
+    leaveLogin("back")
+  }
+
+  async function sendOtpCode() {
+    const result = await requestOtp(phoneDigits)
+    setChallengeToken(result.challengeToken)
+    const serverDebugOtp = result.debugOtp?.trim() || null
+    if (__DEV__ && serverDebugOtp) {
+      setDebugOtp(serverDebugOtp)
+      setOtp(serverDebugOtp)
+    } else {
+      setDebugOtp(null)
+      setOtp("")
+    }
+    setResendSeconds(30)
+    return result
+  }
+
+  async function handleResend() {
+    if (!canSendCode || resendSeconds > 0 || resending || loading) return
+    Keyboard.dismiss()
+    setError(null)
+    setResending(true)
+    try {
+      await sendOtpCode()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not resend code.")
+    } finally {
+      setResending(false)
+    }
   }
 
   async function handleContinue() {
@@ -84,16 +181,7 @@ export default function LoginScreen() {
       if (!canSendCode) return
       setLoading(true)
       try {
-        const result = await requestOtp(phoneDigits)
-        setChallengeToken(result.challengeToken)
-        const serverDebugOtp = result.debugOtp?.trim() || null
-        if (__DEV__ && serverDebugOtp) {
-          setDebugOtp(serverDebugOtp)
-          setOtp(serverDebugOtp)
-        } else {
-          setDebugOtp(null)
-          setOtp("")
-        }
+        await sendOtpCode()
         setStep("otp")
       } catch (err) {
         setError(err instanceof ApiError ? err.message : "Could not send code.")
@@ -124,8 +212,6 @@ export default function LoginScreen() {
           // Authenticated first-time user — name onboarding (backend is source of truth).
           setError(null)
           setStep("name")
-          void registerPushTokenWithServer()
-          void favorites.refresh()
         }
       } catch (err) {
         if (err instanceof ApiError) {
@@ -150,7 +236,7 @@ export default function LoginScreen() {
     return (
       <NameOnboarding
         onComplete={() => {
-          goHomeOrNext()
+          leaveLogin("home")
         }}
       />
     )
@@ -243,22 +329,41 @@ export default function LoginScreen() {
             <Button
               label={step === "phone" ? "Continue" : "Verify OTP"}
               loading={loading}
-              disabled={step === "phone" ? !canSendCode : !canVerify}
+              disabled={
+                step === "phone" ? !canSendCode : !canVerify || resending
+              }
               onPress={handleContinue}
             />
             {step === "otp" ? (
-              <Button
-                label="Change number"
-                variant="ghost"
-                onPress={() => {
-                  Keyboard.dismiss()
-                  setOtp("")
-                  setDebugOtp(null)
-                  setChallengeToken(null)
-                  setError(null)
-                  setStep("phone")
-                }}
-              />
+              <>
+                <Button
+                  label={
+                    resending
+                      ? "Sending…"
+                      : resendSeconds > 0
+                        ? `Resend code in ${resendSeconds}s`
+                        : "Resend code"
+                  }
+                  variant="ghost"
+                  loading={resending}
+                  disabled={resendSeconds > 0 || loading}
+                  onPress={() => void handleResend()}
+                />
+                <Button
+                  label="Change number"
+                  variant="ghost"
+                  disabled={loading || resending}
+                  onPress={() => {
+                    Keyboard.dismiss()
+                    setOtp("")
+                    setDebugOtp(null)
+                    setChallengeToken(null)
+                    setError(null)
+                    setResendSeconds(0)
+                    setStep("phone")
+                  }}
+                />
+              </>
             ) : (
               <Text variant="caption" muted style={styles.terms}>
                 By continuing, you agree to Glammzo{" "}

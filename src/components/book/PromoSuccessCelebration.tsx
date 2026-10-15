@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   confetti: {
     position: "absolute",

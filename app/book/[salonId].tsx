@@ -50,6 +50,12 @@ import {
   type PromoCashbackClaim,
 } from "@/lib/promo-api"
 import { getSalonByIdLive } from "@/lib/salons-api"
+import {
+  cartServicesSubtotal,
+  formatRupees,
+  serviceCartCaption,
+  serviceLineAmount,
+} from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
 import {
   isValidEmail,
@@ -112,6 +118,7 @@ export default function BookingScreen() {
   const [phoneMissing, setPhoneMissing] = useState(false)
   const [marketingOptIn, setMarketingOptIn] = useState(true)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const [step, setStep] = useState(0)
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
@@ -223,19 +230,17 @@ export default function BookingScreen() {
     }
   }, [salonId])
 
+  const salonCart = salon ? cart.getCart(salon.id) : undefined
+
   const selectedServices = useMemo(() => {
-    if (!salon) return []
-    const salonCart = cart.getCart(salon.id)
-    if (!salonCart) return []
+    if (!salon || !salonCart) return []
     return salon.services.filter((service) => salonCart.serviceIds.includes(service.id))
-  }, [cart, salon])
+  }, [salon, salonCart])
 
   const selectedPackage = useMemo(() => {
-    if (!salon) return undefined
-    const salonCart = cart.getCart(salon.id)
-    if (!salonCart?.packageId) return undefined
+    if (!salon || !salonCart?.packageId) return undefined
     return salon.packages.find((item) => item.id === salonCart.packageId)
-  }, [cart, salon])
+  }, [salon, salonCart])
 
   const serviceIdsForAvailability = useMemo(() => {
     if (selectedPackage) {
@@ -335,9 +340,15 @@ export default function BookingScreen() {
   const selectedSlotLabel =
     slots.find((slot) => slot.value === slotValue)?.label ?? slotValue ?? "—"
 
-  const subtotal = selectedPackage
-    ? selectedPackage.packagePrice
-    : selectedServices.reduce((sum, service) => sum + service.price, 0)
+  const subtotal = salon
+    ? cartServicesSubtotal(
+        salon.services,
+        salonCart?.serviceIds ?? [],
+        selectedPackage ?? null,
+        salonCart?.quantities,
+        salonCart?.priceOptionIds,
+      )
+    : 0
 
   const loyaltyAvailable = canApplyLoyalty(loyalty)
   const afterPromo = appliedDiscount?.finalTotal ?? subtotal
@@ -371,7 +382,7 @@ export default function BookingScreen() {
       return
     }
     if (!salon || serviceIdsForAvailability.length === 0) {
-      setPromoError("Add services to your cart before applying a promo code.")
+      setPromoError("Add services to your bag before applying a promo code.")
       return
     }
 
@@ -383,6 +394,8 @@ export default function BookingScreen() {
         code,
         serviceIds: serviceIdsForAvailability,
         packageId: selectedPackage?.id,
+        serviceQuantities: salonCart?.quantities,
+        servicePriceOptionIds: salonCart?.priceOptionIds,
       })
 
       if (result.kind === "discount") {
@@ -428,6 +441,8 @@ export default function BookingScreen() {
       code,
       serviceIds: serviceIdsForAvailability,
       packageId: selectedPackage?.id,
+      serviceQuantities: salonCart?.quantities,
+      servicePriceOptionIds: salonCart?.priceOptionIds,
     })
       .then((result) => {
         if (!active) return
@@ -448,7 +463,7 @@ export default function BookingScreen() {
         setPromoError(
           err instanceof ApiError
             ? err.message
-            : "This code is no longer valid for your cart.",
+            : "This code is no longer valid for your bag.",
         )
       })
 
@@ -456,7 +471,13 @@ export default function BookingScreen() {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- revalidate only when cart shape changes
-  }, [salon?.id, serviceIdsForAvailability.join("|"), selectedPackage?.id])
+  }, [
+    salon?.id,
+    serviceIdsForAvailability.join("|"),
+    selectedPackage?.id,
+    JSON.stringify(salonCart?.quantities ?? {}),
+    JSON.stringify(salonCart?.priceOptionIds ?? {}),
+  ])
 
   if (salonLoading) {
     return <SalonDetailSkeleton />
@@ -498,11 +519,16 @@ export default function BookingScreen() {
           priceLabel: `₹${selectedPackage.packagePrice}`,
         },
       ]
-    : selectedServices.map((service) => ({
-        title: service.name,
-        subtitle: `${service.category} · ${service.durationMin} min`,
-        priceLabel: `₹${service.price}`,
-      }))
+    : selectedServices.map((service) => {
+        const optionId = salonCart?.priceOptionIds[service.id] ?? null
+        return {
+          title: service.name,
+          subtitle: serviceCartCaption(service, salonCart?.quantities, optionId),
+          priceLabel: formatRupees(
+            serviceLineAmount(service, salonCart?.quantities, optionId),
+          ),
+        }
+      })
 
   const confirmPriceLines = [
     { label: "Subtotal", value: `₹${Math.round(subtotal)}` },
@@ -575,6 +601,8 @@ export default function BookingScreen() {
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
         marketingOptIn,
+        serviceQuantities: salonCart?.quantities,
+        servicePriceOptionIds: salonCart?.priceOptionIds,
       })
       // Keep profile in sync when the guest adds/updates email at checkout.
       void syncProfileEmailFromBooking(email)
@@ -618,9 +646,15 @@ export default function BookingScreen() {
       >
         <Text variant="title">Reserve your visit</Text>
         <Text muted style={styles.gap}>
-          Review your services, time, and rewards before confirming.
+          {step === 0
+            ? "Review your services"
+            : step === 1
+              ? "Pick a date and time"
+              : "Confirm and book"}
         </Text>
 
+        {step === 0 ? (
+        <>
         <View style={styles.card}>
           <View style={styles.salonRow}>
             <Image
@@ -692,7 +726,9 @@ export default function BookingScreen() {
             </View>
           ) : null}
 
-          {selectedServices.map((service) => (
+          {selectedServices.map((service) => {
+            const optionId = salonCart?.priceOptionIds[service.id] ?? null
+            return (
             <View key={service.id} style={styles.serviceCard}>
               <Image
                 source={{ uri: service.imageUrl || salon.imageUrl }}
@@ -703,9 +739,13 @@ export default function BookingScreen() {
               <View style={styles.serviceCopy}>
                 <Text variant="bodyStrong">{service.name}</Text>
                 <Text variant="caption" muted>
-                  {service.category} · {service.durationMin} min
+                  {serviceCartCaption(service, salonCart?.quantities, optionId)}
                 </Text>
-                <Text variant="bodyStrong">₹{service.price}</Text>
+                <Text variant="bodyStrong">
+                  {formatRupees(
+                    serviceLineAmount(service, salonCart?.quantities, optionId),
+                  )}
+                </Text>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -717,7 +757,8 @@ export default function BookingScreen() {
                 <Icon name="close" size={16} color={colors.textSubtle} />
               </Pressable>
             </View>
-          ))}
+            )
+          })}
 
           {!hasSelection ? (
             <>
@@ -732,7 +773,31 @@ export default function BookingScreen() {
             </>
           ) : null}
         </View>
+        </>
+        ) : null}
 
+        {step === 2 ? (
+        <>
+        <View style={styles.card}>
+          <Text variant="label" muted>
+            Your visit
+          </Text>
+          <Text variant="bodyStrong" numberOfLines={2}>
+            {selectedPackage
+              ? selectedPackage.name
+              : selectedServices.map((s) => s.name).join(" · ") || "Services"}
+          </Text>
+          <Text variant="caption" muted style={{ marginTop: 4 }}>
+            {selectedDate && slotValue
+              ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
+              : "Date and time"}
+            {selectedPackage
+              ? ""
+              : selectedStaffName
+                ? ` · ${selectedStaffName}`
+                : " · Any specialist"}
+          </Text>
+        </View>
         <View style={styles.card}>
           <Text variant="label" muted>
             Customer info
@@ -793,7 +858,10 @@ export default function BookingScreen() {
             </View>
           </Pressable>
         </View>
+        </>
+        ) : null}
 
+        {step === 1 ? (
         <View style={styles.card}>
           <Text variant="label" muted>
             Appointment
@@ -923,7 +991,10 @@ export default function BookingScreen() {
             placeholder="Anything we should know"
           />
         </View>
+        ) : null}
 
+        {step === 2 ? (
+        <>
         <View style={styles.card}>
           <Text variant="label" muted>
             Promo code
@@ -1135,6 +1206,8 @@ export default function BookingScreen() {
             <Text variant="heading">₹{Math.round(total)}</Text>
           </View>
         </View>
+        </>
+        ) : null}
       </Screen>
 
       <BookingDateSheet
@@ -1198,29 +1271,58 @@ export default function BookingScreen() {
       />
 
       <StickyCta
-        title={`Book · pay at salon ₹${Math.round(total)}`}
+        title={
+          step === 0
+            ? hasSelection
+              ? `Continue · ₹${Math.round(total)}`
+              : "Select services to continue"
+            : step === 1
+              ? selectedDate && slotValue
+                ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
+                : "Pick a date and time"
+              : `Book · pay at salon ₹${Math.round(total)}`
+        }
         subtitle={
           phoneMissing
             ? "Sign in again to restore your verified mobile"
-            : hasSelection && selectedDate && slotValue
-              ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-              : "Select a service and time"
+            : step === 0
+              ? "Next · choose date and time"
+              : step === 1
+                ? "Next · confirm your booking"
+                : hasSelection && selectedDate && slotValue
+                  ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
+                  : "Review details below"
         }
-        error={!confirmSheetOpen ? submitError : null}
-        label="Book"
+        error={step === 2 && !confirmSheetOpen ? submitError : null}
+        label={step < 2 ? "Continue" : "Book"}
         bottomOffset={keyboardHeight}
         disabled={
           submitting ||
           phoneMissing ||
-          !hasSelection ||
-          noStaffForServices ||
-          !selectedDate ||
-          !slotValue ||
-          name.trim().length < 2 ||
-          normalizeMobileDigits(phone).length < 10 ||
-          !isValidEmail(email)
+          (step === 0 && !hasSelection) ||
+          (step === 1 &&
+            (!hasSelection ||
+              noStaffForServices ||
+              !selectedDate ||
+              !slotValue)) ||
+          (step === 2 &&
+            (!hasSelection ||
+              noStaffForServices ||
+              !selectedDate ||
+              !slotValue ||
+              name.trim().length < 2 ||
+              normalizeMobileDigits(phone).length < 10 ||
+              !isValidEmail(email)))
         }
         onPress={() => {
+          if (step === 0) {
+            if (hasSelection) setStep(1)
+            return
+          }
+          if (step === 1) {
+            if (selectedDate && slotValue) setStep(2)
+            return
+          }
           setSubmitError(null)
           setConfirmSheetOpen(true)
         }}

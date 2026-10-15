@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as SecureStore from "expo-secure-store"
 
+import { clearAccessToken, getAccessToken } from "@/lib/session"
+
 const DISPLAY_NAME_KEY = "glammzo_display_name"
 const LOCATION_KEY = "glammzo_location_label"
 const LOCATION_DETAILS_KEY = "glammzo_location_details"
@@ -19,13 +21,13 @@ export type SavedLocation = {
 
 /** Fallback when location permission is denied or GPS fails. */
 export const DEFAULT_SAVED_LOCATION: SavedLocation = {
-  label: "Koramangala, Bengaluru",
-  area: "Koramangala",
+  label: "Indiranagar, Bengaluru",
+  area: "Indiranagar",
   city: "Bengaluru",
   state: "Karnataka",
-  latitude: 12.9352,
-  longitude: 77.6245,
-  formattedAddress: "Koramangala, Bengaluru, Karnataka",
+  latitude: 12.9784,
+  longitude: 77.6408,
+  formattedAddress: "Indiranagar, Bengaluru, Karnataka",
 }
 
 export const CONSUMER_GENDER_OPTIONS = ["female", "male"] as const
@@ -78,6 +80,13 @@ const emptyProfile: ConsumerProfile = {
   address: "",
 }
 
+/** Last greeting we confirmed (session-aware). Used so Home can paint instantly. */
+let greetingCache: string | null = null
+
+export function peekCachedGreeting(): string | null {
+  return greetingCache
+}
+
 export async function getDisplayName(): Promise<string> {
   const profile = await getConsumerProfile()
   if (profile.name.trim()) return profile.name.trim()
@@ -86,16 +95,39 @@ export async function getDisplayName(): Promise<string> {
   return trimmed && trimmed.length > 0 ? trimmed : "Guest"
 }
 
+/** Home greeting: never show a cached name without a session token. */
+export async function getSignedInDisplayName(): Promise<string> {
+  try {
+    const token = await getAccessToken()
+    if (!token) {
+      greetingCache = "Guest"
+      return "Guest"
+    }
+    const name = await getDisplayName()
+    greetingCache = name
+    return name
+  } catch {
+    return greetingCache ?? "Guest"
+  }
+}
+
+export async function hydrateGreetingCache(): Promise<string> {
+  return getSignedInDisplayName()
+}
+
 export async function setDisplayName(name: string): Promise<void> {
   const trimmed = name.trim()
   if (!trimmed) {
+    greetingCache = "Guest"
     await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
     return
   }
+  greetingCache = trimmed
   await SecureStore.setItemAsync(DISPLAY_NAME_KEY, trimmed)
 }
 
 export async function clearDisplayName(): Promise<void> {
+  greetingCache = "Guest"
   await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
 }
 
@@ -157,6 +189,11 @@ export async function setSavedLocation(location: SavedLocation): Promise<void> {
 export async function clearConsumerProfile(): Promise<void> {
   await AsyncStorage.removeItem(PROFILE_KEY)
   await clearDisplayName()
+}
+
+export async function clearLocalSession(): Promise<void> {
+  await clearAccessToken()
+  await clearConsumerProfile()
 }
 
 export async function getConsumerProfile(): Promise<ConsumerProfile> {

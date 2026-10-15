@@ -1,11 +1,12 @@
 import { API_URL } from "@/lib/config"
 import { getAccessToken } from "@/lib/session"
+import { clearLocalSession } from "@/lib/user"
 
 type ApiOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
   body?: unknown
   auth?: boolean
-  /** Request timeout in ms. Defaults to 12s. */
+  /** Request timeout in ms. Defaults to 25s (local Next compile can exceed 12s). */
   timeoutMs?: number
 }
 
@@ -41,7 +42,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     }
   }
 
-  const timeoutMs = options.timeoutMs ?? 12_000
+  const timeoutMs = options.timeoutMs ?? 25_000
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -84,6 +85,9 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
       data && typeof data === "object" && !Array.isArray(data)
         ? (data as Record<string, unknown>)
         : {}
+    if (response.status === 401 && options.auth !== false) {
+      await clearLocalSession()
+    }
     throw new ApiError(response.status, message, extras)
   }
 

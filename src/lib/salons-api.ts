@@ -9,8 +9,14 @@ import type {
   SalonReview,
   SalonService,
   SalonTaxInfo,
+  ServicePriceOption,
 } from "@/data/types"
 import { ApiError, apiFetch } from "@/lib/api"
+import {
+  parsePackageGenderAudience,
+  parseServiceGenderAudience,
+} from "@/lib/gender-audience"
+import { parsePricingUnit } from "@/lib/pricing-unit"
 
 const CACHE_TTL_MS = 60_000
 const CATALOG_STORAGE_KEY = "glammzo_salon_catalog_v1"
@@ -95,6 +101,21 @@ function mapService(raw: unknown): SalonService | null {
   const includes = Array.isArray(s.includes)
     ? s.includes.filter((item): item is string => typeof item === "string")
     : []
+  const priceOptions = Array.isArray(s.priceOptions)
+    ? s.priceOptions
+        .map((option): ServicePriceOption | null => {
+          if (!option || typeof option !== "object") return null
+          const row = option as Record<string, unknown>
+          const optionId = asString(row.id)
+          const optionName = asString(row.name).trim()
+          const optionPrice = asNumber(row.price)
+          if (!optionId || !optionName || !(optionPrice > 0)) return null
+          return { id: optionId, name: optionName, price: optionPrice }
+        })
+        .filter((option): option is ServicePriceOption => option != null)
+    : []
+  const pricingUnit = parsePricingUnit(s.pricingUnit) ?? undefined
+  const genderAudience = parseServiceGenderAudience(s.genderAudience)
   return {
     id,
     name,
@@ -108,6 +129,9 @@ function mapService(raw: unknown): SalonService | null {
     imageUrl: asString(s.imageUrl),
     description: typeof s.description === "string" ? s.description : undefined,
     includes,
+    ...(pricingUnit ? { pricingUnit } : {}),
+    ...(genderAudience ? { genderAudience } : {}),
+    ...(priceOptions.length >= 2 ? { priceOptions } : {}),
   }
 }
 
@@ -162,6 +186,9 @@ function mapPackage(raw: unknown, fallbackImage = ""): SalonPackage | null {
       typeof p.showComparePrice === "boolean"
         ? p.showComparePrice
         : p.show_compare_price !== false,
+    genderAudience: parsePackageGenderAudience(
+      p.genderAudience ?? p.gender_audience,
+    ),
   }
 }
 

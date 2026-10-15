@@ -65,6 +65,8 @@ export function NameOnboarding({ onComplete }: Props) {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const submittingRef = useRef(false)
+  const finishingRef = useRef(false)
+  const [finishing, setFinishing] = useState(false)
 
   const askOpacity = useRef(new Animated.Value(1)).current
   const welcomeOpacity = useRef(new Animated.Value(0)).current
@@ -157,6 +159,20 @@ export function NameOnboarding({ onComplete }: Props) {
   }
 
   const greeting = firstNameFromDisplay(savedName || normalizeDisplayName(rawName))
+
+  function finishWelcome() {
+    if (finishingRef.current) return
+    finishingRef.current = true
+    setFinishing(true)
+    askOpacity.stopAnimation()
+    welcomeOpacity.stopAnimation()
+    welcomeY.stopAnimation()
+    welcomeScale.stopAnimation()
+    sparkleOpacity.stopAnimation()
+    requestAnimationFrame(() => {
+      onComplete(savedName || greeting)
+    })
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
@@ -268,7 +284,9 @@ export function NameOnboarding({ onComplete }: Props) {
               </Text>
               <Button
                 label="Let's Glammzo →"
-                onPress={() => onComplete(savedName || greeting)}
+                loading={finishing}
+                disabled={finishing}
+                onPress={finishWelcome}
                 style={styles.welcomeCta}
                 accessibilityLabel="Continue to Glammzo home"
               />

@@ -26,6 +26,8 @@ export async function validatePromoCode(input: {
   code: string
   serviceIds: string[]
   packageId?: string | null
+  serviceQuantities?: Record<string, number>
+  servicePriceOptionIds?: Record<string, string>
 }): Promise<ValidatePromoResult> {
   const data = await apiFetch<{
     ok: boolean
@@ -41,6 +43,8 @@ export async function validatePromoCode(input: {
       code: input.code,
       serviceIds: input.serviceIds,
       packageId: input.packageId ?? null,
+      serviceQuantities: input.serviceQuantities,
+      servicePriceOptionIds: input.servicePriceOptionIds,
     },
   })
 

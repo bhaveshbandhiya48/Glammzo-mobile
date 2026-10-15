@@ -343,32 +343,37 @@ export function SalonCard({ salon, onPress, layout = "grid", active = false }: P
       <Pressable
         accessibilityRole="button"
         onPress={onPress}
-        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+        style={({ pressed }) => [
+          styles.body,
+          isCarousel && styles.bodyCarousel,
+          pressed && styles.pressed,
+        ]}
       >
-        <Text variant="bodyStrong" numberOfLines={1}>
+        <Text variant={isCarousel ? "heading" : "bodyStrong"} numberOfLines={1}>
           {salon.name}
         </Text>
         <Text variant="caption" muted numberOfLines={1}>
           {salon.area}
-          {salon.businessType ? ` · ${salon.businessType}` : ""}
+          {salon.distanceKm > 0 ? ` · ${salon.distanceKm.toFixed(1)} km` : ""}
         </Text>
-        <View style={styles.metaRow}>
+        <View style={[styles.metaRow, isCarousel && styles.metaRowCarousel]}>
           <View style={styles.ratingPill}>
             <Text variant="caption" color={colors.primaryFg}>
               ★ {salon.rating.toFixed(1)}
             </Text>
           </View>
-          <Text variant="caption" muted>
-            {salon.distanceKm.toFixed(1)} km
-          </Text>
-          <Text variant="caption" muted>
-            ·
-          </Text>
-          <Text variant="caption" color={salon.isOpenNow ? colors.success : colors.textSubtle}>
+          <Text
+            variant="caption"
+            color={salon.isOpenNow ? colors.success : colors.textSubtle}
+            numberOfLines={1}
+            style={styles.openStatus}
+          >
             {salon.isOpenNow ? "Open" : "Closed"}
           </Text>
         </View>
-        <Text variant="bodyStrong">from ₹{salon.priceFrom}</Text>
+        <Text variant={isCarousel ? "heading" : "bodyStrong"}>
+          from ₹{salon.priceFrom}
+        </Text>
       </Pressable>
       </View>
     </View>
@@ -416,11 +421,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   imageWrapCarousel: {
-    height: undefined,
-    aspectRatio: 1,
+    height: 96,
+    aspectRatio: undefined,
   },
   imageFill: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   image: {
     width: "100%",
@@ -453,7 +458,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.95)",
   },
   listGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 1,
   },
   listOverlay: {
@@ -543,11 +548,25 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 4,
   },
+  bodyCarousel: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    gap: 6,
+  },
   metaRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
-    gap: 6,
+    columnGap: 6,
+    rowGap: 2,
     marginTop: 2,
+  },
+  metaRowCarousel: {
+    marginTop: 2,
+  },
+  openStatus: {
+    flexShrink: 0,
   },
   ratingPill: {
     backgroundColor: colors.success,

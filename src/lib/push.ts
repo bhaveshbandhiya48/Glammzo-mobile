@@ -42,34 +42,34 @@ export async function ensureAndroidChannel() {
 export async function getExpoPushToken(): Promise<string | null> {
   if (Platform.OS === "web") return null
 
-  await ensureAndroidChannel()
-
-  if (!Device.isDevice) {
-    // Simulators may still work on newer Xcode; try anyway on iOS.
-    if (Platform.OS !== "ios") return null
-  }
-
-  const { status: existing } = await Notifications.getPermissionsAsync()
-  let finalStatus = existing
-  if (existing !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync()
-    finalStatus = status
-  }
-  if (finalStatus !== "granted") return null
-
-  const projectId = resolveProjectId()
-  if (!projectId) {
-    console.warn("[push] Missing EAS projectId in app.json extra.eas.projectId")
-    return null
-  }
-
   try {
+    await ensureAndroidChannel()
+
+    if (!Device.isDevice) {
+      // Simulators may still work on newer Xcode; try anyway on iOS.
+      if (Platform.OS !== "ios") return null
+    }
+
+    const { status: existing } = await Notifications.getPermissionsAsync()
+    let finalStatus = existing
+    if (existing !== "granted") {
+      const { status } = await Notifications.requestPermissionsAsync()
+      finalStatus = status
+    }
+    if (finalStatus !== "granted") return null
+
+    const projectId = resolveProjectId()
+    if (!projectId) {
+      console.warn("[push] Missing EAS projectId in app.json extra.eas.projectId")
+      return null
+    }
+
     const token = await Notifications.getExpoPushTokenAsync({ projectId })
     return token.data
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.warn(
-      "[push] getExpoPushTokenAsync failed:",
+      "[push] getExpoPushToken failed:",
       message,
       Platform.OS === "android"
         ? "(Android needs google-services.json + FCM V1 credentials on EAS — see .env.example)"
@@ -80,13 +80,13 @@ export async function getExpoPushToken(): Promise<string | null> {
 }
 
 export async function registerPushTokenWithServer(): Promise<boolean> {
-  const accessToken = await getAccessToken()
-  if (!accessToken) return false
-
-  const expoPushToken = await getExpoPushToken()
-  if (!expoPushToken) return false
-
   try {
+    const accessToken = await getAccessToken()
+    if (!accessToken) return false
+
+    const expoPushToken = await getExpoPushToken()
+    if (!expoPushToken) return false
+
     await apiFetch("/api/mobile/push/register", {
       method: "POST",
       body: {

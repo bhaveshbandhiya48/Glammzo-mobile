@@ -8,6 +8,10 @@ export const FILTER_LABELS = {
   cancelled: "Cancelled",
 } as const
 
+export function isArtistBooking(booking: Booking): boolean {
+  return booking.kind === "artist" || booking.id.startsWith("artist:")
+}
+
 export function getBookingStatusLabel(status: BookingStatus): string {
   switch (status) {
     case "pending":
@@ -99,4 +103,10 @@ export function serviceSummary(booking: Booking): string {
 export function bookingDurationMin(booking: Booking): number {
   if (booking.durationMin > 0) return booking.durationMin
   return booking.services.reduce((sum, s) => sum + (s.durationMin || 0), 0)
+}
+
+/** Invoice PDFs are created only when CRM status is truly `completed`. */
+export function canDownloadBookingInvoice(booking: Booking): boolean {
+  if (isArtistBooking(booking)) return false
+  return Boolean(booking.isCrmCompleted && (booking.crmAppointmentId || booking.id))
 }

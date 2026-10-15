@@ -1,7 +1,10 @@
-import * as Location from "expo-location"
 import * as Notifications from "expo-notifications"
 
-import { reverseGeocode } from "@/lib/location-api"
+import {
+  ensureForegroundLocationPermission,
+  getDeviceCoordinates,
+  resolvePlaceFromCoordinates,
+} from "@/lib/device-location"
 import { ensureAndroidChannel, registerPushTokenWithServer } from "@/lib/push"
 import {
   DEFAULT_SAVED_LOCATION,
@@ -49,9 +52,42 @@ function emitLaunchLocation(location: SavedLocation) {
   for (const listener of listeners) listener(location)
 }
 
+/** Previous deny fallback — treat as replaceable, not a user pick. */
+function isLegacyDefaultLocation(location: SavedLocation) {
+  return (
+    location.area === "Koramangala" &&
+    location.city === "Bengaluru" &&
+    location.latitude === 12.9352 &&
+    location.longitude === 77.6245
+  )
+}
+
+async function deniedOrUnavailableLocation(
+  existing: SavedLocation | null,
+): Promise<SavedLocation> {
+  const fallback =
+    !existing || isLegacyDefaultLocation(existing)
+      ? DEFAULT_SAVED_LOCATION
+      : existing
+  if (!existing || isLegacyDefaultLocation(existing)) {
+    await setSavedLocation(fallback)
+  }
+  lastGpsAt = Date.now()
+  emitLaunchLocation(fallback)
+  return fallback
+}
+
+/**
+ * Ask once if the OS has never prompted. Denied/restricted is not asked again.
+ * Android still reports canAskAgain after the first Deny — do not use that flag.
+ */
+async function hasForegroundLocationAccess(): Promise<boolean> {
+  return ensureForegroundLocationPermission(true)
+}
+
 /**
  * On first app session: ask for location + notification permission.
- * Allowed location → current place. Denied/failed → Koramangala, Bengaluru.
+ * Allowed location → current place. Denied/failed → Indiranagar, Bengaluru.
  * Concurrent callers share one promise (avoids returning stale location mid-resolve).
  *
  * Manual picks during the session are not overwritten by this bootstrap.
@@ -109,17 +145,15 @@ async function resolveLaunchLocationInner(): Promise<SavedLocation> {
   }
 
   try {
-    const permission = await Location.requestForegroundPermissionsAsync()
-    if (!permission.granted) {
-      const fallback = existing ?? DEFAULT_SAVED_LOCATION
-      if (!existing) await setSavedLocation(fallback)
-      emitLaunchLocation(fallback)
-      return fallback
+    const granted = await hasForegroundLocationAccess()
+    if (!granted) {
+      return deniedOrUnavailableLocation(existing)
     }
 
-    const position = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    })
+    const coords = await getDeviceCoordinates({ promptIfNeeded: false })
+    if (!coords) {
+      return deniedOrUnavailableLocation(existing)
+    }
     lastGpsAt = Date.now()
 
     // Manual pick may have landed while GPS was resolving.
@@ -131,53 +165,29 @@ async function resolveLaunchLocationInner(): Promise<SavedLocation> {
       }
     }
 
-    try {
-      const place = await reverseGeocode({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      })
-      if (sessionManualLocation) {
-        const manual = await getSavedLocation()
-        if (manual) {
-          emitLaunchLocation(manual)
-          return manual
-        }
+    const place = await resolvePlaceFromCoordinates(coords)
+    if (sessionManualLocation) {
+      const manual = await getSavedLocation()
+      if (manual) {
+        emitLaunchLocation(manual)
+        return manual
       }
-      const next: SavedLocation = {
-        label: place.label,
-        placeId: place.placeId || undefined,
-        latitude: place.latitude,
-        longitude: place.longitude,
-        city: place.city,
-        area: place.area,
-        state: place.state,
-        formattedAddress: place.formattedAddress,
-      }
-      await setSavedLocation(next)
-      emitLaunchLocation(next)
-      return next
-    } catch {
-      if (sessionManualLocation) {
-        const manual = await getSavedLocation()
-        if (manual) {
-          emitLaunchLocation(manual)
-          return manual
-        }
-      }
-      const next: SavedLocation = {
-        label: "Current location",
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }
-      await setSavedLocation(next)
-      emitLaunchLocation(next)
-      return next
     }
+    const next: SavedLocation = {
+      label: place.label,
+      placeId: place.placeId || undefined,
+      latitude: place.latitude,
+      longitude: place.longitude,
+      city: place.city,
+      area: place.area,
+      state: place.state,
+      formattedAddress: place.formattedAddress,
+    }
+    await setSavedLocation(next)
+    emitLaunchLocation(next)
+    return next
   } catch {
-    const fallback = existing ?? DEFAULT_SAVED_LOCATION
-    if (!existing) await setSavedLocation(fallback)
-    emitLaunchLocation(fallback)
-    return fallback
+    return deniedOrUnavailableLocation(existing)
   }
 }
 

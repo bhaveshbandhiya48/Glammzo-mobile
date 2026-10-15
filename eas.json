@@ -16,17 +16,20 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://glammzo.com",
         "EXPO_PUBLIC_SITE_URL": "https://glammzo.com",
+        "EXPO_PUBLIC_CRM_URL": "https://app.glammzo.com",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyBGxv8i5HzhaFGqyDZ_PjY0O6PKZ9x7620",
         "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyCxuC4BcLNspF49YXBGspEa3Hmm-BqiRbY"
       }
     },
     "production": {
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://glammzo.com",
         "EXPO_PUBLIC_SITE_URL": "https://glammzo.com",
+        "EXPO_PUBLIC_CRM_URL": "https://app.glammzo.com",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyBGxv8i5HzhaFGqyDZ_PjY0O6PKZ9x7620",
         "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyCxuC4BcLNspF49YXBGspEa3Hmm-BqiRbY"
       }
@@ -35,7 +38,7 @@
   "submit": {
     "production": {
       "ios": {
-        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID"
+        "ascAppId": "6821923068"
       },
       "android": {
         "track": "internal",

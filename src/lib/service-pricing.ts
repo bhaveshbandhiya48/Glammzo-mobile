@@ -67,8 +67,14 @@ export function cartServicesSubtotal(
   return selectedServiceIds.reduce((sum, serviceId) => sum + lineAmount(serviceId), 0)
 }
 
+/** ₹ with Indian grouping (₹15,000); paise only when the amount has them (₹682.50). */
 export function formatRupees(amount: number) {
-  return `₹${Math.round(amount)}`
+  const paise = Math.round(amount * 100)
+  const whole = paise % 100 === 0
+  return `₹${(paise / 100).toLocaleString("en-IN", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  })}`
 }
 
 export function formatServicePriceLabel(

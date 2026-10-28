@@ -116,7 +116,7 @@ export default function BookingScreen() {
   const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
   const [walletBalance, setWalletBalance] = useState(0)
   const [phoneMissing, setPhoneMissing] = useState(false)
-  const [marketingOptIn, setMarketingOptIn] = useState(true)
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [step, setStep] = useState(0)
 
@@ -531,12 +531,12 @@ export default function BookingScreen() {
       })
 
   const confirmPriceLines = [
-    { label: "Subtotal", value: `₹${Math.round(subtotal)}` },
+    { label: "Subtotal", value: `${formatRupees(subtotal)}` },
     ...(promoDiscount > 0 && appliedDiscount
       ? [
           {
             label: `Promo (${appliedDiscount.code})`,
-            value: `−₹${Math.round(promoDiscount)}`,
+            value: `−${formatRupees(promoDiscount)}`,
             success: true,
           },
         ]
@@ -561,7 +561,7 @@ export default function BookingScreen() {
                 ? salonTax.ratePercent
                 : salonTax.ratePercent.toFixed(2)
             }%)`,
-            value: `₹${Math.round(gstAmount)}`,
+            value: `${formatRupees(gstAmount)}`,
           },
         ]
       : []),
@@ -823,7 +823,7 @@ export default function BookingScreen() {
             style={styles.lockedInput}
           />
           <Input
-            label="Email"
+            label="Email (required)"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -831,6 +831,7 @@ export default function BookingScreen() {
             autoComplete="email"
             placeholder="you@email.com"
             hint="We'll send your invoice to this email."
+            error={email.trim() && !isValidEmail(email) ? "Check the email, it doesn't look complete." : null}
           />
           <Pressable
             onPress={() => setMarketingOptIn((value) => !value)}
@@ -1005,7 +1006,7 @@ export default function BookingScreen() {
                 <Text variant="bodyStrong">{appliedPromoCode}</Text>
                 {appliedDiscount ? (
                   <Text variant="caption" muted>
-                    {appliedDiscount.title} · −₹{Math.round(promoDiscount)}
+                    {appliedDiscount.title} · −{formatRupees(promoDiscount)}
                   </Text>
                 ) : cashbackClaim ? (
                   <Text variant="caption" muted>
@@ -1079,7 +1080,7 @@ export default function BookingScreen() {
               <Text variant="bodyStrong">Wallet credit</Text>
               <Text variant="caption" muted>
                 {walletBalance > 0
-                  ? `₹${Math.round(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
+                  ? `${formatRupees(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
                   : "No wallet balance yet"}
               </Text>
             </View>
@@ -1163,12 +1164,12 @@ export default function BookingScreen() {
           </Text>
           <View style={styles.summaryRow}>
             <Text muted>Subtotal</Text>
-            <Text>₹{Math.round(subtotal)}</Text>
+            <Text>{formatRupees(subtotal)}</Text>
           </View>
           {promoDiscount > 0 && appliedDiscount ? (
             <View style={styles.summaryRow}>
               <Text muted>Promo ({appliedDiscount.code})</Text>
-              <Text color={colors.success}>−₹{Math.round(promoDiscount)}</Text>
+              <Text color={colors.success}>−{formatRupees(promoDiscount)}</Text>
             </View>
           ) : null}
           {cashbackClaim ? (
@@ -1192,7 +1193,7 @@ export default function BookingScreen() {
                   : salonTax.ratePercent.toFixed(2)}
                 %)
               </Text>
-              <Text>₹{Math.round(gstAmount)}</Text>
+              <Text>{formatRupees(gstAmount)}</Text>
             </View>
           ) : null}
           {walletCredit > 0 ? (
@@ -1203,7 +1204,7 @@ export default function BookingScreen() {
           ) : null}
           <View style={[styles.summaryRow, styles.summaryTotal]}>
             <Text variant="bodyStrong">Pay at salon</Text>
-            <Text variant="heading">₹{Math.round(total)}</Text>
+            <Text variant="heading">{formatRupees(total)}</Text>
           </View>
         </View>
         </>
@@ -1256,7 +1257,7 @@ export default function BookingScreen() {
         customerEmail={email.trim() || "—"}
         notes={notes.trim() || null}
         priceLines={confirmPriceLines}
-        totalLabel={`₹${Math.round(total)}`}
+        totalLabel={`${formatRupees(total)}`}
         submitting={submitting}
         error={submitError}
         onConfirm={() => {
@@ -1274,13 +1275,13 @@ export default function BookingScreen() {
         title={
           step === 0
             ? hasSelection
-              ? `Continue · ₹${Math.round(total)}`
+              ? `Continue · ${formatRupees(total)}`
               : "Select services to continue"
             : step === 1
               ? selectedDate && slotValue
                 ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
                 : "Pick a date and time"
-              : `Book · pay at salon ₹${Math.round(total)}`
+              : `Book · pay at salon ${formatRupees(total)}`
         }
         subtitle={
           phoneMissing
@@ -1289,7 +1290,11 @@ export default function BookingScreen() {
               ? "Next · choose date and time"
               : step === 1
                 ? "Next · confirm your booking"
-                : hasSelection && selectedDate && slotValue
+                : name.trim().length < 2
+                  ? "Add your name to book"
+                  : !isValidEmail(email)
+                    ? "Add a valid email to book. Your invoice goes there."
+                    : hasSelection && selectedDate && slotValue
                   ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
                   : "Review details below"
         }

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
-import { Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
+import { formatRupees } from "@/lib/service-pricing"
 
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
@@ -31,6 +32,7 @@ import {
 } from "@/lib/booking-display"
 import { cancelArtistPublicBooking } from "@/lib/artists-api"
 import { cancelBooking, fetchBookings } from "@/lib/bookings-api"
+import { CRM_URL } from "@/lib/config"
 import {
   canCancelWithNotice,
   CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
@@ -205,10 +207,12 @@ function BookingCard({
           {serviceLine}
         </Text>
         <View style={styles.priceRow}>
-          <Text variant="heading">₹{Math.round(booking.price)}</Text>
+          <Text variant="heading">{formatRupees(booking.price)}</Text>
           <Icon name="chevron-forward" size={16} color={colors.textSubtle} />
         </View>
       </View>
+
+      <PayAdvanceStrip booking={booking} />
 
       {booking.hasVerifiedReview && booking.review ? (
         <View style={styles.cardReview}>
@@ -224,6 +228,38 @@ function BookingCard({
         </View>
       ) : null}
     </Pressable>
+  )
+}
+
+/** Glammzo payment page for an artist advance that is still due and whose slot is still held. */
+function advancePayUrl(booking: Booking): string | null {
+  if (booking.kind !== "artist" || !booking.artistPublicToken || !booking.paymentDeadline) return null
+  if (new Date(booking.paymentDeadline).getTime() <= Date.now()) return null
+  return `${CRM_URL}/pay/booking/${encodeURIComponent(booking.artistPublicToken)}`
+}
+
+/** Tax or charges the salon billed on top of the listed services. */
+function salonExtras(booking: Booking): string {
+  const services = booking.services.reduce((sum, item) => sum + item.price, 0)
+  const extra = Math.round((booking.price - services) * 100) / 100
+  return services > 0 && extra > 0 ? ` · includes ${formatRupees(extra)} tax and charges` : ""
+}
+
+function formatDeadline(iso: string): string {
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
+}
+
+function PayAdvanceStrip({ booking }: { booking: Booking }) {
+  const url = advancePayUrl(booking)
+  if (!url || !booking.paymentDeadline) return null
+  return (
+    <View style={styles.payStrip}>
+      <Text variant="caption" style={{ flex: 1 }}>
+        Pay the {formatRupees(booking.advanceAmount ?? 0)} advance by {formatDeadline(booking.paymentDeadline)} to
+        confirm. After that the time is released.
+      </Text>
+      <Button label={`Pay ${formatRupees(booking.advanceAmount ?? 0)}`} onPress={() => void Linking.openURL(url)} />
+    </View>
   )
 }
 
@@ -554,11 +590,22 @@ export default function BookingsScreen() {
                             {formatDuration(service.durationMin)}
                           </Text>
                         </View>
-                        <Text variant="bodyStrong">₹{Math.round(service.price)}</Text>
+                        <Text variant="bodyStrong">{formatRupees(service.price)}</Text>
                       </View>
                     </View>
                   ))
                 )}
+                {selected.travelFee ? (
+                  <>
+                    <View style={styles.sectionDivider} />
+                    <View style={styles.serviceRow}>
+                      <Text variant="bodyStrong" style={{ flex: 1 }}>
+                        Travel fee
+                      </Text>
+                      <Text variant="bodyStrong">{formatRupees(selected.travelFee)}</Text>
+                    </View>
+                  </>
+                ) : null}
               </View>
             </View>
 
@@ -611,16 +658,20 @@ export default function BookingsScreen() {
                 </Text>
                 <Text variant="caption" muted>
                   {selectedArtist
-                    ? "Pay artist directly"
-                    : selected.status === "completed"
-                      ? "Paid at salon"
-                      : "Pay at salon"}
+                    ? selected.advanceAmount && selected.advancePaid
+                      ? `${formatRupees(selected.advanceAmount)} advance paid · ${formatRupees(Math.max(0, selected.price - selected.advanceAmount))} at the visit`
+                      : selected.advanceAmount && advancePayUrl(selected)
+                        ? `${formatRupees(selected.advanceAmount)} advance due now · rest at the visit`
+                        : "Pay artist directly"
+                    : `${selected.status === "completed" ? "Paid at salon" : "Pay at salon"}${salonExtras(selected)}`}
                 </Text>
               </View>
               <Text variant="title" style={styles.payAmount}>
-                ₹{Math.round(selected.price)}
+                {formatRupees(selected.price)}
               </Text>
             </View>
+
+            <PayAdvanceStrip booking={selected} />
 
             {selectedArtist ? (
               <ShareArtistInvoiceButton booking={selected} />
@@ -1174,6 +1225,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+  },
+  payStrip: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderRadius: radii.md,
+    backgroundColor: "#FFF4D6",
   },
   payCard: {
     flexDirection: "row",

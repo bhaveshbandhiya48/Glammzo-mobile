@@ -1,3 +1,4 @@
+import { formatRupees } from "@/lib/service-pricing"
 import { useCallback, useState } from "react"
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
@@ -122,7 +123,7 @@ export default function ProfileScreen() {
             Wallet
           </Text>
           <Text variant="bodyStrong">
-            {walletRupees == null ? "—" : `₹${Math.round(walletRupees)}`}
+            {walletRupees == null ? "—" : `${formatRupees(walletRupees)}`}
           </Text>
         </Pressable>
         <Pressable style={styles.tile} onPress={() => router.push("/profile/loyalty")}>

@@ -10,6 +10,7 @@ import { Text } from "@/components/ui/Text"
 import type { SalonService } from "@/data/types"
 import {
   defaultPriceOptionId,
+  formatRupees,
   formatServicePriceLabel,
   serviceHasPriceOptions,
 } from "@/lib/service-pricing"
@@ -173,7 +174,7 @@ export function CatalogServiceRow({
                   {option.name}
                 </Text>
                 <Text variant="caption" color={active ? colors.coral : colors.text}>
-                  ₹{Math.round(option.price)}
+                  {formatRupees(option.price)}
                 </Text>
               </Pressable>
             )

@@ -1,11 +1,12 @@
 import type { Booking } from "@/data/types"
 import { formatBookingDate, formatDuration } from "@/lib/booking-display"
+import { formatRupees } from "@/lib/service-pricing"
 
 /** Plain-text invoice summary for WhatsApp / share sheet. */
 export function buildArtistInvoiceMessage(booking: Booking): string {
   const when = formatBookingDate(booking.date)
   const services =
-    booking.services?.map((s) => `• ${s.name} — ₹${Math.round(s.price)}`).join("\n") ||
+    booking.services?.map((s) => `• ${s.name} — ${formatRupees(s.price)}`).join("\n") ||
     "• Service"
   const location = booking.notes?.trim() || booking.salonArea || "Visit"
   const duration =
@@ -22,7 +23,7 @@ export function buildArtistInvoiceMessage(booking: Booking): string {
     "Services:",
     services,
     "",
-    `Total: ₹${Math.round(booking.price)}`,
+    `Total: ${formatRupees(booking.price)}`,
     "Pay artist directly.",
     "",
     "Booked via Glammzo",

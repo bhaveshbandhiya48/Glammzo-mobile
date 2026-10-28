@@ -1,6 +1,6 @@
 import { Image } from "expo-image"
 import { useLocalSearchParams, useNavigation, useRouter, type Href } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Linking,
@@ -141,6 +141,8 @@ export default function ArtistBookScreen() {
 
   const timezone = artist?.timezone || "Asia/Kolkata"
   const days = useMemo(() => dayKeys(new Date(), 14, timezone), [timezone])
+  // Until the client picks a date, skip ahead past days with no free times.
+  const autoDate = useRef(true)
   const dateOptions = useMemo(
     () => days.map((key) => ({ date: key, label: formatDayChip(key) })),
     [days],
@@ -381,6 +383,13 @@ export default function ArtistBookScreen() {
       signal: controller.signal,
     })
       .then((data) => {
+        if (autoDate.current && data.slots.length === 0) {
+          const next = days[days.indexOf(date) + 1]
+          if (next) {
+            setDate(next)
+            return
+          }
+        }
         setSlots(data.slots)
         setQuote(needsHome && !pin ? null : data.quote)
         setSlotMessage(data.message)
@@ -432,6 +441,8 @@ export default function ArtistBookScreen() {
     ? Math.min(Math.max(0, Math.round(walletBalance)), amountBeforeWallet)
     : 0
   const payableTotal = Math.max(0, amountBeforeWallet - walletCredit)
+  // Advance comes from the artist's quote; never more than what is left to pay.
+  const advanceDue = Math.min(quote?.advance ?? 0, payableTotal)
   const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
 
   async function applyPromo() {
@@ -1101,7 +1112,7 @@ export default function ArtistBookScreen() {
                   <Text variant="bodyStrong">Wallet credit</Text>
                   <Text variant="caption" muted>
                     {walletBalance > 0
-                      ? `₹${Math.round(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
+                      ? `${formatRupees(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
                       : "No wallet balance yet"}
                   </Text>
                 </View>
@@ -1220,10 +1231,39 @@ export default function ArtistBookScreen() {
                 </View>
               ) : null}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text variant="bodyStrong">Pay artist</Text>
+                <Text variant="bodyStrong">Total</Text>
                 <Text variant="heading">{formatRupees(payableTotal)}</Text>
               </View>
+              {advanceDue > 0 ? (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text variant="bodyStrong">Pay now (advance)</Text>
+                    <Text variant="bodyStrong">{formatRupees(advanceDue)}</Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text muted>Pay the artist at your visit</Text>
+                    <Text muted>{formatRupees(payableTotal - advanceDue)}</Text>
+                  </View>
+                  <Text variant="caption" muted>
+                    After you book, you&apos;ll pay the advance securely on Glammzo (UPI, card or net
+                    banking). Your time is held for 15 minutes.
+                  </Text>
+                </>
+              ) : (
+                <Text variant="caption" muted>
+                  Pay the artist at your visit.
+                </Text>
+              )}
             </View>
+
+            {advanceDue > 0 && artist.cancellationPolicyLines?.length ? (
+              <View style={styles.policyCard}>
+                <Text variant="label">If you cancel</Text>
+                {artist.cancellationPolicyLines.map((line) => (
+                  <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
+                ))}
+              </View>
+            ) : null}
 
             {artist.cancellationPolicyText ? (
               <View style={styles.policyCard}>
@@ -1251,9 +1291,11 @@ export default function ArtistBookScreen() {
                 ? "Continue"
                 : step === 1
                   ? "Continue"
-                  : quote
-                    ? `Confirm · ${formatRupees(payableTotal)}`
-                    : "Confirm booking"
+                  : advanceDue > 0
+                    ? `Book and pay ${formatRupees(advanceDue)} now`
+                    : quote
+                      ? `Confirm · ${formatRupees(payableTotal)}`
+                      : "Confirm booking"
           }
           loading={busy === "book" || busy === "session"}
           disabled={
@@ -1283,6 +1325,7 @@ export default function ArtistBookScreen() {
         value={date || null}
         onClose={() => setDateSheetOpen(false)}
         onSelect={(next) => {
+          autoDate.current = false
           setDate(next)
           setSlot(null)
         }}
@@ -1404,6 +1447,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
     borderRadius: radii.lg,
     padding: spacing.md,
+    gap: 4,
   },
   card: {
     backgroundColor: colors.card,

@@ -1,3 +1,4 @@
+import { formatRupees } from "@/lib/service-pricing"
 import { useCallback, useState } from "react"
 import { StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
@@ -57,7 +58,7 @@ export default function WalletScreen() {
       ) : (
         <>
           <Text variant="title" style={styles.gap}>
-            ₹{Math.round(balanceRupees)}
+            {formatRupees(balanceRupees)}
           </Text>
           <Text muted style={styles.gap}>
             Wallet credit applies at checkout when you toggle Apply on booking.

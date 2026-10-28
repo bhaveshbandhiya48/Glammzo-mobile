@@ -552,7 +552,7 @@ export default function ExploreScreen() {
           salonId: salon.id,
           salonName: salon.name,
           itemCount,
-          totalLabel: `₹${Math.round(total)}`,
+          totalLabel: `${formatRupees(total)}`,
           imageUrls: images,
           previewLabel: preview,
           onPress: () => {

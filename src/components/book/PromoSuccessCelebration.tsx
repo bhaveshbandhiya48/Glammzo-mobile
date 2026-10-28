@@ -1,3 +1,4 @@
+import { formatRupees } from "@/lib/service-pricing"
 import { useEffect, useMemo, useRef } from "react"
 import {
   Animated,
@@ -142,7 +143,7 @@ function formatDiscountLabel(discount: AppliedOfferDiscount) {
   if (discount.discountType === "percent") {
     return `${discount.discountValue}% off`
   }
-  return `₹${Math.round(discount.discountValue)} off`
+  return `${formatRupees(discount.discountValue)} off`
 }
 
 export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
@@ -176,7 +177,7 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
 
   const isDiscount = payload.kind === "discount"
   const headline = isDiscount
-    ? `You got ₹${Math.round(payload.discount.discountAmount)} off`
+    ? `You got ${formatRupees(payload.discount.discountAmount)} off`
     : `You got ₹${payload.cashback.cashbackRupees} cashback`
   const title = isDiscount ? payload.discount.title : "Wallet cashback unlocked"
   const code = isDiscount ? payload.discount.code : payload.cashback.code
@@ -184,7 +185,7 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
     ? `${formatDiscountLabel(payload.discount)} · Code ${code}`
     : payload.cashback.message
   const subdetail = isDiscount
-    ? `New total ₹${Math.round(payload.discount.finalTotal)} (was ₹${Math.round(payload.discount.subtotal)})`
+    ? `New total ${formatRupees(payload.discount.finalTotal)} (was ${formatRupees(payload.discount.subtotal)})`
     : `Code ${code} · credited after your visit`
   const burstKey = isDiscount
     ? `${payload.discount.code}-${Math.round(payload.discount.discountAmount)}`

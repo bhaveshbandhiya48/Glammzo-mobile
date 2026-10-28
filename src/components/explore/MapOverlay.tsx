@@ -1,3 +1,4 @@
+import { formatRupees } from "@/lib/service-pricing"
 import Constants from "expo-constants"
 import { Image } from "expo-image"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -259,7 +260,7 @@ function PricePin({
   kind: MapPin["kind"]
   selected: boolean
 }) {
-  const label = `₹${Math.round(Number(price) || 0)}`
+  const label = `${formatRupees(Number(price) || 0)}`
   const width = pricePinMinWidth(label)
   const iconColor = selected ? colors.primaryFg : colors.text
 
@@ -352,7 +353,7 @@ function MapPriceMarker({
       {...(Platform.OS === "android"
         ? {
             style: {
-              width: pricePinMinWidth(`₹${Math.round(Number(price) || 0)}`),
+              width: pricePinMinWidth(`${formatRupees(Number(price) || 0)}`),
               height: ANDROID_PIN_HEIGHT,
               overflow: "visible" as const,
             },
@@ -423,7 +424,7 @@ function MapListingCard({
         </View>
         <View style={styles.listingFooter}>
           <Text variant="bodyStrong">
-            {pin.price > 0 ? `₹${Math.round(pin.price)}` : "—"}
+            {pin.price > 0 ? `${formatRupees(pin.price)}` : "—"}
           </Text>
           <Pressable onPress={onOpen} hitSlop={8} style={styles.viewBtn}>
             <Text variant="caption" color={colors.coral}>

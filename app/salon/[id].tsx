@@ -58,6 +58,7 @@ import { quantityForService } from "@/lib/pricing-unit"
 import {
   cartServicesSubtotal,
   defaultPriceOptionId,
+  formatRupees,
   formatServicePriceLabel,
   serviceHasPriceOptions,
 } from "@/lib/service-pricing"
@@ -1074,7 +1075,7 @@ export default function SalonDetailScreen() {
                       ]}
                     >
                       <Text variant="bodyStrong">{option.name}</Text>
-                      <Text variant="bodyStrong">₹{Math.round(option.price)}</Text>
+                      <Text variant="bodyStrong">{formatRupees(option.price)}</Text>
                     </Pressable>
                   )
                 })}
@@ -1392,7 +1393,7 @@ export default function SalonDetailScreen() {
               salonId: salon.id,
               salonName: salon.name,
               itemCount: cart.itemCountFor(salon.id),
-              totalLabel: `₹${Math.round(total)}`,
+              totalLabel: `${formatRupees(total)}`,
               imageUrls: cartImages,
               previewLabel: cartPreviewLabel,
               ctaLabel: "Checkout",

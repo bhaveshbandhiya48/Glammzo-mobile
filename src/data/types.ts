@@ -156,6 +156,13 @@ export type Booking = {
   /** Hours before start the customer must cancel; salon policy or platform default. */
   startsAt?: string
   cancelNoticeHours?: number
+  /** Solo artist travel fee, included in `price`. */
+  travelFee?: number
+  /** Solo artist advance amount, and whether it has been paid. */
+  advanceAmount?: number
+  advancePaid?: boolean
+  /** Set while a solo artist booking waits for its advance: when the held slot is released. */
+  paymentDeadline?: string
   /** Solo artist with a paid advance: what the client gets back if they cancel now. */
   cancelRefundNote?: string
   staffName?: string

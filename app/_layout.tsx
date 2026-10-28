@@ -104,6 +104,10 @@ function RootNavigator() {
           options={profileStackOptions("Loyalty rewards")}
         />
         <Stack.Screen
+          name="profile/refer"
+          options={profileStackOptions("Refer a friend")}
+        />
+        <Stack.Screen
           name="profile/activity"
           options={profileStackOptions("Wallet activity")}
         />

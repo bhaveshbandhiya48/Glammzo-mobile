@@ -28,6 +28,7 @@ type HubRow = {
     | "/profile/loyalty"
     | "/profile/activity"
     | "/profile/support"
+    | "/profile/refer"
   url?: string
   action?: () => void
   hint?: string
@@ -47,6 +48,7 @@ const SECTIONS: { title: string; rows: HubRow[] }[] = [
       { label: "Wallet", href: "/profile/wallet", icon: "wallet-outline" },
       { label: "Wallet activity", href: "/profile/activity", icon: "receipt-outline" },
       { label: "Loyalty rewards", href: "/profile/loyalty", icon: "ribbon-outline" },
+      { label: "Refer a friend · get ₹199", href: "/profile/refer", icon: "gift-outline" },
     ],
   },
   {

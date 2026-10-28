@@ -6,7 +6,7 @@ import { Screen } from "@/components/ui/Screen"
 import { ProfileBlockSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { getAccessToken } from "@/lib/session"
-import { fetchWallet, type WalletLedgerEntry } from "@/lib/wallet-api"
+import { fetchWallet, type WalletLedgerEntry, walletReasonLabel } from "@/lib/wallet-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 function formatLedgerAmount(deltaPaise: number) {
@@ -84,7 +84,7 @@ export default function WalletActivityScreen() {
             <View key={entry.id} style={styles.row}>
               <View style={styles.copy}>
                 <Text variant="bodyStrong" numberOfLines={2}>
-                  {entry.reason || "Wallet update"}
+                  {walletReasonLabel(entry.reason)}
                 </Text>
                 <Text variant="caption" muted>
                   {formatLedgerDate(entry.createdAt)}

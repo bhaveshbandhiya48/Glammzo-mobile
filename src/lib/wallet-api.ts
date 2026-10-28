@@ -10,6 +10,20 @@ export type WalletSummary = {
   balanceRupees: number
 }
 
+const REASON_LABELS: Record<string, string> = {
+  cashback_first200: "Welcome cashback",
+  cashback_glammzo_offer: "Offer cashback",
+  wallet_redeem: "Used on a booking",
+  wallet_restore: "Returned after a cancellation",
+  adjustment: "Adjustment by Glammzo",
+  referral_reward: "Refer a friend reward",
+}
+
+/** Plain words for a wallet ledger reason code. */
+export function walletReasonLabel(reason: string) {
+  return REASON_LABELS[reason] ?? "Wallet update"
+}
+
 export type WalletLedgerEntry = {
   id: string
   deltaPaise: number
@@ -58,3 +72,27 @@ export async function fetchLoyalty(): Promise<LoyaltySummary> {
 }
 
 export { LOYALTY_DISCOUNT_CAP_RUPEES, LOYALTY_VISITS_PER_FREE }
+
+export type ReferralSummary = {
+  code: string | null
+  rewardRupees: number
+  invited: number
+  rewarded: number
+  earnedRupees: number
+  canClaim: boolean
+  claimedCode: string | null
+  claimedStatus: "pending" | "rewarded" | null
+}
+
+export async function fetchReferral() {
+  const data = await apiFetch<{ ok: boolean; referral: ReferralSummary }>("/api/mobile/referral")
+  return data.referral
+}
+
+export async function claimReferral(code: string) {
+  const data = await apiFetch<{ ok: boolean; referral: ReferralSummary }>("/api/mobile/referral/claim", {
+    method: "POST",
+    body: { code },
+  })
+  return data.referral
+}

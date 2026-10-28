@@ -7,7 +7,7 @@ import { Screen } from "@/components/ui/Screen"
 import { ProfileBlockSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { getAccessToken } from "@/lib/session"
-import { fetchWallet, type WalletLedgerEntry } from "@/lib/wallet-api"
+import { fetchWallet, walletReasonLabel, type WalletLedgerEntry } from "@/lib/wallet-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 export default function WalletScreen() {
@@ -84,7 +84,7 @@ export default function WalletScreen() {
               <Text variant="bodyStrong">Recent activity</Text>
               {ledger.slice(0, 8).map((entry) => (
                 <View key={entry.id} style={styles.ledgerRow}>
-                  <Text style={{ flex: 1 }}>{entry.reason}</Text>
+                  <Text style={{ flex: 1 }}>{walletReasonLabel(entry.reason)}</Text>
                   <Text variant="bodyStrong">
                     {entry.deltaPaise >= 0 ? "+" : ""}
                     ₹{(entry.deltaPaise / 100).toFixed(0)}

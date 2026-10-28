@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
+import type { ArtistCardData } from "@/lib/artists-api"
 import { getDeviceCoordinates } from "@/lib/device-location"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { GLAMMZO_MAP_STYLE } from "@/lib/map-styles"
@@ -43,13 +44,31 @@ type Props = {
   salons: Salon[]
   /** Used to open the camera on the user's current browse area. */
   areaSalons: Salon[]
+  /** Filtered solo artists with map pins. */
+  artists?: ArtistCardData[]
+  /** Artists in the current browse area (camera fit). */
+  areaArtists?: ArtistCardData[]
   userLatitude?: number
   userLongitude?: number
   onClose: () => void
   onSelectSalon: (salonId: string) => void
+  onSelectArtist?: (slug: string) => void
 }
 
-type MappableSalon = { salon: Salon; latitude: number; longitude: number }
+type MapPin = {
+  id: string
+  kind: "salon" | "artist"
+  latitude: number
+  longitude: number
+  price: number
+  name: string
+  areaLine: string
+  rating: number | null
+  distanceKm: number | null
+  imageUrl: string | null
+  salonId?: string
+  artistSlug?: string
+}
 
 function regionAroundPoint(
   latitude: number,
@@ -69,7 +88,7 @@ function regionAroundPoint(
   }
 }
 
-function regionForPins(pins: MappableSalon[]): Region {
+function regionForPins(pins: MapPin[]): Region {
   const lats = pins.map((item) => item.latitude)
   const lngs = pins.map((item) => item.longitude)
   const minLat = Math.min(...lats)
@@ -85,7 +104,7 @@ function regionForPins(pins: MappableSalon[]): Region {
 }
 
 /** True when a pin sits inside the map camera (with a small edge pad). */
-function isPinInRegion(pin: MappableSalon, region: Region, padRatio = 0.08) {
+function isPinInRegion(pin: MapPin, region: Region, padRatio = 0.08) {
   const latPad = region.latitudeDelta * padRatio
   const lngPad = region.longitudeDelta * padRatio
   const minLat = region.latitude - region.latitudeDelta / 2 - latPad
@@ -100,7 +119,7 @@ function isPinInRegion(pin: MappableSalon, region: Region, padRatio = 0.08) {
   )
 }
 
-function pinsInRegion(pins: MappableSalon[], region: Region) {
+function pinsInRegion(pins: MapPin[], region: Region) {
   return pins.filter((pin) => isPinInRegion(pin, region))
 }
 
@@ -114,19 +133,19 @@ function isSameRegion(a: Region, b: Region) {
   )
 }
 
-/** Keep list order stable and never drop the salon the user just picked. */
+/** Keep list order stable and never drop the pin the user just picked. */
 function carouselPinsForRegion(
-  pins: MappableSalon[],
+  pins: MapPin[],
   region: Region,
   selectedId: string | null,
 ) {
   const visible = pinsInRegion(pins, region)
-  if (!selectedId || visible.some((item) => item.salon.id === selectedId)) {
+  if (!selectedId || visible.some((item) => item.id === selectedId)) {
     return visible
   }
-  const keep = new Set(visible.map((item) => item.salon.id))
+  const keep = new Set(visible.map((item) => item.id))
   keep.add(selectedId)
-  return pins.filter((item) => keep.has(item.salon.id))
+  return pins.filter((item) => keep.has(item.id))
 }
 
 function salonCoords(salon: Salon): { latitude: number; longitude: number } | null {
@@ -139,6 +158,60 @@ function salonCoords(salon: Salon): { latitude: number; longitude: number } | nu
     return null
   }
   return { latitude: salon.latitude, longitude: salon.longitude }
+}
+
+function artistCoords(
+  artist: ArtistCardData,
+): { latitude: number; longitude: number } | null {
+  if (
+    artist.latitude == null ||
+    artist.longitude == null ||
+    !Number.isFinite(artist.latitude) ||
+    !Number.isFinite(artist.longitude)
+  ) {
+    return null
+  }
+  return { latitude: artist.latitude, longitude: artist.longitude }
+}
+
+function salonToPin(salon: Salon): MapPin | null {
+  const coords = salonCoords(salon)
+  if (!coords) return null
+  return {
+    id: `salon:${salon.id}`,
+    kind: "salon",
+    ...coords,
+    price: salon.priceFrom,
+    name: salon.name,
+    areaLine: [salon.area, salon.businessType].filter(Boolean).join(" · "),
+    rating: salon.rating > 0 ? salon.rating : null,
+    distanceKm: salon.distanceKm > 0 ? salon.distanceKm : null,
+    imageUrl: salon.imageUrl || null,
+    salonId: salon.id,
+  }
+}
+
+function artistToPin(artist: ArtistCardData): MapPin | null {
+  const coords = artistCoords(artist)
+  if (!coords) return null
+  const place = [artist.area, artist.hasStudio ? "Salon" : artist.offersHomeVisits ? "Home" : null]
+    .filter(Boolean)
+    .join(" · ")
+  return {
+    id: `artist:${artist.slug}`,
+    kind: "artist",
+    ...coords,
+    price: artist.startingPrice ?? 0,
+    name: artist.displayName,
+    areaLine: place || "Solo artist",
+    rating:
+      (artist.reviewCount ?? 0) > 0 && artist.averageRating != null
+        ? artist.averageRating
+        : null,
+    distanceKm: artist.distanceKm,
+    imageUrl: artist.profilePhotoUrl,
+    artistSlug: artist.slug,
+  }
 }
 
 function useGoogleMapsProvider() {
@@ -166,18 +239,29 @@ function useGoogleMapsProvider() {
 function pricePinMinWidth(label: string) {
   // Android Google Maps snapshots custom markers into a bitmap and often
   // under-measures RN views, which clips multi-digit prices mid-glyph.
+  // Extra space for the salon/artist icon before the price.
+  const iconPad = Platform.OS === "android" ? 18 : 16
   const charWidth = Platform.OS === "android" ? 12 : 8.5
   const horizontalPad = Platform.OS === "android" ? 40 : 24
-  const floor = Platform.OS === "android" ? 88 : 54
-  return Math.max(floor, Math.ceil(horizontalPad + label.length * charWidth))
+  const floor = Platform.OS === "android" ? 104 : 70
+  return Math.max(floor, Math.ceil(horizontalPad + iconPad + label.length * charWidth))
 }
 
 /** Fixed Android height: pill + diamond caret (border triangles measure as 0×0). */
 const ANDROID_PIN_HEIGHT = 52
 
-function PricePin({ price, selected }: { price: number; selected: boolean }) {
+function PricePin({
+  price,
+  kind,
+  selected,
+}: {
+  price: number
+  kind: MapPin["kind"]
+  selected: boolean
+}) {
   const label = `₹${Math.round(Number(price) || 0)}`
   const width = pricePinMinWidth(label)
+  const iconColor = selected ? colors.primaryFg : colors.text
 
   return (
     <View
@@ -198,13 +282,18 @@ function PricePin({ price, selected }: { price: number; selected: boolean }) {
         ]}
         collapsable={false}
       >
+        <Icon
+          name={kind === "artist" ? "sparkles-outline" : "storefront-outline"}
+          size={13}
+          color={iconColor}
+        />
         <RNText
           numberOfLines={1}
           allowFontScaling={false}
           style={[
             styles.pricePinText,
             Platform.OS === "android" && styles.pricePinTextAndroid,
-            { color: selected ? colors.primaryFg : colors.text },
+            { color: iconColor },
           ]}
         >
           {label}
@@ -220,15 +309,17 @@ function PricePin({ price, selected }: { price: number; selected: boolean }) {
 }
 
 /** Remounts + tracks redraw so selected coral pins don’t snapshot blank. */
-function SalonPriceMarker({
-  salonId,
+function MapPriceMarker({
+  pinId,
+  kind,
   price,
   latitude,
   longitude,
   selected,
   onPress,
 }: {
-  salonId: string
+  pinId: string
+  kind: MapPin["kind"]
   price: number
   latitude: number
   longitude: number
@@ -245,11 +336,11 @@ function SalonPriceMarker({
       Platform.OS === "android" ? 2200 : 900,
     )
     return () => clearTimeout(timer)
-  }, [selected, price, salonId])
+  }, [selected, price, pinId, kind])
 
   return (
     <Marker
-      identifier={`${salonId}-${selected ? "on" : "off"}`}
+      identifier={`${pinId}-${selected ? "on" : "off"}`}
       coordinate={{ latitude, longitude }}
       onPress={(event) => {
         event.stopPropagation?.()
@@ -268,22 +359,29 @@ function SalonPriceMarker({
           }
         : null)}
     >
-      <PricePin price={price} selected={selected} />
+      <PricePin price={price} kind={kind} selected={selected} />
     </Marker>
   )
 }
 
 function MapListingCard({
-  salon,
+  pin,
   active,
   onOpen,
   onFocus,
 }: {
-  salon: Salon
+  pin: MapPin
   active: boolean
   onOpen: () => void
   onFocus: () => void
 }) {
+  const distanceLabel =
+    pin.distanceKm != null
+      ? pin.distanceKm < 10
+        ? `${pin.distanceKm.toFixed(1)} km`
+        : `${Math.round(pin.distanceKm)} km`
+      : null
+
   return (
     <Pressable
       onPress={onFocus}
@@ -292,31 +390,41 @@ function MapListingCard({
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
     >
-      <Image
-        source={{ uri: salon.imageUrl }}
-        style={styles.listingImage}
-        contentFit="cover"
-      />
-      <View style={styles.listingBody}>
-        <Text variant="bodyStrong" numberOfLines={1}>
-          {salon.name}
-        </Text>
-        <Text variant="caption" muted numberOfLines={1}>
-          {salon.area}
-          {salon.businessType ? ` · ${salon.businessType}` : ""}
-        </Text>
-        <View style={styles.listingMeta}>
-          <View style={styles.ratingChip}>
-            <Text variant="caption" color={colors.primaryFg}>
-              ★ {salon.rating.toFixed(1)}
-            </Text>
-          </View>
-          <Text variant="caption" muted>
-            {salon.distanceKm.toFixed(1)} km
+      {pin.imageUrl ? (
+        <Image source={{ uri: pin.imageUrl }} style={styles.listingImage} contentFit="cover" />
+      ) : (
+        <View style={[styles.listingImage, styles.listingImageFallback]}>
+          <Text variant="heading" color={colors.primaryFg}>
+            {pin.name.slice(0, 1).toUpperCase()}
           </Text>
         </View>
+      )}
+      <View style={styles.listingBody}>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {pin.name}
+        </Text>
+        <Text variant="caption" muted numberOfLines={1}>
+          {pin.kind === "artist" ? "Solo artist · " : ""}
+          {pin.areaLine}
+        </Text>
+        <View style={styles.listingMeta}>
+          {pin.rating != null ? (
+            <View style={styles.ratingChip}>
+              <Text variant="caption" color={colors.primaryFg}>
+                ★ {pin.rating.toFixed(1)}
+              </Text>
+            </View>
+          ) : null}
+          {distanceLabel ? (
+            <Text variant="caption" muted>
+              {distanceLabel}
+            </Text>
+          ) : null}
+        </View>
         <View style={styles.listingFooter}>
-          <Text variant="bodyStrong">₹{salon.priceFrom}</Text>
+          <Text variant="bodyStrong">
+            {pin.price > 0 ? `₹${Math.round(pin.price)}` : "—"}
+          </Text>
           <Pressable onPress={onOpen} hitSlop={8} style={styles.viewBtn}>
             <Text variant="caption" color={colors.coral}>
               View
@@ -336,10 +444,13 @@ export function MapOverlay({
   locationLabel,
   salons,
   areaSalons,
+  artists = [],
+  areaArtists = [],
   userLatitude,
   userLongitude,
   onClose,
   onSelectSalon,
+  onSelectArtist,
 }: Props) {
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView | null>(null)
@@ -347,6 +458,8 @@ export function MapOverlay({
   const programmaticCameraUntilRef = useRef(0)
   const ignoreScrollUntilRef = useRef(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showSalons, setShowSalons] = useState(true)
+  const [showArtists, setShowArtists] = useState(true)
   const [viewRegion, setViewRegion] = useState<Region | null>(null)
   const [liveUserCoords, setLiveUserCoords] = useState<{
     latitude: number
@@ -356,30 +469,41 @@ export function MapOverlay({
   const [mapReady, setMapReady] = useState(false)
   const provider = useGoogleMapsProvider()
   const useCustomStyle = provider === PROVIDER_GOOGLE
-  const mappableRef = useRef<MappableSalon[]>([])
+  const mappableRef = useRef<MapPin[]>([])
 
-  const mappable = useMemo(
-    () =>
-      salons
-        .map((salon) => {
-          const coords = salonCoords(salon)
-          if (!coords) return null
-          return { salon, ...coords }
-        })
-        .filter((item): item is MappableSalon => item != null),
-    [salons],
-  )
+  const mappable = useMemo(() => {
+    const salonPins = showSalons
+      ? salons.map(salonToPin).filter((item): item is MapPin => item != null)
+      : []
+    const artistPins = showArtists
+      ? artists.map(artistToPin).filter((item): item is MapPin => item != null)
+      : []
+    return [...salonPins, ...artistPins]
+  }, [salons, artists, showSalons, showArtists])
   mappableRef.current = mappable
 
-  const areaIdSet = useMemo(
-    () => new Set(areaSalons.map((salon) => salon.id)),
-    [areaSalons],
-  )
+  const areaIdSet = useMemo(() => {
+    const ids = new Set<string>()
+    if (showSalons) {
+      for (const salon of areaSalons) ids.add(`salon:${salon.id}`)
+    }
+    if (showArtists) {
+      for (const artist of areaArtists) ids.add(`artist:${artist.slug}`)
+    }
+    return ids
+  }, [areaSalons, areaArtists, showSalons, showArtists])
 
   const areaMappable = useMemo(
-    () => mappable.filter((item) => areaIdSet.has(item.salon.id)),
+    () => mappable.filter((item) => areaIdSet.has(item.id)),
     [areaIdSet, mappable],
   )
+
+  useEffect(() => {
+    if (!selectedId) return
+    if (!mappable.some((pin) => pin.id === selectedId)) {
+      setSelectedId(mappable[0]?.id ?? null)
+    }
+  }, [mappable, selectedId])
 
   const initialRegion: Region = useMemo(() => {
     if (areaMappable.length > 0) {
@@ -410,7 +534,7 @@ export function MapOverlay({
     [activeRegion, mappable, selectedId],
   )
   const selectedCarouselIndex = useMemo(
-    () => carouselItems.findIndex((item) => item.salon.id === selectedId),
+    () => carouselItems.findIndex((item) => item.id === selectedId),
     [carouselItems, selectedId],
   )
 
@@ -430,6 +554,8 @@ export function MapOverlay({
   useEffect(() => {
     if (!visible) {
       setSelectedId(null)
+      setShowSalons(true)
+      setShowArtists(true)
       setViewRegion(null)
       setLiveUserCoords(null)
       setMapReady(false)
@@ -438,7 +564,7 @@ export function MapOverlay({
 
     // Init once per open: fit current area; cards then sync via region changes.
     setViewRegion(initialRegion)
-    setSelectedId(areaMappable[0]?.salon.id ?? null)
+    setSelectedId(areaMappable[0]?.id ?? null)
     programmaticCameraUntilRef.current = Date.now() + 900
     ignoreScrollUntilRef.current = Date.now() + 500
     const pins = areaMappable
@@ -512,10 +638,10 @@ export function MapOverlay({
   function syncSelectionToRegion(region: Region) {
     const visible = pinsInRegion(mappableRef.current, region)
     setSelectedId((current) => {
-      if (current && visible.some((item) => item.salon.id === current)) {
+      if (current && visible.some((item) => item.id === current)) {
         return current
       }
-      return visible[0]?.salon.id ?? null
+      return visible[0]?.id ?? null
     })
   }
 
@@ -557,12 +683,12 @@ export function MapOverlay({
     }
   }
 
-  function focusSalon(salonId: string, animateMap = true) {
-    setSelectedId(salonId)
-    const pin = mappable.find((item) => item.salon.id === salonId)
+  function focusPin(pinId: string, animateMap = true) {
+    setSelectedId(pinId)
+    const pin = mappable.find((item) => item.id === pinId)
     if (!pin) return
 
-    const index = carouselItems.findIndex((item) => item.salon.id === salonId)
+    const index = carouselItems.findIndex((item) => item.id === pinId)
     if (index >= 0) {
       scrollCarouselToIndex(index, true)
     }
@@ -583,13 +709,21 @@ export function MapOverlay({
     }
   }
 
+  function openPin(pin: MapPin) {
+    if (pin.kind === "artist" && pin.artistSlug) {
+      onSelectArtist?.(pin.artistSlug)
+      return
+    }
+    if (pin.salonId) onSelectSalon(pin.salonId)
+  }
+
   function onCarouselScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     if (Date.now() < ignoreScrollUntilRef.current) return
     const x = event.nativeEvent.contentOffset.x
     const index = Math.round(x / SNAP_INTERVAL)
     const pin = carouselItems[index]
-    if (pin && pin.salon.id !== selectedId) {
-      focusSalon(pin.salon.id, true)
+    if (pin && pin.id !== selectedId) {
+      focusPin(pin.id, true)
     }
   }
 
@@ -640,19 +774,20 @@ export function MapOverlay({
           {mapReady
             ? [...mappable]
                 .sort((a, b) => {
-                  if (a.salon.id === selectedId) return 1
-                  if (b.salon.id === selectedId) return -1
+                  if (a.id === selectedId) return 1
+                  if (b.id === selectedId) return -1
                   return 0
                 })
-                .map(({ salon, latitude, longitude }) => (
-                  <SalonPriceMarker
-                    key={`${salon.id}-${salon.id === selectedId ? "on" : "off"}`}
-                    salonId={salon.id}
-                    price={salon.priceFrom}
-                    latitude={latitude}
-                    longitude={longitude}
-                    selected={salon.id === selectedId}
-                    onPress={() => focusSalon(salon.id, true)}
+                .map((pin) => (
+                  <MapPriceMarker
+                    key={`${pin.id}-${pin.id === selectedId ? "on" : "off"}`}
+                    pinId={pin.id}
+                    kind={pin.kind}
+                    price={pin.price}
+                    latitude={pin.latitude}
+                    longitude={pin.longitude}
+                    selected={pin.id === selectedId}
+                    onPress={() => focusPin(pin.id, true)}
                   />
                 ))
             : null}
@@ -662,8 +797,11 @@ export function MapOverlay({
           <View style={styles.emptyMap} pointerEvents="none">
             <Icon name="location-outline" size={22} color={colors.textMuted} />
             <Text muted style={{ marginTop: spacing.sm, textAlign: "center" }}>
-              No mapped salons for this location yet. Try browsing the city or
-              another area.
+              {!showSalons && showArtists
+                ? "No mapped solo artists for this location yet."
+                : showSalons && !showArtists
+                  ? "No mapped salons for this location yet."
+                  : "No mapped salons or artists for this location yet. Try browsing the city or another area."}
             </Text>
           </View>
         ) : null}
@@ -698,6 +836,48 @@ export function MapOverlay({
             accessibilityLabel="Close map"
           >
             <Icon name="close" size={20} color={colors.text} />
+          </Pressable>
+        </View>
+
+        <View
+          style={[
+            styles.kindToggle,
+            { top: insets.top + spacing.sm + 44 + spacing.sm },
+          ]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            onPress={() => {
+              // Keep at least one kind visible.
+              if (showSalons && !showArtists) return
+              setShowSalons((v) => !v)
+            }}
+            style={[styles.kindToggleBtn, showSalons && styles.kindToggleBtnOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: showSalons }}
+            accessibilityLabel={showSalons ? "Hide salons" : "Show salons"}
+          >
+            <Icon
+              name="storefront-outline"
+              size={16}
+              color={showSalons ? "#FFFFFF" : colors.textMuted}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (showArtists && !showSalons) return
+              setShowArtists((v) => !v)
+            }}
+            style={[styles.kindToggleBtn, showArtists && styles.kindToggleBtnOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: showArtists }}
+            accessibilityLabel={showArtists ? "Hide solo artists" : "Show solo artists"}
+          >
+            <Icon
+              name="sparkles-outline"
+              size={16}
+              color={showArtists ? "#FFFFFF" : colors.textMuted}
+            />
           </Pressable>
         </View>
 
@@ -742,15 +922,15 @@ export function MapOverlay({
               onMomentumScrollEnd={onCarouselScrollEnd}
               contentContainerStyle={styles.carousel}
             >
-              {carouselItems.map(({ salon }) => {
-                const active = salon.id === selectedId
+              {carouselItems.map((pin) => {
+                const active = pin.id === selectedId
                 return (
-                  <View key={salon.id} style={styles.cardWrap}>
+                  <View key={pin.id} style={styles.cardWrap}>
                     <MapListingCard
-                      salon={salon}
+                      pin={pin}
                       active={active}
-                      onFocus={() => focusSalon(salon.id, true)}
-                      onOpen={() => onSelectSalon(salon.id)}
+                      onFocus={() => focusPin(pin.id, true)}
+                      onOpen={() => openPin(pin)}
                     />
                   </View>
                 )
@@ -842,13 +1022,15 @@ const styles = StyleSheet.create({
     overflow: "visible",
   },
   pricePin: {
+    flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderRadius: radii.pill,
-    paddingHorizontal: Platform.OS === "android" ? 14 : 12,
+    paddingHorizontal: Platform.OS === "android" ? 12 : 10,
     paddingVertical: Platform.OS === "android" ? 0 : 8,
     minHeight: Platform.OS === "android" ? undefined : 34,
     alignItems: "center",
     justifyContent: "center",
+    gap: 4,
     borderWidth: 2,
     borderColor: "rgba(0,0,0,0.08)",
     shadowColor: "#000",
@@ -857,6 +1039,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: Platform.OS === "android" ? 0 : 4,
     overflow: "visible",
+  },
+  kindToggle: {
+    position: "absolute",
+    right: spacing.lg,
+    zIndex: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    padding: 3,
+    borderRadius: radii.pill,
+    backgroundColor: colors.chrome,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  kindToggleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: radii.pill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kindToggleBtnOn: {
+    backgroundColor: "#111111",
   },
   pricePinSelected: {
     backgroundColor: colors.coral,
@@ -952,6 +1162,11 @@ const styles = StyleSheet.create({
     width: 112,
     height: "100%",
     backgroundColor: colors.muted,
+  },
+  listingImageFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#C9B8A8",
   },
   listingBody: {
     flex: 1,

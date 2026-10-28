@@ -15,17 +15,31 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
+import { ArtistOffersStrip } from "@/components/artists/ArtistOffersStrip"
+import { ArtistVerifiedBadge } from "@/components/artists/ArtistVerifiedBadge"
 import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
+import { useCart } from "@/context/CartContext"
+import { artistCartId } from "@/lib/artist-cart"
+import {
+  artistLevelLabel,
+  parseArtistLevel,
+} from "@/lib/artist-level"
 import {
   fetchPublicArtist,
   type PublicArtist,
   type PublicArtistService,
 } from "@/lib/artists-api"
+import {
+  fetchGlammzoOffersForArtist,
+  type GlammzoOfferCard,
+} from "@/lib/glammzo-offers-api"
 import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
 
@@ -39,37 +53,28 @@ function placeLine(artist: PublicArtist) {
   return [artist.area, artist.city].filter(Boolean).join(", ")
 }
 
-function StarRow({ value }: { value: number }) {
-  return (
-    <View style={styles.stars} accessibilityLabel={`${value.toFixed(1)} stars`}>
-      {Array.from({ length: 5 }, (_, i) => (
-        <Icon
-          key={i}
-          name={i < Math.round(value) ? "star" : "star-outline"}
-          size={14}
-          color={colors.coral}
-        />
-      ))}
-    </View>
-  )
-}
-
 export default function ArtistDetailScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
   const { slug, focus } = useLocalSearchParams<{ slug?: string; focus?: string }>()
+  const { isFavorite, toggle } = useArtistFavorites()
+  const cart = useCart()
   const [artist, setArtist] = useState<PublicArtist | null>(null)
+  const [offers, setOffers] = useState<GlammzoOfferCard[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const [detailService, setDetailService] = useState<PublicArtistService | null>(null)
   const scrollRef = useRef<ScrollView>(null)
   const portfolioY = useRef(0)
+  const reviewsY = useRef(0)
   const didFocusPortfolio = useRef(false)
 
   const safeSlug = (slug ?? "").trim().toLowerCase()
+  const cartId = safeSlug ? artistCartId(safeSlug) : ""
+  const artistCart = cartId ? cart.getCart(cartId) : undefined
+  const selectedServiceIds = artistCart?.serviceIds ?? []
   const wantsPortfolio = (focus ?? "").toLowerCase() === "portfolio"
 
   useEffect(() => {
@@ -84,7 +89,15 @@ export default function ArtistDetailScreen() {
     didFocusPortfolio.current = false
     void fetchPublicArtist(safeSlug)
       .then((data) => {
-        if (!cancelled) setArtist(data)
+        if (!cancelled) {
+          setArtist(data)
+          void fetchGlammzoOffersForArtist({
+            city: data.city,
+            area: data.area,
+          }).then((next) => {
+            if (!cancelled) setOffers(next)
+          })
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load artist.")
@@ -122,11 +135,21 @@ export default function ArtistDetailScreen() {
   }, [wantsPortfolio, loading, artist, portfolio.length])
 
   function toggleService(service: PublicArtistService) {
-    setSelectedServiceIds((prev) =>
-      prev.includes(service.id)
-        ? prev.filter((id) => id !== service.id)
-        : [...prev, service.id],
-    )
+    if (!artist || !cartId) return
+    const listPrice = Number(service.price) || 0
+    const offerPrice =
+      service.offerPrice != null && service.offerPrice < listPrice
+        ? service.offerPrice
+        : listPrice
+    cart.toggleService(cartId, service.id, {
+      kind: "artist",
+      providerName: artist.displayName,
+      providerImageUrl: artist.profilePhotoUrl,
+      providerArea: artist.area,
+      serviceName: service.name,
+      servicePrice: offerPrice,
+      serviceDurationMin: service.durationMinutes,
+    })
   }
 
   const selectedServices = useMemo(() => {
@@ -135,7 +158,13 @@ export default function ArtistDetailScreen() {
   }, [artist, selectedServiceIds])
 
   const selectedTotal = useMemo(
-    () => selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0),
+    () =>
+      selectedServices.reduce((sum, s) => {
+        const listPrice = Number(s.price) || 0
+        const offerPrice =
+          s.offerPrice != null && s.offerPrice < listPrice ? s.offerPrice : listPrice
+        return sum + offerPrice
+      }, 0),
     [selectedServices],
   )
 
@@ -158,6 +187,8 @@ export default function ArtistDetailScreen() {
     } as Href)
   }
 
+  const favorited = artist ? isFavorite(artist.slug) : false
+
   const header = useMemo(
     () => (
       <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
@@ -172,10 +203,32 @@ export default function ArtistDetailScreen() {
         <Text variant="heading" style={{ flex: 1 }} numberOfLines={1}>
           {artist?.displayName ?? "Artist"}
         </Text>
-        <View style={styles.iconBtn} />
+        <Pressable
+          onPress={() => {
+            if (!artist) return
+            void (async () => {
+              const result = await toggle(artist.slug)
+              if (result === "auth") {
+                router.push({
+                  pathname: "/login",
+                  params: { next: `/artist/${artist.slug}` },
+                } as Href)
+              }
+            })()
+          }}
+          style={styles.iconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={favorited ? "Remove favorite" : "Save artist"}
+        >
+          <Icon
+            name={favorited ? "heart" : "heart-outline"}
+            size={22}
+            color={favorited ? colors.coral : colors.text}
+          />
+        </Pressable>
       </View>
     ),
-    [artist?.displayName, insets.top, router],
+    [artist, favorited, insets.top, router, toggle],
   )
 
   if (loading) {
@@ -207,6 +260,9 @@ export default function ArtistDetailScreen() {
   const where = placeLine(artist)
   const reviewCount = artist.reviewCount ?? reviews.length
   const averageRating = artist.averageRating ?? 0
+  const level = parseArtistLevel(artist.level)
+  const levelLabel = artistLevelLabel(level, artist.levelLabel)
+  const showVerified = artist.isVerified !== false
 
   return (
     <View style={styles.root}>
@@ -220,30 +276,49 @@ export default function ArtistDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          {artist.profilePhotoUrl ? (
-            <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
-          ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text variant="title" color={colors.coral}>
-                {artist.displayName.slice(0, 1).toUpperCase()}
-              </Text>
+          <View style={styles.avatarWrap}>
+            {artist.profilePhotoUrl ? (
+              <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
+            ) : (
+              <View style={[styles.avatar, styles.avatarFallback]}>
+                <Text variant="title" color={colors.coral}>
+                  {artist.displayName.slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+              <ArtistLevelBadge level={level} size={28} />
             </View>
-          )}
-          <Text variant="title" style={{ textAlign: "center" }}>
-            {artist.displayName}
-          </Text>
-          {where ? (
-            <Text variant="caption" muted style={{ textAlign: "center" }}>
-              {where}
+          </View>
+          <View style={styles.nameRow}>
+            <Text variant="title" style={styles.nameText} numberOfLines={2}>
+              {artist.displayName}
             </Text>
-          ) : null}
+            {showVerified ? <ArtistVerifiedBadge size={20} /> : null}
+          </View>
+          <Text variant="caption" muted style={{ textAlign: "center" }}>
+            {levelLabel}
+            {where ? ` · ${where}` : ""}
+          </Text>
           {reviewCount > 0 ? (
-            <View style={styles.ratingRow}>
-              <StarRow value={averageRating} />
-              <Text variant="caption">
-                {averageRating.toFixed(1)} · {reviewCount} review{reviewCount === 1 ? "" : "s"}
+            <Pressable
+              onPress={() => {
+                scrollRef.current?.scrollTo({
+                  y: Math.max(0, reviewsY.current - spacing.md),
+                  animated: true,
+                })
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={`${averageRating.toFixed(1)} out of 5, ${reviewCount} reviews. Jump to reviews.`}
+              style={({ pressed }) => [styles.ratingRow, pressed && { opacity: 0.7 }]}
+            >
+              <Text variant="bodyStrong" color={colors.coral}>
+                {averageRating.toFixed(1)}/5
               </Text>
-            </View>
+              <Text variant="caption" muted>
+                · {reviewCount} review{reviewCount === 1 ? "" : "s"}
+              </Text>
+            </Pressable>
           ) : null}
           {artist.yearsExperience ? (
             <Text variant="caption" muted>
@@ -325,6 +400,12 @@ export default function ArtistDetailScreen() {
           </View>
         ) : null}
 
+        <ArtistOffersStrip
+          artistOffers={artist.offers ?? []}
+          services={artist.services}
+          glammzoOffers={offers}
+        />
+
         <View style={styles.section}>
           <Text variant="heading">Services</Text>
           {artist.services.length === 0 ? (
@@ -347,10 +428,19 @@ export default function ArtistDetailScreen() {
           )}
         </View>
 
-        {reviews.length > 0 ? (
-          <View style={styles.section}>
+        {reviewCount > 0 ? (
+          <View
+            style={styles.section}
+            onLayout={(e) => {
+              reviewsY.current = e.nativeEvent.layout.y
+            }}
+          >
             <Text variant="heading">Reviews</Text>
-            {reviews.slice(0, 8).map((review) => (
+            <Text variant="caption" muted>
+              {averageRating.toFixed(1)}/5 · {reviewCount} review
+              {reviewCount === 1 ? "" : "s"}
+            </Text>
+            {(reviews.length > 0 ? reviews : []).slice(0, 8).map((review) => (
               <View key={review.id} style={styles.reviewCard}>
                 <View style={styles.reviewHead}>
                   <View style={{ flex: 1 }}>
@@ -364,7 +454,11 @@ export default function ArtistDetailScreen() {
                       {review.serviceName ? ` · ${review.serviceName}` : ""}
                     </Text>
                   </View>
-                  <StarRow value={review.rating} />
+                  <View style={styles.ratingPill}>
+                    <Text variant="caption" color={colors.primaryFg}>
+                      ★ {Number(review.rating).toFixed(1)}
+                    </Text>
+                  </View>
                 </View>
                 {review.comment ? (
                   <Text variant="body" muted style={{ marginTop: spacing.sm }}>
@@ -402,7 +496,25 @@ export default function ArtistDetailScreen() {
               <Text variant="caption" muted>
                 At artist's studio
               </Text>
-              <Text variant="title">{formatRupees(detailService.price)}</Text>
+              {detailService.offerPrice != null &&
+              detailService.offerPrice < detailService.price ? (
+                <>
+                  <Text variant="caption" muted style={{ textDecorationLine: "line-through" }}>
+                    {formatRupees(detailService.price)}
+                  </Text>
+                  <Text variant="title" color={colors.coral}>
+                    {formatRupees(detailService.offerPrice)}
+                  </Text>
+                  {detailService.offerDealLabel ? (
+                    <Text variant="caption" color={colors.coral} style={{ marginTop: 4 }}>
+                      {detailService.offerDealLabel}
+                      {detailService.offerTitle ? ` · ${detailService.offerTitle}` : ""}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text variant="title">{formatRupees(detailService.price)}</Text>
+              )}
               {detailService.homeVisitPriceOverride != null ? (
                 <>
                   <Text variant="caption" muted style={{ marginTop: spacing.sm }}>
@@ -458,7 +570,9 @@ export default function ArtistDetailScreen() {
               previewLabel: cartPreviewLabel,
               ctaLabel: "Next",
               onPress: () => goBook(),
-              onClear: () => setSelectedServiceIds([]),
+              onClear: () => {
+                if (cartId) cart.clearSalon(cartId)
+              },
             },
           ]}
         />
@@ -542,6 +656,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   hero: { alignItems: "center", gap: spacing.sm },
+  avatarWrap: {
+    position: "relative",
+  },
   avatar: {
     width: 96,
     height: 96,
@@ -549,8 +666,38 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
-  ratingRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  stars: { flexDirection: "row", gap: 2 },
+  levelOnAvatar: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    borderRadius: 99,
+    backgroundColor: colors.card,
+    padding: 2,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    maxWidth: "100%",
+    paddingHorizontal: spacing.sm,
+  },
+  nameText: {
+    textAlign: "center",
+    flexShrink: 1,
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 2,
+  },
+  ratingPill: {
+    backgroundColor: colors.coral,
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
   section: { gap: spacing.md },
   portfolioStrip: {
     flexDirection: "row",

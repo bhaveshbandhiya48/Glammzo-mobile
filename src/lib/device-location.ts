@@ -1,4 +1,5 @@
 import * as Location from "expo-location"
+import { Linking, Platform } from "react-native"
 
 import { reverseGeocode, type ResolvedPlace } from "@/lib/location-api"
 
@@ -6,6 +7,11 @@ const GPS_TIMEOUT_MS = 8_000
 const REVERSE_TIMEOUT_MS = 10_000
 const NATIVE_REVERSE_TIMEOUT_MS = 5_000
 const LAST_KNOWN_MAX_AGE_MS = 5 * 60_000
+
+export type DeviceLocationFailure =
+  | "permission_denied"
+  | "services_off"
+  | "unavailable"
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -23,33 +29,55 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   })
 }
 
-/** Prompt only if the OS has never asked. Denied stays denied. */
+/** When prompting: ask if undetermined, or again if the OS still allows it. */
 export async function ensureForegroundLocationPermission(
   promptIfNeeded: boolean,
 ): Promise<boolean> {
   const current = await Location.getForegroundPermissionsAsync()
   if (current.granted) return true
   if (!promptIfNeeded) return false
-  if (current.status !== Location.PermissionStatus.UNDETERMINED) return false
+  if (current.status === Location.PermissionStatus.DENIED && !current.canAskAgain) {
+    return false
+  }
+  if (
+    current.status !== Location.PermissionStatus.UNDETERMINED &&
+    current.status !== Location.PermissionStatus.DENIED
+  ) {
+    return false
+  }
   const requested = await Location.requestForegroundPermissionsAsync()
   return requested.granted
 }
 
 /**
- * Fast coords for browse: last-known first, then a bounded GPS fix.
- * Does not show Android's "improve accuracy" settings dialog.
+ * On Android, show the system dialog to turn location / high-accuracy on.
+ * No-op when services are already enabled. Returns whether services are on.
  */
-export async function getDeviceCoordinates(options?: {
-  promptIfNeeded?: boolean
-  timeoutMs?: number
+export async function ensureLocationServicesEnabled(
+  promptIfNeeded: boolean,
+): Promise<boolean> {
+  const enabled = await Location.hasServicesEnabledAsync().catch(() => true)
+  if (enabled) return true
+  if (!promptIfNeeded) return false
+
+  if (Platform.OS === "android") {
+    try {
+      // Google Play services dialog: turn on location / high accuracy.
+      await Location.enableNetworkProviderAsync()
+      return await Location.hasServicesEnabledAsync().catch(() => false)
+    } catch {
+      return false
+    }
+  }
+
+  // iOS: only the user can enable Location Services in Settings.
+  return false
+}
+
+async function readCoordinates(options: {
+  promptSettingsDialog: boolean
+  timeoutMs: number
 }): Promise<{ latitude: number; longitude: number } | null> {
-  const granted = await ensureForegroundLocationPermission(
-    options?.promptIfNeeded ?? false,
-  )
-  if (!granted) return null
-
-  const timeoutMs = options?.timeoutMs ?? GPS_TIMEOUT_MS
-
   const recent = await Location.getLastKnownPositionAsync({
     maxAge: LAST_KNOWN_MAX_AGE_MS,
     requiredAccuracy: 1000,
@@ -59,9 +87,10 @@ export async function getDeviceCoordinates(options?: {
     const current = await withTimeout(
       Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
-        mayShowUserSettingsDialog: false,
+        // Android: Play Services "turn on location" / improve accuracy dialog.
+        mayShowUserSettingsDialog: options.promptSettingsDialog,
       }),
-      timeoutMs,
+      options.timeoutMs,
     )
     return {
       latitude: current.coords.latitude,
@@ -81,6 +110,57 @@ export async function getDeviceCoordinates(options?: {
       longitude: stale.coords.longitude,
     }
   }
+}
+
+/**
+ * Fast coords for browse: last-known first, then a bounded GPS fix.
+ * When `promptIfNeeded`, Android shows the turn-on-location system dialog if GPS is off.
+ */
+export async function getDeviceCoordinates(options?: {
+  promptIfNeeded?: boolean
+  timeoutMs?: number
+}): Promise<{ latitude: number; longitude: number } | null> {
+  const prompt = options?.promptIfNeeded ?? false
+  const granted = await ensureForegroundLocationPermission(prompt)
+  if (!granted) return null
+
+  if (prompt) {
+    await ensureLocationServicesEnabled(true)
+  }
+
+  return readCoordinates({
+    promptSettingsDialog: prompt,
+    timeoutMs: options?.timeoutMs ?? GPS_TIMEOUT_MS,
+  })
+}
+
+/** Richer result for UI that needs specific error copy (e.g. Use current location). */
+export async function getDeviceCoordinatesDetailed(options?: {
+  promptIfNeeded?: boolean
+  timeoutMs?: number
+}): Promise<
+  | { ok: true; coords: { latitude: number; longitude: number } }
+  | { ok: false; reason: DeviceLocationFailure }
+> {
+  const prompt = options?.promptIfNeeded ?? false
+  const permission = await Location.getForegroundPermissionsAsync()
+  const granted = await ensureForegroundLocationPermission(prompt)
+  if (!granted) {
+    if (prompt && permission.status === Location.PermissionStatus.DENIED && !permission.canAskAgain) {
+      void Linking.openSettings()
+    }
+    return { ok: false, reason: "permission_denied" }
+  }
+
+  const servicesOn = await ensureLocationServicesEnabled(prompt)
+  if (!servicesOn) return { ok: false, reason: "services_off" }
+
+  const coords = await readCoordinates({
+    promptSettingsDialog: prompt,
+    timeoutMs: options?.timeoutMs ?? GPS_TIMEOUT_MS,
+  })
+  if (!coords) return { ok: false, reason: "unavailable" }
+  return { ok: true, coords }
 }
 
 function placeFromNativeAddress(

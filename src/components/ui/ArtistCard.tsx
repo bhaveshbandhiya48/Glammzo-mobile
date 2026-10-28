@@ -1,16 +1,25 @@
 import { Image } from "expo-image"
-import { useRouter, type Href } from "expo-router"
-import { Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { Pressable, StyleSheet, View } from "react-native"
 
+import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
+import { ArtistVerifiedBadge } from "@/components/artists/ArtistVerifiedBadge"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import {
+  artistLevelLabel,
+  parseArtistLevel,
+} from "@/lib/artist-level"
 import type { ArtistCardData } from "@/lib/artists-api"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
 
 const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`
 
-/** How many portfolio thumbs to show before a “View more” tile. */
-const PORTFOLIO_PREVIEW = 5
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return "?"
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase()
+  return `${parts[0]![0] ?? ""}${parts[1]![0] ?? ""}`.toUpperCase()
+}
 
 type Props = {
   artist: ArtistCardData
@@ -20,161 +29,157 @@ type Props = {
   compact?: boolean
 }
 
-export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: Props) {
-  const router = useRouter()
-  const where = [artist.area, artist.city].filter(Boolean).join(", ")
-  const homeLabel = compact
-    ? artist.coversYourArea
-      ? "To you"
-      : "Home"
-    : artist.coversYourArea
-      ? "Travels to you"
-      : `Home visits${artist.serviceRadiusKm ? ` · ${Math.round(artist.serviceRadiusKm)} km` : ""}`
-
-  const portfolio = artist.portfolio
-  const useSlider = portfolio.length > 3
-  const preview = portfolio.slice(0, PORTFOLIO_PREVIEW)
-  const showViewMore = portfolio.length > 3
-  const extraCount = Math.max(0, portfolio.length - PORTFOLIO_PREVIEW)
-
-  function openPortfolio() {
-    router.push({
-      pathname: "/artist/[slug]",
-      params: {
-        slug: artist.slug,
-        name: artist.displayName,
-        focus: "portfolio",
-      },
-    } as Href)
-  }
-
-  const thumbStyle = [styles.thumb, compact && styles.thumbCompact]
-
-  const portfolioTiles = (
-    <>
-      {preview.map((uri) => (
-        <Pressable
-          key={uri}
-          onPress={openPortfolio}
-          accessibilityRole="button"
-          accessibilityLabel="View portfolio"
-        >
-          <Image source={{ uri }} style={thumbStyle} contentFit="cover" />
-        </Pressable>
-      ))}
-      {showViewMore ? (
-        <Pressable
-          onPress={openPortfolio}
-          accessibilityRole="button"
-          accessibilityLabel="View more portfolio photos"
-          style={({ pressed }) => [
-            styles.thumb,
-            compact && styles.thumbCompact,
-            styles.viewMore,
-            pressed && { opacity: 0.88 },
-          ]}
-        >
-          {extraCount > 0 ? (
-            <Text variant="caption" color={colors.coral} style={styles.viewMoreText}>
-              +{extraCount}
-            </Text>
-          ) : null}
-          <Text variant="caption" color={colors.coral} style={styles.viewMoreText}>
-            View more
-          </Text>
-        </Pressable>
-      ) : null}
-    </>
-  )
+export function ArtistCard({ artist, categoryLabel: _categoryLabel, onPress, compact = false }: Props) {
+  const where = artist.area?.trim() || null
+  const distanceLabel =
+    artist.distanceKm != null
+      ? artist.distanceKm < 10
+        ? `${artist.distanceKm.toFixed(1)} km`
+        : `${Math.round(artist.distanceKm)} km`
+      : null
+  const placeLine = [where, distanceLabel].filter(Boolean).join(" · ")
+  const avatarSize = compact ? 52 : 56
+  const showVerified = artist.isVerified !== false
+  const showHome = Boolean(artist.offersHomeVisits)
+  const showStudio = Boolean(artist.hasStudio)
+  const level = parseArtistLevel(artist.level)
+  const levelLabel = artistLevelLabel(level, artist.levelLabel)
 
   return (
-    <View style={[styles.card, compact && styles.cardCompact]}>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={`${artist.displayName}, ${where}`}
-        style={({ pressed }) => [pressed && styles.pressed]}
-      >
-        <View style={styles.top}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${artist.displayName}${showVerified ? ", verified" : ""}, ${levelLabel}${placeLine ? `, ${placeLine}` : ""}${(artist.reviewCount ?? 0) > 0 && artist.averageRating != null ? `, ${artist.averageRating.toFixed(1)} stars` : ""}`}
+      style={({ pressed }) => [
+        styles.card,
+        compact && styles.cardCompact,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.header}>
+        <View style={styles.avatarWrap}>
           {artist.profilePhotoUrl ? (
-            <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
+            <Image
+              source={{ uri: artist.profilePhotoUrl }}
+              style={{
+                width: avatarSize,
+                height: avatarSize,
+                borderRadius: avatarSize / 2,
+                backgroundColor: colors.muted,
+              }}
+              contentFit="cover"
+            />
           ) : (
-            <View style={[styles.avatar, styles.avatarFallback]}>
-              <Text variant="heading" color={colors.coral}>
-                {artist.displayName.slice(0, 1).toUpperCase()}
+            <View
+              style={[
+                styles.avatarFallback,
+                {
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                },
+              ]}
+            >
+              <Text variant="heading" color={colors.primaryFg} style={styles.initials}>
+                {initials(artist.displayName)}
               </Text>
             </View>
           )}
-          <View style={styles.info}>
-            <Text variant="heading" numberOfLines={1}>
-              {artist.displayName}
-            </Text>
-            {where ? (
-              <Text variant="caption" muted numberOfLines={1}>
-                {where}
-                {artist.distanceKm != null
-                  ? ` · ${artist.distanceKm < 10 ? artist.distanceKm.toFixed(1) : Math.round(artist.distanceKm)} km`
-                  : ""}
-              </Text>
-            ) : null}
-            <Text variant="caption" muted numberOfLines={1} style={{ marginTop: 2 }}>
-              {artist.categories.slice(0, 3).map(categoryLabel).join(" · ")}
-              {artist.yearsExperience ? ` · ${artist.yearsExperience}+ yrs` : ""}
-            </Text>
-            {artist.startingPrice != null ? (
-              <Text variant="heading" numberOfLines={1} style={styles.price}>
-                from {rupees(artist.startingPrice)}
-              </Text>
-            ) : null}
+          <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+            <ArtistLevelBadge level={level} size={compact ? 18 : 20} />
           </View>
         </View>
-      </Pressable>
 
-      {portfolio.length > 0 ? (
-        useSlider ? (
-          <ScrollView
-            horizontal
-            nestedScrollEnabled
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.strip}
-          >
-            {portfolioTiles}
-          </ScrollView>
-        ) : (
-          <View style={styles.strip}>{portfolioTiles}</View>
-        )
-      ) : null}
-
-      {artist.offersHomeVisits || artist.hasStudio ? (
-        <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.pressed]}>
-          <View style={styles.badges}>
-            {artist.offersHomeVisits ? (
-              <View style={[styles.badge, artist.coversYourArea && styles.badgeOn]}>
-                <Icon
-                  name="home-outline"
-                  size={13}
-                  color={artist.coversYourArea ? colors.success : colors.textMuted}
-                />
-                <Text
-                  variant="caption"
-                  color={artist.coversYourArea ? colors.success : colors.textMuted}
-                >
-                  {homeLabel}
-                </Text>
-              </View>
-            ) : null}
-            {artist.hasStudio ? (
-              <View style={styles.badge}>
-                <Icon name="storefront-outline" size={13} color={colors.textMuted} />
-                <Text variant="caption" muted>
-                  Studio
-                </Text>
-              </View>
-            ) : null}
+        <View style={styles.headerCopy}>
+          <View style={styles.nameRow}>
+            <Text variant="heading" numberOfLines={1} style={styles.nameText}>
+              {artist.displayName}
+            </Text>
+            {showVerified ? <ArtistVerifiedBadge size={compact ? 15 : 16} /> : null}
           </View>
-        </Pressable>
+          {placeLine ? (
+            <Text variant="caption" muted numberOfLines={1}>
+              {placeLine}
+            </Text>
+          ) : null}
+          {(artist.reviewCount ?? 0) > 0 && artist.averageRating != null ? (
+            <View style={styles.ratingRow}>
+              <View style={styles.ratingPill} accessibilityLabel={`${artist.averageRating.toFixed(1)} stars`}>
+                <Text variant="caption" color={colors.primaryFg}>
+                  ★ {artist.averageRating.toFixed(1)}
+                </Text>
+              </View>
+              <Text variant="caption" muted>
+                {artist.reviewCount} review{artist.reviewCount === 1 ? "" : "s"}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      {showHome || showStudio ? (
+        <View style={styles.tags}>
+          {showHome ? (
+            <View
+              style={[styles.placeBadge, artist.coversYourArea && styles.placeBadgeOn]}
+              accessibilityLabel={
+                artist.coversYourArea ? "Home visits to you" : "Home visits"
+              }
+            >
+              <Icon
+                name="home-outline"
+                size={13}
+                color={artist.coversYourArea ? colors.success : colors.textMuted}
+              />
+              <Text
+                variant="caption"
+                color={artist.coversYourArea ? colors.success : colors.textMuted}
+              >
+                Home
+              </Text>
+            </View>
+          ) : null}
+          {showStudio ? (
+            <View style={styles.placeBadge} accessibilityLabel="Studio visits">
+              <Icon name="storefront-outline" size={13} color={colors.textMuted} />
+              <Text variant="caption" muted>
+                Salon
+              </Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
-    </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.footer}>
+        {artist.startingPrice != null ? (
+          <Text variant="body">
+            <Text variant="caption" muted>
+              from{" "}
+            </Text>
+            <Text variant="bodyStrong">{rupees(artist.startingPrice)}</Text>
+          </Text>
+        ) : (
+          <View />
+        )}
+
+        {artist.offerBadge ? (
+          <View style={styles.offerBadge} pointerEvents="none">
+            <Text variant="caption" color={colors.primaryFg} style={styles.offerBadgeText}>
+              {artist.offerBadge}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.cta}>
+            <Text variant="bodyStrong" color={colors.coral}>
+              View profile
+            </Text>
+            <Icon name="chevron-forward" size={16} color={colors.coral} />
+          </View>
+        )}
+      </View>
+    </Pressable>
   )
 }
 
@@ -190,46 +195,65 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
-  pressed: { opacity: 0.9 },
-  top: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.muted },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
-  info: { flex: 1, minWidth: 0 },
-  strip: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
-  thumb: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+  pressed: { opacity: 0.92 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
   },
-  thumbCompact: {
-    width: 56,
-    height: 56,
+  avatarWrap: {
+    position: "relative",
   },
-  viewMore: {
+  avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8EDE8",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(232, 120, 90, 0.35)",
+    backgroundColor: "#C9B8A8",
+  },
+  initials: {
+    fontSize: 16,
+    color: colors.primaryFg,
+  },
+  levelOnAvatar: {
+    position: "absolute",
+    right: -2,
+    bottom: -2,
+    borderRadius: 99,
+    backgroundColor: colors.card,
+    padding: 1,
+  },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
     gap: 2,
-    paddingHorizontal: 4,
   },
-  viewMoreText: {
-    textAlign: "center",
-    fontSize: 11,
-    lineHeight: 14,
-  },
-  price: {
-    marginTop: 4,
-  },
-  badges: {
+  nameRow: {
     flexDirection: "row",
-    flexWrap: "nowrap",
+    alignItems: "center",
+    gap: 6,
+    minWidth: 0,
+  },
+  nameText: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  ratingRow: {
+    flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    marginTop: 2,
   },
-  badge: {
+  ratingPill: {
+    backgroundColor: colors.coral,
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  tags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  placeBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
@@ -237,7 +261,34 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    flexShrink: 1,
   },
-  badgeOn: { backgroundColor: "#E5F4EA" },
+  placeBadgeOn: {
+    backgroundColor: "#E5F4EA",
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  cta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  offerBadge: {
+    backgroundColor: colors.coral,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+  },
+  offerBadgeText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: "700",
+  },
 })

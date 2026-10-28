@@ -9,6 +9,7 @@ import { AnimatedSplash } from "@/components/brand/AnimatedSplash"
 import { OfflineBanner } from "@/components/layout/OfflineBanner"
 import { ProfileStackHeader } from "@/components/layout/ProfileStackHeader"
 import { CartProvider } from "@/context/CartContext"
+import { ArtistFavoritesProvider } from "@/context/ArtistFavoritesContext"
 import { FavoritesProvider } from "@/context/FavoritesContext"
 import { NetworkProvider } from "@/context/NetworkContext"
 import { NotificationsProvider } from "@/context/NotificationsContext"
@@ -112,7 +113,7 @@ function RootNavigator() {
         />
         <Stack.Screen
           name="profile/favorites"
-          options={profileStackOptions("Saved salons")}
+          options={profileStackOptions("Saved")}
         />
         <Stack.Screen
           name="profile/support"
@@ -141,14 +142,16 @@ export default function RootLayout() {
       {showApp ? (
         <CartProvider>
           <FavoritesProvider>
-            <NotificationsProvider>
-              <NetworkProvider>
-                <View style={{ flex: 1 }}>
-                  <RootNavigator />
-                  <OfflineBanner />
-                </View>
-              </NetworkProvider>
-            </NotificationsProvider>
+            <ArtistFavoritesProvider>
+              <NotificationsProvider>
+                <NetworkProvider>
+                  <View style={{ flex: 1 }}>
+                    <RootNavigator />
+                    <OfflineBanner />
+                  </View>
+                </NetworkProvider>
+              </NotificationsProvider>
+            </ArtistFavoritesProvider>
           </FavoritesProvider>
         </CartProvider>
       ) : null}

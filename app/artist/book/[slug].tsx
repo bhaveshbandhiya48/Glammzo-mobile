@@ -3,6 +3,7 @@ import { useLocalSearchParams, useNavigation, useRouter, type Href } from "expo-
 import { useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
+  Linking,
   Pressable,
   StyleSheet,
   View,
@@ -22,7 +23,7 @@ import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
 import {
   artistServiceUnitPrice,
-  createArtistPublicBooking,
+  createArtistBookingWithRewards,
   fetchArtistSlots,
   fetchPublicArtist,
   issueArtistVerificationFromSession,
@@ -31,8 +32,21 @@ import {
   type PublicArtist,
   type PublicArtistService,
 } from "@/lib/artists-api"
+import { ApiError } from "@/lib/api"
 import { fetchMe } from "@/lib/auth-api"
+import {
+  canApplyLoyalty,
+  EMPTY_LOYALTY_SUMMARY,
+  LOYALTY_DISCOUNT_CAP_RUPEES,
+  LOYALTY_VISITS_PER_FREE,
+  type LoyaltySummary,
+} from "@/lib/loyalty"
 import { loadProfilePreferApi } from "@/lib/profile-api"
+import {
+  validateArtistPromoCode,
+  type AppliedOfferDiscount,
+  type PromoCashbackClaim,
+} from "@/lib/promo-api"
 import { formatRupees } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
 import {
@@ -40,6 +54,7 @@ import {
   normalizeMobileDigits,
   patchConsumerProfileCache,
 } from "@/lib/user"
+import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
 
 function dayKeys(from: Date, count: number, timeZone: string) {
@@ -73,12 +88,20 @@ export default function ArtistBookScreen() {
   const router = useRouter()
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
-  const { slug, serviceId: serviceIdParam, serviceIds: serviceIdsParam } = useLocalSearchParams<{
+  const {
+    slug,
+    serviceId: serviceIdParam,
+    serviceIds: serviceIdsParam,
+    promo: promoParam,
+  } = useLocalSearchParams<{
     slug?: string
     serviceId?: string
     serviceIds?: string
+    promo?: string
   }>()
   const safeSlug = (slug ?? "").trim().toLowerCase()
+  const initialPromo =
+    typeof promoParam === "string" ? promoParam.trim().toUpperCase() : ""
 
   const [artist, setArtist] = useState<PublicArtist | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -105,12 +128,16 @@ export default function ArtistBookScreen() {
   const [verifiedFor, setVerifiedFor] = useState<{ phone: string; token: string } | null>(null)
   const [busy, setBusy] = useState<"book" | "session" | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<{
-    token: string
-    startsAt: string
-    quote: ArtistBookingQuote
-    awaitingPayment: boolean
-  } | null>(null)
+
+  const [promoInput, setPromoInput] = useState(initialPromo)
+  const [promoError, setPromoError] = useState<string | null>(null)
+  const [promoApplying, setPromoApplying] = useState(false)
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedOfferDiscount | null>(null)
+  const [cashbackClaim, setCashbackClaim] = useState<PromoCashbackClaim | null>(null)
+  const [useWallet, setUseWallet] = useState(false)
+  const [useLoyalty, setUseLoyalty] = useState(false)
+  const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
+  const [walletBalance, setWalletBalance] = useState(0)
 
   const timezone = artist?.timezone || "Asia/Kolkata"
   const days = useMemo(() => dayKeys(new Date(), 14, timezone), [timezone])
@@ -264,6 +291,26 @@ export default function ArtistBookScreen() {
     })
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const token = await getAccessToken()
+      if (!token || cancelled) return
+      const [loyaltyResult, walletResult] = await Promise.allSettled([
+        fetchLoyalty(),
+        fetchWallet(),
+      ])
+      if (cancelled) return
+      if (loyaltyResult.status === "fulfilled") setLoyalty(loyaltyResult.value)
+      if (walletResult.status === "fulfilled") {
+        setWalletBalance(walletResult.value.wallet?.balanceRupees ?? 0)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const selectedServices = useMemo(() => {
     if (!artist) return [] as PublicArtistService[]
     return artist.services.filter((s) => selectedIds.includes(s.id))
@@ -369,6 +416,74 @@ export default function ArtistBookScreen() {
     return { token: issued.verificationToken, phone: issuedPhone }
   }
 
+  const loyaltyAvailable = canApplyLoyalty(loyalty)
+  const quoteTotal = quote ? Math.round(quote.total) : 0
+  const serviceSubtotal = quote ? Math.round(quote.servicePrice) : 0
+  const promoDiscount = Math.min(
+    Math.max(0, serviceSubtotal),
+    Math.max(0, Math.round(appliedDiscount?.discountAmount ?? 0)),
+  )
+  const loyaltyCredit =
+    useLoyalty && loyaltyAvailable
+      ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(serviceSubtotal - promoDiscount, 0))
+      : 0
+  const amountBeforeWallet = Math.max(0, quoteTotal - promoDiscount - loyaltyCredit)
+  const walletCredit = useWallet
+    ? Math.min(Math.max(0, Math.round(walletBalance)), amountBeforeWallet)
+    : 0
+  const payableTotal = Math.max(0, amountBeforeWallet - walletCredit)
+  const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
+
+  async function applyPromo() {
+    const code = promoInput.trim().toUpperCase()
+    if (!code) {
+      setPromoError("Enter a promo code")
+      return
+    }
+    if (!artist || selectedIds.length === 0) {
+      setPromoError("Add services before applying a promo code.")
+      return
+    }
+    if (!quote || quoteTotal <= 0) {
+      setPromoError("Add services and a time before applying a promo code.")
+      return
+    }
+    setPromoApplying(true)
+    setPromoError(null)
+    try {
+      const result = await validateArtistPromoCode({
+        code,
+        subtotal: quoteTotal,
+        artistSlug: artist.slug,
+        serviceIds: selectedIds,
+      })
+      if (result.kind === "discount") {
+        setAppliedDiscount(result.discount)
+        setCashbackClaim(null)
+        setPromoInput(result.discount.code)
+        return
+      }
+      setAppliedDiscount(null)
+      setCashbackClaim(result.cashback)
+      setPromoInput(result.cashback.code)
+    } catch (err) {
+      setAppliedDiscount(null)
+      setCashbackClaim(null)
+      setPromoError(
+        err instanceof ApiError ? err.message : "Could not apply promo code.",
+      )
+    } finally {
+      setPromoApplying(false)
+    }
+  }
+
+  function clearPromo() {
+    setAppliedDiscount(null)
+    setCashbackClaim(null)
+    setPromoInput("")
+    setPromoError(null)
+  }
+
   async function onBook() {
     if (!artist || selectedIds.length === 0 || !slot) return
     if (name.trim().length < 2) {
@@ -382,12 +497,9 @@ export default function ArtistBookScreen() {
     setBusy("book")
     setError(null)
     try {
-      const session = await ensureVerifiedSession()
-      if (!/^[6-9]\d{9}$/.test(session.phone)) {
-        setError("Your account needs a verified mobile number.")
-        return
-      }
-      const res = await createArtistPublicBooking({
+      // Keep session warm for CRM; booking itself goes through Glammzo-web for rewards.
+      await ensureVerifiedSession()
+      const res = await createArtistBookingWithRewards({
         slug: artist.slug,
         serviceIds: selectedIds,
         startAt: slot,
@@ -397,23 +509,78 @@ export default function ArtistBookScreen() {
         lat: pin?.lat,
         lng: pin?.lng,
         fullName: name.trim(),
-        phone: session.phone,
-        verificationToken: session.token,
+        promoCode: appliedPromoCode || undefined,
+        useWallet: useWallet && walletBalance > 0,
+        useFreeService: useLoyalty && loyaltyAvailable,
       })
-      setDone({
-        token: res.booking.token,
-        startsAt: res.booking.startsAt,
-        quote: res.quote,
-        awaitingPayment: res.awaitingPayment,
+      const dateKey = new Date(res.booking.startsAt).toLocaleDateString("en-CA", {
+        timeZone: timezone,
       })
+      // The artist asks for an advance: pay it on Glammzo's secure web page (not in-app purchase).
+      if (res.awaitingPayment && res.payUrl) {
+        void Linking.openURL(res.payUrl)
+      }
+      router.replace({
+        pathname: "/book/confirmation",
+        params: {
+          kind: "artist",
+          salonId: artist.slug,
+          bookingId: `artist:${res.booking.token}`,
+          total: String(Math.round(res.payable ?? payableTotal)),
+          slot: formatSlot(res.booking.startsAt, timezone),
+          name: name.trim(),
+          date: dateKey,
+          status: res.awaitingPayment ? "pending" : "confirmed",
+          ...(res.awaitingPayment && res.payUrl ? { payUrl: res.payUrl } : {}),
+          services: selectedServices.map((s) => s.name).join(" · "),
+          visitType: locationType === "client_home" ? "Home visit" : "Studio visit",
+          area: [artist.area, artist.city].filter(Boolean).join(", "),
+          providerName: artist.displayName,
+          photoUrl: artist.profilePhotoUrl ?? "",
+        },
+      } as Href)
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Couldn't book."
+      const message =
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : "Couldn't book."
       setError(message)
       if (/no longer available/i.test(message)) setSlot(null)
     } finally {
       setBusy(null)
     }
   }
+
+  // Keep an applied artist offer in sync when the bag changes.
+  useEffect(() => {
+    if (!artist || !appliedDiscount) return
+    if (selectedIds.length === 0) {
+      setAppliedDiscount(null)
+      return
+    }
+    let active = true
+    void validateArtistPromoCode({
+      code: appliedDiscount.code,
+      subtotal: Math.max(quoteTotal, serviceSubtotal, 1),
+      artistSlug: artist.slug,
+      serviceIds: selectedIds,
+    })
+      .then((result) => {
+        if (!active) return
+        if (result.kind === "discount") {
+          setAppliedDiscount(result.discount)
+          setPromoError(null)
+          return
+        }
+        setAppliedDiscount(null)
+      })
+      .catch(() => {
+        if (active) setAppliedDiscount(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [artist?.slug, selectedIds.join("|")])
 
   useEffect(() => {
     navigation.setOptions({
@@ -452,42 +619,6 @@ export default function ArtistBookScreen() {
         </Text>
         <Button label="Go back" onPress={() => router.back()} style={{ marginTop: spacing.lg }} />
       </View>
-    )
-  }
-
-  if (done && selectedServices.length > 0) {
-    const when = new Date(done.startsAt).toLocaleString("en-IN", {
-      timeZone: timezone,
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "numeric",
-      minute: "2-digit",
-    })
-    const serviceLabel = selectedServices.map((s) => s.name).join(" · ")
-    return (
-      <Screen scroll contentStyle={styles.scroll} edges={["top", "left", "right"]}>
-        <Icon name="checkmark-circle" size={48} color={colors.coral} />
-        <Text variant="title">You're booked</Text>
-        <Text variant="body" muted>
-          {serviceLabel} with {artist.displayName}
-        </Text>
-        <View style={styles.card}>
-          <Text variant="heading">{when}</Text>
-          <Text variant="body" muted style={{ marginTop: spacing.sm }}>
-            Total {formatRupees(done.quote.total)}
-          </Text>
-        </View>
-        <Button
-          label="Done"
-          onPress={() =>
-            router.replace({
-              pathname: "/artist/[slug]",
-              params: { slug: artist.slug },
-            } as Href)
-          }
-        />
-      </Screen>
     )
   }
 
@@ -818,6 +949,30 @@ export default function ArtistBookScreen() {
                   Add your location to see the final home-visit total.
                 </Text>
               ) : null}
+              {quote && quote.advance > 0 ? (
+                <View style={{ marginTop: spacing.sm, gap: 4 }}>
+                  <View style={styles.priceRow}>
+                    <Text variant="label">Pay now to confirm (advance)</Text>
+                    <Text variant="label">{formatRupees(quote.advance)}</Text>
+                  </View>
+                  <View style={styles.priceRow}>
+                    <Text variant="caption" muted>Pay the artist at your visit</Text>
+                    <Text variant="caption" muted>{formatRupees(Math.max(0, quote.total - quote.advance))}</Text>
+                  </View>
+                  <Text variant="caption" muted>
+                    {artist.displayName} asks for an advance. After you book, you&apos;ll pay it securely on
+                    Glammzo (UPI, card or net banking). Your time is held for 15 minutes.
+                  </Text>
+                  {artist.cancellationPolicyLines?.length ? (
+                    <View style={{ gap: 2, marginTop: 4 }}>
+                      <Text variant="label">If you cancel</Text>
+                      {artist.cancellationPolicyLines.map((line) => (
+                        <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </>
         ) : null}
@@ -850,35 +1005,233 @@ export default function ArtistBookScreen() {
                 {visitWhereLabel}
                 {needsHome && address.trim() ? ` · ${address.trim()}` : ""}
               </Text>
-              {quote ? (
-                <>
-                  <View style={styles.priceRow}>
-                    <Text variant="body">
-                      Services
-                      {needsHome ? " (home rates)" : ""}
-                    </Text>
-                    <Text variant="bodyStrong">
-                      {formatRupees(quote.servicePrice)}
-                    </Text>
-                  </View>
-                  {travelFee > 0 ? (
-                    <View style={styles.priceRow}>
-                      <Text variant="body">
-                        Travel fee
-                        {quote.distanceKm != null
-                          ? ` · ${quote.distanceKm.toFixed(1)} km`
-                          : ""}
-                      </Text>
-                      <Text variant="bodyStrong">{formatRupees(travelFee)}</Text>
-                    </View>
-                  ) : null}
-                  <View style={[styles.priceRow, { marginTop: spacing.sm }]}>
-                    <Text variant="heading">Total</Text>
-                    <Text variant="heading">{formatRupees(quote.total)}</Text>
-                  </View>
-                </>
-              ) : null}
             </View>
+
+            <View style={[styles.card, styles.rewardsCard]}>
+              <Text variant="label" muted>
+                Promo code
+              </Text>
+              {appliedPromoCode ? (
+                <View style={styles.appliedPromo}>
+                  <View style={{ flex: 1 }}>
+                    <Text variant="bodyStrong">{appliedPromoCode}</Text>
+                    {appliedDiscount ? (
+                      <Text variant="caption" muted>
+                        {appliedDiscount.title} · save{" "}
+                        {formatRupees(appliedDiscount.discountAmount)}
+                      </Text>
+                    ) : null}
+                    {cashbackClaim ? (
+                      <Text variant="caption" muted>
+                        ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Pressable onPress={clearPromo} hitSlop={8}>
+                    <Text variant="caption" color={colors.destructive}>
+                      Remove
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.promoRow}>
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={promoInput}
+                      onChangeText={(value) => {
+                        setPromoInput(value)
+                        setPromoError(null)
+                      }}
+                      placeholder="Enter code"
+                      autoCapitalize="characters"
+                    />
+                  </View>
+                  <Button
+                    label={promoApplying ? "…" : "Apply"}
+                    style={styles.applyBtn}
+                    onPress={() => {
+                      void applyPromo()
+                    }}
+                    loading={promoApplying}
+                    disabled={promoInput.trim().length === 0 || promoApplying}
+                  />
+                </View>
+              )}
+              {promoError ? (
+                <Text variant="caption" color={colors.destructive}>
+                  {promoError}
+                </Text>
+              ) : null}
+              {cashbackClaim && !promoError ? (
+                <Text variant="caption" muted>
+                  {cashbackClaim.message}
+                </Text>
+              ) : appliedDiscount && !promoError ? (
+                <Text variant="caption" muted>
+                  Artist offer applied on service price.
+                </Text>
+              ) : (
+                <Text variant="caption" muted>
+                  Artist offer codes and Glammzo cashback codes work here.
+                </Text>
+              )}
+            </View>
+
+            <View style={[styles.card, styles.rewardsCard]}>
+              <Text variant="label" muted>
+                Wallet & loyalty
+              </Text>
+
+              <Pressable
+                style={[
+                  styles.rewardRow,
+                  useWallet && walletBalance > 0 && styles.rewardRowActive,
+                  walletBalance <= 0 && styles.rewardDisabled,
+                ]}
+                disabled={walletBalance <= 0}
+                onPress={() => {
+                  if (walletBalance <= 0) return
+                  setUseWallet((value) => !value)
+                }}
+              >
+                <View style={styles.rewardIcon}>
+                  <Icon name="wallet-outline" size={20} color={colors.coral} />
+                </View>
+                <View style={styles.rewardCopy}>
+                  <Text variant="bodyStrong">Wallet credit</Text>
+                  <Text variant="caption" muted>
+                    {walletBalance > 0
+                      ? `₹${Math.round(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
+                      : "No wallet balance yet"}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.applyChip,
+                    useWallet && walletBalance > 0 && styles.applyChipOn,
+                    walletBalance <= 0 && styles.applyChipDisabled,
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    color={
+                      walletBalance <= 0
+                        ? colors.textSubtle
+                        : useWallet
+                          ? colors.primaryFg
+                          : colors.coral
+                    }
+                  >
+                    {walletBalance <= 0 ? "Unavailable" : useWallet ? "Applied" : "Apply"}
+                  </Text>
+                </View>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.rewardRow,
+                  useLoyalty && loyaltyAvailable && styles.rewardRowActive,
+                  !loyaltyAvailable && styles.rewardDisabled,
+                ]}
+                disabled={!loyaltyAvailable}
+                onPress={() => {
+                  if (!loyaltyAvailable) return
+                  setUseLoyalty((value) => !value)
+                }}
+              >
+                <View style={styles.rewardIcon}>
+                  <Icon name="ribbon-outline" size={20} color={colors.coral} />
+                </View>
+                <View style={styles.rewardCopy}>
+                  <Text variant="bodyStrong">Loyalty reward</Text>
+                  <Text variant="caption" muted>
+                    {loyaltyAvailable
+                      ? `Up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off · ${loyalty.freeServiceCredits} credit${loyalty.freeServiceCredits === 1 ? "" : "s"} · tap to ${useLoyalty ? "remove" : "apply"}`
+                      : `Complete ${LOYALTY_VISITS_PER_FREE} services → unlock up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off. ${loyalty.stampsTowardNextFree}/${LOYALTY_VISITS_PER_FREE} completed · ${loyalty.visitsLeft} more to go.`}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.applyChip,
+                    useLoyalty && loyaltyAvailable && styles.applyChipOn,
+                    !loyaltyAvailable && styles.applyChipDisabled,
+                  ]}
+                >
+                  <Text
+                    variant="caption"
+                    color={
+                      !loyaltyAvailable
+                        ? colors.textSubtle
+                        : useLoyalty
+                          ? colors.primaryFg
+                          : colors.coral
+                    }
+                  >
+                    {!loyaltyAvailable ? "Locked" : useLoyalty ? "Applied" : "Apply"}
+                  </Text>
+                </View>
+              </Pressable>
+            </View>
+
+            <View style={[styles.card, styles.rewardsCard]}>
+              <Text variant="label" muted>
+                Payment summary
+              </Text>
+              <View style={styles.summaryRow}>
+                <Text muted>
+                  Services
+                  {needsHome ? " (home rates)" : ""}
+                </Text>
+                <Text>{formatRupees(serviceSubtotal)}</Text>
+              </View>
+              {travelFee > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text muted>
+                    Travel fee
+                    {quote?.distanceKm != null
+                      ? ` · ${quote.distanceKm.toFixed(1)} km`
+                      : ""}
+                  </Text>
+                  <Text>{formatRupees(travelFee)}</Text>
+                </View>
+              ) : null}
+              {promoDiscount > 0 && appliedDiscount ? (
+                <View style={styles.summaryRow}>
+                  <Text muted>Offer ({appliedDiscount.code})</Text>
+                  <Text color={colors.success}>−{formatRupees(promoDiscount)}</Text>
+                </View>
+              ) : null}
+              {cashbackClaim ? (
+                <View style={styles.summaryRow}>
+                  <Text muted>Cashback ({cashbackClaim.code})</Text>
+                  <Text muted>+₹{cashbackClaim.cashbackRupees} later</Text>
+                </View>
+              ) : null}
+              {loyaltyCredit > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text muted>Loyalty</Text>
+                  <Text color={colors.success}>−{formatRupees(loyaltyCredit)}</Text>
+                </View>
+              ) : null}
+              {walletCredit > 0 ? (
+                <View style={styles.summaryRow}>
+                  <Text muted>Wallet</Text>
+                  <Text color={colors.success}>−{formatRupees(walletCredit)}</Text>
+                </View>
+              ) : null}
+              <View style={[styles.summaryRow, styles.summaryTotal]}>
+                <Text variant="bodyStrong">Pay artist</Text>
+                <Text variant="heading">{formatRupees(payableTotal)}</Text>
+              </View>
+            </View>
+
+            {artist.cancellationPolicyText ? (
+              <View style={styles.policyCard}>
+                <Text variant="caption" muted>
+                  {artist.cancellationPolicyText}
+                </Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -898,7 +1251,9 @@ export default function ArtistBookScreen() {
                 ? "Continue"
                 : step === 1
                   ? "Continue"
-                  : "Confirm booking"
+                  : quote
+                    ? `Confirm · ${formatRupees(payableTotal)}`
+                    : "Confirm booking"
           }
           loading={busy === "book" || busy === "session"}
           disabled={
@@ -1045,6 +1400,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  policyCard: {
+    backgroundColor: colors.muted,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+  },
   card: {
     backgroundColor: colors.card,
     borderRadius: radii.lg,
@@ -1082,6 +1442,86 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     backgroundColor: colors.card,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  rewardsCard: {
+    gap: spacing.md,
+  },
+  promoRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: spacing.sm,
+  },
+  applyBtn: {
+    minWidth: 96,
+    minHeight: 48,
+    paddingHorizontal: spacing.lg,
+  },
+  appliedPromo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: "#EEF6F1",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  rewardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  rewardRowActive: {
+    borderColor: colors.coral,
+    backgroundColor: "#FFF7F5",
+  },
+  rewardDisabled: {
+    opacity: 0.55,
+  },
+  rewardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radii.md,
+    backgroundColor: "#FFF0ED",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rewardCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  applyChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.coral,
+    backgroundColor: colors.surface,
+  },
+  applyChipOn: {
+    backgroundColor: colors.coral,
+    borderColor: colors.coral,
+  },
+  applyChipDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.muted,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  summaryTotal: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },

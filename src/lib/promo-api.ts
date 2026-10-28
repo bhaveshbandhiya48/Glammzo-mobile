@@ -48,6 +48,44 @@ export async function validatePromoCode(input: {
     },
   })
 
+  return parsePromoValidateResponse(data)
+}
+
+/** Artist checkout codes (instant discount) + Glammzo cashback codes. */
+export async function validateArtistPromoCode(input: {
+  code: string
+  subtotal: number
+  artistSlug: string
+  serviceIds: string[]
+}): Promise<ValidatePromoResult> {
+  const data = await apiFetch<{
+    ok: boolean
+    kind?: string
+    discount?: AppliedOfferDiscount
+    code?: string
+    cashbackRupees?: number
+    message?: string
+  }>("/api/mobile/promo/validate", {
+    method: "POST",
+    body: {
+      scope: "artist",
+      code: input.code,
+      subtotal: input.subtotal,
+      artistSlug: input.artistSlug,
+      serviceIds: input.serviceIds,
+    },
+  })
+
+  return parsePromoValidateResponse(data)
+}
+
+function parsePromoValidateResponse(data: {
+  kind?: string
+  discount?: AppliedOfferDiscount
+  code?: string
+  cashbackRupees?: number
+  message?: string
+}): ValidatePromoResult {
   if (data.kind === "discount" && data.discount) {
     return { kind: "discount", discount: data.discount }
   }

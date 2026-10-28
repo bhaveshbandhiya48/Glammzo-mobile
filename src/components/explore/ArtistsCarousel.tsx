@@ -16,6 +16,7 @@ import {
   getHomeArtistsSnapshot,
   type ArtistCardData,
 } from "@/lib/artists-api"
+import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { colors, spacing } from "@/theme/tokens"
 
 type Props = {
@@ -57,16 +58,17 @@ export function ArtistsCarousel({ latitude, longitude }: Props) {
 
   const gap = spacing.md
   const padLeft = spacing.lg
-  const peek = Math.round(windowWidth * 0.12)
-  const cardWidth = Math.min(280, windowWidth - padLeft - gap - peek)
+  const peek = Math.round(windowWidth * 0.1)
+  /** Wide enough for the horizontal profile card layout. */
+  const cardWidth = Math.min(300, windowWidth - padLeft - gap - peek)
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="heading">Solo artists</Text>
+          <Text variant="heading">Nearby Artists</Text>
           <Text variant="caption" muted style={{ marginTop: 2 }}>
-            Makeup, hair, mehendi and more
+            Within {NEARBY_RADIUS_KM} km · makeup, hair, mehendi and more
           </Text>
         </View>
         <Pressable onPress={() => router.push("/artists" as Href)} hitSlop={8}>

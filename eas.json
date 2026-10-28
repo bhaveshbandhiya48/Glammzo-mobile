@@ -18,7 +18,7 @@
         "EXPO_PUBLIC_SITE_URL": "https://glammzo.com",
         "EXPO_PUBLIC_CRM_URL": "https://app.glammzo.com",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyBGxv8i5HzhaFGqyDZ_PjY0O6PKZ9x7620",
-        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyCxuC4BcLNspF49YXBGspEa3Hmm-BqiRbY"
+        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyBSn2hPh2EPRKEI5Wmysq7O6ezZ6QvNK2g"
       }
     },
     "production": {
@@ -31,7 +31,7 @@
         "EXPO_PUBLIC_SITE_URL": "https://glammzo.com",
         "EXPO_PUBLIC_CRM_URL": "https://app.glammzo.com",
         "EXPO_PUBLIC_GOOGLE_MAPS_IOS_API_KEY": "AIzaSyBGxv8i5HzhaFGqyDZ_PjY0O6PKZ9x7620",
-        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyCxuC4BcLNspF49YXBGspEa3Hmm-BqiRbY"
+        "EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY": "AIzaSyBSn2hPh2EPRKEI5Wmysq7O6ezZ6QvNK2g"
       }
     }
   },

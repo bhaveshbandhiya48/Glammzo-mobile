@@ -73,6 +73,14 @@ export async function fetchGlammzoOffersForSalon(input: {
   }
 }
 
+/** Same CMS cashback offers, shown simply on solo-artist detail. */
+export async function fetchGlammzoOffersForArtist(input: {
+  city?: string | null
+  area?: string | null
+}): Promise<GlammzoOfferCard[]> {
+  return fetchGlammzoOffersForSalon(input)
+}
+
 /** Explore homepage offer banners for this location (CMS only). */
 export async function fetchGlammzoOfferBanners(input: {
   city?: string | null

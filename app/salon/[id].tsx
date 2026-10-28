@@ -36,6 +36,7 @@ import { useFavorites } from "@/context/FavoritesContext"
 import {
   flattenAmenities,
   getSalonHeroSlides,
+  salonProfileImageUrl,
 } from "@/data/mocks/salons"
 import type { Salon, SalonPackage, SalonReview, SalonService } from "@/data/types"
 import { getSalonByIdLive } from "@/lib/salons-api"
@@ -373,10 +374,8 @@ export default function SalonDetailScreen() {
   const hasCart = cart.itemCountFor(salon.id) > 0
   const packagesExpanded = expandedServiceCategories.includes(PACKAGES_CATEGORY)
   const showMenuFab = catalogPackages.length > 0 || serviceGroups.length > 1
-  const cartImages = [
-    ...selectedServices.map((service) => service.imageUrl),
-    ...(selectedPackage ? [selectedPackage.imageUrl] : []),
-  ]
+  const profileImage = salonProfileImageUrl(salon)
+  const cartImages = profileImage ? [profileImage] : []
   const cartPreviewLabel = [
     ...selectedServices.map((service) => service.name),
     ...(selectedPackage ? [selectedPackage.name] : []),

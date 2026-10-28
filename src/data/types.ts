@@ -129,6 +129,13 @@ export type BookingStatus =
   | "declined"
   | "expired"
 
+/** Customer's verified review for a completed visit (when already submitted). */
+export type BookingReview = {
+  rating: number
+  comment: string
+  reviewType: string
+}
+
 export type Booking = {
   id: string
   salonId: string
@@ -149,9 +156,13 @@ export type Booking = {
   /** Hours before start the customer must cancel; salon policy or platform default. */
   startsAt?: string
   cancelNoticeHours?: number
+  /** Solo artist with a paid advance: what the client gets back if they cancel now. */
+  cancelRefundNote?: string
   staffName?: string
   declineReason?: string
   hasVerifiedReview?: boolean
+  /** Submitted review details when `hasVerifiedReview` is true. */
+  review?: BookingReview
   confirmationDeadline?: string
   /** salon (default) or solo artist booking. */
   kind?: "salon" | "artist"

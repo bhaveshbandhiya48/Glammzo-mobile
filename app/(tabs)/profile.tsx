@@ -25,7 +25,7 @@ const HUB_ROWS: {
   icon: IconName
 }[] = [
   { label: "Your profile", href: "/profile/details", icon: "person-outline" },
-  { label: "Saved salons", href: "/profile/favorites", icon: "heart-outline" },
+  { label: "Saved", href: "/profile/favorites", icon: "heart-outline" },
   { label: "Wallet", href: "/profile/wallet", icon: "wallet-outline" },
   { label: "Loyalty rewards", href: "/profile/loyalty", icon: "ribbon-outline" },
   { label: "Wallet activity", href: "/profile/activity", icon: "receipt-outline" },

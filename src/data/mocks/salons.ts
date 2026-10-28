@@ -104,6 +104,13 @@ export function getSalonHeroSlides(salon: Salon, max = 5): string[] {
 
 const CARD_GALLERY_LIMIT = 3
 
+/** Salon profile photo (cover as last resort). Never uses service/package images. */
+export function salonProfileImageUrl(
+  salon: Pick<Salon, "imageUrl" | "coverImageUrl">,
+): string {
+  return salon.imageUrl?.trim() || salon.coverImageUrl?.trim() || ""
+}
+
 /**
  * Listing card slider: explore/list photo first, then up to 3 gallery photos.
  * Cover is never included (matches Glammzo-web getSalonCardImages).

@@ -46,6 +46,7 @@ export function CatalogServiceRow({
   const priceOptions = service.priceOptions ?? []
   const activeOptionId = selectedOptionId || defaultPriceOptionId(service) || ""
   const showQuantity = selected && serviceUsesQuantity(service)
+  const thumbUrl = service.imageUrl.trim()
 
   function handleAdd() {
     if (hasOptions && activeOptionId) {
@@ -71,9 +72,9 @@ export function CatalogServiceRow({
           accessibilityRole="button"
           accessibilityLabel={`${service.name} details`}
         >
-          {service.imageUrl.trim() ? (
+          {thumbUrl ? (
             <Image
-              source={{ uri: service.imageUrl }}
+              source={{ uri: thumbUrl }}
               style={styles.thumb}
               contentFit="cover"
             />

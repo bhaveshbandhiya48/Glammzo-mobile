@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router"
 
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
+import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
@@ -18,12 +19,17 @@ import {
   canDownloadBookingInvoice,
   FILTER_LABELS,
   formatBookingDate,
+  formatBookingDateShort,
+  formatBookingWhen,
   formatDuration,
   getBookingStatusLabel,
   isArtistBooking,
+  relativeBookingDay,
   serviceSummary,
   statusBadgeColors,
+  visitTypeLabel,
 } from "@/lib/booking-display"
+import { cancelArtistPublicBooking } from "@/lib/artists-api"
 import { cancelBooking, fetchBookings } from "@/lib/bookings-api"
 import {
   canCancelWithNotice,
@@ -42,12 +48,26 @@ type Filter = keyof typeof FILTER_LABELS
 const upcomingStatuses: BookingStatus[] = ["pending", "confirmed", "upcoming"]
 const cancelledStatuses: BookingStatus[] = ["cancelled", "declined", "expired"]
 
-const CANCEL_REASONS = [
-  { id: "change_of_plans", label: "Change of plans" },
-  { id: "found_another", label: "Found another salon" },
-  { id: "different_time", label: "Timing no longer works" },
-  { id: "other", label: "Other" },
+const CANCEL_REASON_IDS = [
+  "change_of_plans",
+  "found_another",
+  "different_time",
+  "other",
 ] as const
+
+type CancelReasonId = (typeof CANCEL_REASON_IDS)[number]
+
+function cancelReasonsFor(kind: "salon" | "artist") {
+  return [
+    { id: "change_of_plans" as const, label: "Change of plans" },
+    {
+      id: "found_another" as const,
+      label: kind === "artist" ? "Found another artist" : "Found another salon",
+    },
+    { id: "different_time" as const, label: "Timing no longer works" },
+    { id: "other" as const, label: "Other" },
+  ]
+}
 
 function StatusBadge({ status }: { status: BookingStatus }) {
   const tone = statusBadgeColors(status)
@@ -66,26 +86,50 @@ function StatusBadge({ status }: { status: BookingStatus }) {
   )
 }
 
-function MetaChip({
+function KindPill({ artist }: { artist: boolean }) {
+  return (
+    <View style={[styles.kindPill, artist && styles.kindPillArtist]}>
+      <Icon
+        name={artist ? "sparkles-outline" : "storefront-outline"}
+        size={12}
+        color={artist ? colors.coral : colors.textMuted}
+      />
+      <Text variant="caption" color={artist ? colors.coral : colors.textMuted}>
+        {artist ? "Solo artist" : "Salon"}
+      </Text>
+    </View>
+  )
+}
+
+function DetailRow({
   icon,
   label,
   value,
+  subvalue,
 }: {
-  icon: "calendar-outline" | "time-outline" | "timer-outline" | "person-outline"
+  icon: string
   label: string
   value: string
+  subvalue?: string | null
 }) {
   return (
-    <View style={styles.metaChip}>
-      <View style={styles.metaLabelRow}>
-        <Icon name={icon} size={12} color={colors.textSubtle} />
-        <Text variant="label" muted style={styles.metaLabel}>
+    <View style={styles.detailRow}>
+      <View style={styles.detailIcon}>
+        <Icon name={icon} size={16} color={colors.textMuted} />
+      </View>
+      <View style={styles.detailCopy}>
+        <Text variant="label" muted style={styles.detailLabel}>
           {label}
         </Text>
+        <Text variant="bodyStrong" numberOfLines={2}>
+          {value}
+        </Text>
+        {subvalue ? (
+          <Text variant="caption" muted numberOfLines={2}>
+            {subvalue}
+          </Text>
+        ) : null}
       </View>
-      <Text variant="caption" numberOfLines={1} style={styles.metaValue}>
-        {value}
-      </Text>
     </View>
   )
 }
@@ -97,65 +141,88 @@ function BookingCard({
   booking: Booking
   onPress: () => void
 }) {
+  const artist = isArtistBooking(booking)
   const duration = bookingDurationMin(booking)
+  const relative = relativeBookingDay(booking.date)
+  const visit = visitTypeLabel(booking)
+  const services = booking.services.map((s) => s.name).filter(Boolean)
+  const serviceLine =
+    services.length === 0
+      ? serviceSummary(booking)
+      : services.length <= 2
+        ? services.join(" · ")
+        : `${services.slice(0, 2).join(" · ")} +${services.length - 2}`
 
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={onPress}
     >
-      <View style={styles.cardHeader}>
-        <View style={{ flex: 1, minWidth: 0, gap: spacing.sm }}>
-          <View style={styles.titleRow}>
-            <Text variant="bodyStrong" style={{ flexShrink: 1 }} numberOfLines={2}>
-              {booking.salonName}
-            </Text>
-            <StatusBadge status={booking.status} />
-          </View>
-          {isArtistBooking(booking) ? (
-            <Text variant="caption" color={colors.coral} numberOfLines={1}>
-              Solo artist
-            </Text>
-          ) : null}
+      <View style={styles.cardTop}>
+        <StatusBadge status={booking.status} />
+        <KindPill artist={artist} />
+      </View>
+
+      <View style={styles.cardBody}>
+        <View style={styles.cardTitleBlock}>
+          <Text variant="heading" numberOfLines={2} style={styles.cardTitle}>
+            {booking.salonName}
+          </Text>
           <View style={styles.areaRow}>
             <Icon name="location-outline" size={14} color={colors.textMuted} />
-            <Text variant="caption" muted numberOfLines={1}>
-              {booking.salonArea || "—"}
+            <Text variant="caption" muted numberOfLines={1} style={{ flex: 1 }}>
+              {[booking.salonArea, visit].filter(Boolean).join(" · ") || "—"}
             </Text>
           </View>
         </View>
-        <View style={styles.chevron}>
+
+        <View style={styles.whenBlock}>
+          <View style={styles.whenMain}>
+            {relative ? (
+              <Text variant="caption" color={colors.coral} style={styles.relative}>
+                {relative}
+              </Text>
+            ) : null}
+            <Text variant="bodyStrong">{formatBookingDateShort(booking.date)}</Text>
+            <Text variant="caption" muted>
+              {booking.time?.trim() || "—"}
+              {duration > 0 ? ` · ~${formatDuration(duration)}` : ""}
+            </Text>
+          </View>
+          {!artist && booking.staffName?.trim() ? (
+            <View style={styles.staffChip}>
+              <Icon name="person-outline" size={13} color={colors.textMuted} />
+              <Text variant="caption" muted numberOfLines={1}>
+                {booking.staffName.trim()}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      </View>
+
+      <View style={styles.cardFooter}>
+        <Text variant="caption" muted style={{ flex: 1 }} numberOfLines={2}>
+          {serviceLine}
+        </Text>
+        <View style={styles.priceRow}>
+          <Text variant="heading">₹{Math.round(booking.price)}</Text>
           <Icon name="chevron-forward" size={16} color={colors.textSubtle} />
         </View>
       </View>
 
-      <View style={styles.metaGrid}>
-        <MetaChip
-          icon="calendar-outline"
-          label="Date"
-          value={formatBookingDate(booking.date)}
-        />
-        <MetaChip icon="time-outline" label="Time" value={booking.time || "—"} />
-        <MetaChip
-          icon="timer-outline"
-          label="Duration"
-          value={`~${formatDuration(duration)}`}
-        />
-        {booking.staffName && !isArtistBooking(booking) ? (
-          <MetaChip
-            icon="person-outline"
-            label="Stylist"
-            value={booking.staffName}
-          />
-        ) : null}
-      </View>
-
-      <View style={styles.cardFooter}>
-        <Text variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>
-          {serviceSummary(booking)}
-        </Text>
-        <Text variant="bodyStrong">₹{Math.round(booking.price)}</Text>
-      </View>
+      {booking.hasVerifiedReview && booking.review ? (
+        <View style={styles.cardReview}>
+          <View style={styles.ratingPill}>
+            <Text variant="caption" color={colors.primaryFg}>
+              ★ {booking.review.rating.toFixed(1)}
+            </Text>
+          </View>
+          <Text variant="caption" muted numberOfLines={1} style={{ flex: 1 }}>
+            Your review
+            {booking.review.reviewType ? ` · ${booking.review.reviewType}` : ""}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   )
 }
@@ -170,9 +237,7 @@ export default function BookingsScreen() {
   const [filter, setFilter] = useState<Filter>("all")
   const [selected, setSelected] = useState<Booking | null>(null)
   const [cancelOpen, setCancelOpen] = useState(false)
-  const [cancelReason, setCancelReason] = useState<(typeof CANCEL_REASONS)[number]["id"]>(
-    "change_of_plans",
-  )
+  const [cancelReason, setCancelReason] = useState<CancelReasonId>("change_of_plans")
   const [cancelNote, setCancelNote] = useState("")
   const [cancelling, setCancelling] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
@@ -263,6 +328,16 @@ export default function BookingsScreen() {
     })
   }, [bookings, filter])
 
+  const subtitle = useMemo(() => {
+    if (!authed) return "Sign in to see salon and solo-artist visits."
+    if (loading && bookings.length === 0) return "Loading your appointments…"
+    if (counts.upcoming > 0) {
+      return `${counts.upcoming} upcoming · ${counts.all} total`
+    }
+    if (counts.all > 0) return `${counts.all} booking${counts.all === 1 ? "" : "s"}`
+    return "Your salon and solo-artist appointments."
+  }, [authed, loading, bookings.length, counts.upcoming, counts.all])
+
   function showToast(message: string) {
     setToast(message)
     setTimeout(() => setToast(null), 2200)
@@ -273,7 +348,7 @@ export default function BookingsScreen() {
       <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
         <Text variant="title">My bookings</Text>
         <Text muted style={styles.gap}>
-          Upcoming visits and past appointments.
+          Loading your appointments…
         </Text>
         <ScrollView
           style={styles.listScroll}
@@ -291,7 +366,7 @@ export default function BookingsScreen() {
       <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
         <Text variant="title">My bookings</Text>
         <Text muted style={styles.gap}>
-          Upcoming visits and past appointments.
+          Sign in to see salon and solo-artist visits.
         </Text>
         <BookingsEmptyState
           signedOut
@@ -303,11 +378,15 @@ export default function BookingsScreen() {
     )
   }
 
+  const selectedArtist = selected ? isArtistBooking(selected) : false
+  const selectedVisit = selected ? visitTypeLabel(selected) : null
+  const selectedRelative = selected ? relativeBookingDay(selected.date) : null
+
   return (
     <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
       <Text variant="title">My bookings</Text>
       <Text muted style={styles.gap}>
-        Upcoming visits and past appointments.
+        {subtitle}
       </Text>
       {toast ? (
         <View style={styles.toast}>
@@ -330,7 +409,11 @@ export default function BookingsScreen() {
                 style={[styles.chip, active && styles.chipActive]}
                 onPress={() => setFilter(item)}
               >
-                <Text variant="caption" color={active ? colors.coral : colors.text}>
+                <Text
+                  variant="caption"
+                  color={active ? colors.coral : colors.text}
+                  style={active ? styles.chipLabelActive : undefined}
+                >
                   {FILTER_LABELS[item]}
                 </Text>
                 <View style={[styles.countPill, active && styles.countPillActive]}>
@@ -384,163 +467,227 @@ export default function BookingsScreen() {
 
       <BottomSheet
         visible={Boolean(selected) && !cancelOpen}
-        title="Appointment"
+        title="Appointment details"
         onClose={() => setSelected(null)}
       >
         {selected ? (
           <View style={styles.sheetBody}>
-            <View style={styles.sheetHeader}>
-              <Text variant="heading" style={{ flex: 1 }}>
+            <View style={styles.sheetHero}>
+              <View style={styles.sheetHeroTop}>
+                <KindPill artist={selectedArtist} />
+                <StatusBadge status={selected.status} />
+              </View>
+              <Text variant="heading" style={styles.sheetTitle}>
                 {selected.salonName}
               </Text>
-              <StatusBadge status={selected.status} />
-            </View>
-            <Text muted>
-              {isArtistBooking(selected) ? "Solo artist · " : ""}
-              {selected.salonArea}
-              {!isArtistBooking(selected) && selected.id
-                ? ` · #${selected.id.slice(0, 8)}`
-                : ""}
-            </Text>
-
-            <View style={styles.metaGrid}>
-              <MetaChip
-                icon="calendar-outline"
-                label="Date"
-                value={formatBookingDate(selected.date)}
-              />
-              <MetaChip icon="time-outline" label="Time" value={selected.time || "—"} />
-              <MetaChip
-                icon="timer-outline"
-                label="Duration"
-                value={`~${formatDuration(bookingDurationMin(selected))}`}
-              />
-              <MetaChip
-                icon="person-outline"
-                label={isArtistBooking(selected) ? "Artist" : "Stylist"}
-                value={
-                  isArtistBooking(selected)
-                    ? selected.salonName
-                    : selected.staffName?.trim() || "Any available"
-                }
-              />
+              <View style={styles.areaRow}>
+                <Icon name="location-outline" size={14} color={colors.textMuted} />
+                <Text variant="caption" muted numberOfLines={2} style={{ flex: 1 }}>
+                  {selected.salonArea || "—"}
+                  {selectedVisit ? ` · ${selectedVisit}` : ""}
+                </Text>
+              </View>
+              {!selectedArtist && selected.id ? (
+                <Text variant="caption" muted>
+                  Booking #{selected.id.slice(0, 8).toUpperCase()}
+                </Text>
+              ) : null}
             </View>
 
-            <View style={styles.servicesBlock}>
-              <Text variant="label" muted>
+            <View style={styles.section}>
+              <Text variant="label" muted style={styles.sectionLabel}>
+                When
+              </Text>
+              <View style={styles.sectionCard}>
+                <DetailRow
+                  icon="calendar-outline"
+                  label="Date"
+                  value={
+                    selectedRelative
+                      ? `${selectedRelative} · ${formatBookingDate(selected.date)}`
+                      : formatBookingDate(selected.date)
+                  }
+                />
+                <View style={styles.sectionDivider} />
+                <DetailRow
+                  icon="time-outline"
+                  label="Time"
+                  value={selected.time?.trim() || "—"}
+                  subvalue={
+                    bookingDurationMin(selected) > 0
+                      ? `About ${formatDuration(bookingDurationMin(selected))}`
+                      : null
+                  }
+                />
+                <View style={styles.sectionDivider} />
+                <DetailRow
+                  icon="person-outline"
+                  label={selectedArtist ? "With" : "Stylist"}
+                  value={
+                    selectedArtist
+                      ? selected.salonName
+                      : selected.staffName?.trim() || "Any available"
+                  }
+                />
+              </View>
+            </View>
+
+            <View style={styles.section}>
+              <Text variant="label" muted style={styles.sectionLabel}>
                 Services
               </Text>
-              {selected.services.map((service) => (
-                <View key={service.id} style={styles.serviceRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyStrong">{service.name}</Text>
-                    <Text variant="caption" muted>
-                      {formatDuration(service.durationMin)}
-                    </Text>
-                  </View>
-                  <Text>₹{Math.round(service.price)}</Text>
-                </View>
-              ))}
+              <View style={styles.sectionCard}>
+                {selected.services.length === 0 ? (
+                  <Text variant="caption" muted style={styles.sectionPad}>
+                    No services listed
+                  </Text>
+                ) : (
+                  selected.services.map((service, index) => (
+                    <View key={service.id}>
+                      {index > 0 ? <View style={styles.sectionDivider} /> : null}
+                      <View style={styles.serviceRow}>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text variant="bodyStrong" numberOfLines={2}>
+                            {service.name}
+                          </Text>
+                          <Text variant="caption" muted>
+                            {formatDuration(service.durationMin)}
+                          </Text>
+                        </View>
+                        <Text variant="bodyStrong">₹{Math.round(service.price)}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
             </View>
 
             {selected.declineReason?.trim() ? (
-              <Text variant="caption" color={colors.destructive}>
-                {selected.declineReason}
-              </Text>
-            ) : null}
-            {selected.notes?.trim() ? (
-              <Text variant="caption" muted>
-                {isArtistBooking(selected) ? selected.notes : `Note · ${selected.notes}`}
-              </Text>
+              <View style={styles.alertBox}>
+                <Text variant="caption" color={colors.destructive}>
+                  {selected.declineReason}
+                </Text>
+              </View>
             ) : null}
 
-            <View style={styles.payRow}>
-              <Text muted>
-                {isArtistBooking(selected)
-                  ? selected.status === "pending"
-                    ? "Advance pending"
-                    : "Artist booking"
-                  : selected.status === "completed"
-                    ? "Paid at salon"
-                    : "Pay at salon"}
+            {!selectedArtist && selected.notes?.trim() ? (
+              <View style={styles.noteBox}>
+                <Text variant="label" muted style={styles.sectionLabel}>
+                  Note
+                </Text>
+                <Text variant="caption">{selected.notes.trim()}</Text>
+              </View>
+            ) : null}
+
+            {selected.hasVerifiedReview && selected.review ? (
+              <View style={styles.section}>
+                <Text variant="label" muted style={styles.sectionLabel}>
+                  Your review
+                </Text>
+                <View style={styles.reviewCard}>
+                  <View style={styles.reviewHead}>
+                    <View style={styles.ratingPill}>
+                      <Text variant="caption" color={colors.primaryFg}>
+                        ★ {selected.review.rating.toFixed(1)}
+                      </Text>
+                    </View>
+                    <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={2}>
+                      {selected.review.reviewType || "Overall experience"}
+                    </Text>
+                  </View>
+                  {selected.review.comment ? (
+                    <Text variant="body" muted style={{ marginTop: spacing.sm }}>
+                      {selected.review.comment}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.payCard}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="label" muted style={styles.sectionLabel}>
+                  Total
+                </Text>
+                <Text variant="caption" muted>
+                  {selectedArtist
+                    ? "Pay artist directly"
+                    : selected.status === "completed"
+                      ? "Paid at salon"
+                      : "Pay at salon"}
+                </Text>
+              </View>
+              <Text variant="title" style={styles.payAmount}>
+                ₹{Math.round(selected.price)}
               </Text>
-              <Text variant="heading">₹{Math.round(selected.price)}</Text>
             </View>
 
-            {canDownloadBookingInvoice(selected) ? (
+            {selectedArtist ? (
+              <ShareArtistInvoiceButton booking={selected} />
+            ) : canDownloadBookingInvoice(selected) ? (
               <DownloadInvoiceButton
                 bookingId={selected.crmAppointmentId ?? selected.id}
               />
             ) : null}
 
-            {isArtistBooking(selected) ? (
-              <>
-                {selected.artistSlug || selected.salonId ? (
-                  <Button
-                    label="View artist"
-                    onPress={() => {
-                      const slug = selected.artistSlug || selected.salonId
-                      setSelected(null)
-                      router.push({
-                        pathname: "/artist/[slug]",
-                        params: { slug },
-                      })
-                    }}
-                  />
-                ) : null}
-                {(selected.artistSlug || selected.salonId) &&
-                upcomingStatuses.includes(selected.status) ? (
-                  <Button
-                    label="Book again"
-                    variant="secondary"
-                    onPress={() => {
-                      const slug = selected.artistSlug || selected.salonId
-                      setSelected(null)
-                      router.push({
-                        pathname: "/artist/book/[slug]",
-                        params: { slug },
-                      })
-                    }}
-                  />
-                ) : null}
-                {upcomingStatuses.includes(selected.status) ? (
-                  <Text variant="caption" muted>
-                    To change or cancel this visit, contact the artist directly.
-                  </Text>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <Button
-                  label="View salon"
-                  onPress={() => {
-                    const id = selected.salonId
-                    setSelected(null)
-                    router.push({ pathname: "/salon/[id]", params: { id } })
-                  }}
-                />
-
-                {upcomingStatuses.includes(selected.status) ? (
-                  <>
-                    {canRescheduleWithNotice(selected.startsAt).allowed ? (
-                      <Button
-                        label="Reschedule"
-                        variant="secondary"
-                        onPress={() => {
-                          const id = selected.id
-                          setSelected(null)
-                          router.push({
-                            pathname: "/bookings/[id]/reschedule",
-                            params: { id },
-                          })
-                        }}
-                      />
-                    ) : (
-                      <Text variant="caption" muted>
-                        {getRescheduleBlockedReason(selected.startsAt)}
-                      </Text>
-                    )}
-                    {canCancelWithNotice(
+            <View style={styles.actions}>
+              {selectedArtist ? (
+                <>
+                  {selected.artistSlug || selected.salonId ? (
+                    <Button
+                      label="View artist"
+                      onPress={() => {
+                        const slug = selected.artistSlug || selected.salonId
+                        setSelected(null)
+                        router.push({
+                          pathname: "/artist/[slug]",
+                          params: { slug },
+                        })
+                      }}
+                    />
+                  ) : null}
+                  {selected.status === "completed" &&
+                  !selected.hasVerifiedReview &&
+                  (selected.artistPublicToken ||
+                    selected.id.replace(/^artist:/, "").trim()) ? (
+                    <Button
+                      label="Leave a review"
+                      variant="secondary"
+                      onPress={() => {
+                        const token =
+                          selected.artistPublicToken?.trim() ||
+                          selected.id.replace(/^artist:/, "").trim()
+                        const artistName = selected.salonName
+                        setSelected(null)
+                        router.push({
+                          pathname: "/review",
+                          params: {
+                            kind: "artist",
+                            artistPublicToken: token,
+                            salonName: artistName,
+                          },
+                        })
+                      }}
+                    />
+                  ) : null}
+                  {(selected.artistSlug || selected.salonId) &&
+                  (upcomingStatuses.includes(selected.status) ||
+                    selected.status === "completed") ? (
+                    <Button
+                      label="Book again"
+                      variant="secondary"
+                      onPress={() => {
+                        const slug = selected.artistSlug || selected.salonId
+                        setSelected(null)
+                        router.push({
+                          pathname: "/artist/book/[slug]",
+                          params: { slug },
+                        })
+                      }}
+                    />
+                  ) : null}
+                  {upcomingStatuses.includes(selected.status) ? (
+                    canCancelWithNotice(
                       selected.startsAt,
                       selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
                     ).allowed ? (
@@ -550,48 +697,97 @@ export default function BookingsScreen() {
                         onPress={() => setCancelOpen(true)}
                       />
                     ) : (
-                      <Text variant="caption" muted>
+                      <Text variant="caption" muted style={styles.policyHint}>
                         {getCancelBlockedReason(
                           selected.startsAt,
                           selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+                          "artist",
                         )}
                       </Text>
-                    )}
-                  </>
-                ) : null}
-
-                {selected.status === "completed" && !selected.hasVerifiedReview ? (
+                    )
+                  ) : null}
+                </>
+              ) : (
+                <>
                   <Button
-                    label="Leave a review"
-                    variant="secondary"
+                    label="View salon"
                     onPress={() => {
-                      const appointmentId = selected.id
-                      const salonName = selected.salonName
-                      const staffName = selected.staffName?.trim() || ""
+                      const id = selected.salonId
                       setSelected(null)
-                      router.push({
-                        pathname: "/review",
-                        params: {
-                          appointmentId,
-                          salonName,
-                          ...(staffName ? { staffName } : {}),
-                        },
-                      })
+                      router.push({ pathname: "/salon/[id]", params: { id } })
                     }}
                   />
-                ) : null}
-
-                <Button
-                  label="Book again"
-                  variant="secondary"
-                  onPress={() => {
-                    const id = selected.salonId
-                    setSelected(null)
-                    router.push({ pathname: "/salon/[id]", params: { id } })
-                  }}
-                />
-              </>
-            )}
+                  {upcomingStatuses.includes(selected.status) ? (
+                    <>
+                      {canRescheduleWithNotice(selected.startsAt).allowed ? (
+                        <Button
+                          label="Reschedule"
+                          variant="secondary"
+                          onPress={() => {
+                            const id = selected.id
+                            setSelected(null)
+                            router.push({
+                              pathname: "/bookings/[id]/reschedule",
+                              params: { id },
+                            })
+                          }}
+                        />
+                      ) : (
+                        <Text variant="caption" muted style={styles.policyHint}>
+                          {getRescheduleBlockedReason(selected.startsAt)}
+                        </Text>
+                      )}
+                      {canCancelWithNotice(
+                        selected.startsAt,
+                        selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+                      ).allowed ? (
+                        <Button
+                          label="Cancel booking"
+                          variant="ghost"
+                          onPress={() => setCancelOpen(true)}
+                        />
+                      ) : (
+                        <Text variant="caption" muted style={styles.policyHint}>
+                          {getCancelBlockedReason(
+                            selected.startsAt,
+                            selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+                          )}
+                        </Text>
+                      )}
+                    </>
+                  ) : null}
+                  {selected.status === "completed" && !selected.hasVerifiedReview ? (
+                    <Button
+                      label="Leave a review"
+                      variant="secondary"
+                      onPress={() => {
+                        const appointmentId = selected.id
+                        const salonName = selected.salonName
+                        const staffName = selected.staffName?.trim() || ""
+                        setSelected(null)
+                        router.push({
+                          pathname: "/review",
+                          params: {
+                            appointmentId,
+                            salonName,
+                            ...(staffName ? { staffName } : {}),
+                          },
+                        })
+                      }}
+                    />
+                  ) : null}
+                  <Button
+                    label="Book again"
+                    variant="secondary"
+                    onPress={() => {
+                      const id = selected.salonId
+                      setSelected(null)
+                      router.push({ pathname: "/salon/[id]", params: { id } })
+                    }}
+                  />
+                </>
+              )}
+            </View>
           </View>
         ) : null}
       </BottomSheet>
@@ -607,17 +803,27 @@ export default function BookingsScreen() {
               ? "You can cancel until the appointment starts. Tell us why you are cancelling."
               : `Free cancellation until ${selected?.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS} hours before your appointment. Tell us why you are cancelling.`}
           </Text>
-          {CANCEL_REASONS.map((reason) => (
-            <Pressable
-              key={reason.id}
-              style={[styles.reasonRow, cancelReason === reason.id && styles.chipActive]}
-              onPress={() => setCancelReason(reason.id)}
-            >
-              <Text color={cancelReason === reason.id ? colors.coral : colors.text}>
-                {reason.label}
-              </Text>
-            </Pressable>
-          ))}
+          {selected?.cancelRefundNote ? (
+            <Text style={styles.refundNote}>{selected.cancelRefundNote}</Text>
+          ) : null}
+          {selected ? (
+            <Text variant="caption" muted>
+              {formatBookingWhen(selected)} · {selected.salonName}
+            </Text>
+          ) : null}
+          {cancelReasonsFor(selected && isArtistBooking(selected) ? "artist" : "salon").map(
+            (reason) => (
+              <Pressable
+                key={reason.id}
+                style={[styles.reasonRow, cancelReason === reason.id && styles.chipActive]}
+                onPress={() => setCancelReason(reason.id)}
+              >
+                <Text color={cancelReason === reason.id ? colors.coral : colors.text}>
+                  {reason.label}
+                </Text>
+              </Pressable>
+            ),
+          )}
           <Input
             label="Extra note"
             value={cancelNote}
@@ -635,17 +841,36 @@ export default function BookingsScreen() {
               }
               setCancelling(true)
               try {
-                await cancelBooking(selected.id, {
-                  reasonId: cancelReason,
-                  details: cancelNote.trim() || undefined,
-                })
+                if (isArtistBooking(selected)) {
+                  const token =
+                    selected.artistPublicToken?.trim() ||
+                    selected.id.replace(/^artist:/, "").trim()
+                  if (!token) throw new Error("Cancel unavailable for this booking.")
+                  const reasons = cancelReasonsFor("artist")
+                  const reasonLabel =
+                    reasons.find((item) => item.id === cancelReason)?.label ?? cancelReason
+                  const details = cancelNote.trim()
+                  await cancelArtistPublicBooking({
+                    publicToken: token,
+                    reason: details ? `${reasonLabel}: ${details}` : reasonLabel,
+                  })
+                } else {
+                  await cancelBooking(selected.id, {
+                    reasonId: cancelReason,
+                    details: cancelNote.trim() || undefined,
+                  })
+                }
                 setCancelOpen(false)
                 setSelected(null)
                 setCancelNote("")
                 showToast("Booking cancelled")
                 await reloadBookings()
               } catch (err) {
-                showToast(err instanceof ApiError ? err.message : "Cancel failed")
+                showToast(
+                  err instanceof ApiError || err instanceof Error
+                    ? err.message
+                    : "Cancel failed",
+                )
               } finally {
                 setCancelling(false)
               }
@@ -658,6 +883,15 @@ export default function BookingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  refundNote: {
+    backgroundColor: "#FFF7E6",
+    color: "#7A4B00",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   screen: {
     flex: 1,
   },
@@ -705,6 +939,9 @@ const styles = StyleSheet.create({
     borderColor: colors.coral,
     backgroundColor: "#FFF7F5",
   },
+  chipLabelActive: {
+    fontFamily: "Inter_600SemiBold",
+  },
   countPill: {
     minWidth: 20,
     paddingHorizontal: 6,
@@ -728,7 +965,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xxxl,
   },
   card: {
-    borderRadius: radii.lg,
+    borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.card,
@@ -737,32 +974,69 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.94,
   },
-  cardHeader: {
+  cardTop: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
   },
-  titleRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
+  cardBody: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+  },
+  cardTitleBlock: {
     gap: spacing.sm,
+  },
+  cardTitle: {
+    fontSize: 17,
   },
   areaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  chevron: {
-    width: 32,
-    height: 32,
+  whenBlock: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  whenMain: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  relative: {
+    fontFamily: "Inter_600SemiBold",
+  },
+  staffChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    maxWidth: "42%",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
     borderRadius: radii.pill,
     backgroundColor: colors.muted,
+  },
+  kindPill: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+    backgroundColor: colors.muted,
+  },
+  kindPillArtist: {
+    backgroundColor: "#FFF7F5",
   },
   badge: {
     flexDirection: "row",
@@ -778,37 +1052,6 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radii.pill,
   },
-  metaGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-  },
-  metaChip: {
-    width: "47%",
-    flexGrow: 1,
-    minWidth: "42%",
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    gap: 4,
-  },
-  metaLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaLabel: {
-    letterSpacing: 0.8,
-    fontSize: 9,
-  },
-  metaValue: {
-    fontFamily: "Inter_600SemiBold",
-  },
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -819,31 +1062,138 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
   },
-  sheetBody: {
-    gap: spacing.md,
-    paddingBottom: spacing.xl,
+  cardReview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    backgroundColor: colors.surface,
   },
-  sheetHeader: {
+  ratingPill: {
+    backgroundColor: colors.coral,
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  reviewCard: {
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.lg,
+  },
+  reviewHead: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
   },
-  servicesBlock: {
+  sheetBody: {
+    gap: spacing.lg,
+    paddingBottom: spacing.xl,
+  },
+  sheetHero: {
     gap: spacing.sm,
-    paddingTop: spacing.sm,
+  },
+  sheetHeroTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  sheetTitle: {
+    fontSize: 20,
+  },
+  section: {
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    letterSpacing: 1,
+  },
+  sectionCard: {
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  sectionPad: {
+    padding: spacing.lg,
+  },
+  sectionDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginLeft: spacing.lg + 36,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  detailIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.sm,
+    backgroundColor: colors.muted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  detailLabel: {
+    fontSize: 10,
   },
   serviceRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  payRow: {
+  alertBox: {
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: "#FEF2F2",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#FCA5A5",
+  },
+  noteBox: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  payCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: "#FFF7F5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#FFD5CE",
+  },
+  payAmount: {
+    fontSize: 24,
+  },
+  actions: {
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  policyHint: {
+    paddingHorizontal: spacing.xs,
     paddingVertical: spacing.sm,
   },
   errorState: {

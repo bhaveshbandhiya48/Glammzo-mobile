@@ -14,12 +14,36 @@ import {
   pricingUnitUsesQuantity,
 } from "@/lib/pricing-unit"
 
+export type CartServiceLine = {
+  name: string
+  price: number
+  durationMin?: number
+}
+
 export type SalonCart = {
   salonId: string
+  /** Default salon. Artist carts use salonId `artist:{slug}` plus provider meta. */
+  kind?: "salon" | "artist"
+  providerName?: string
+  providerImageUrl?: string | null
+  providerArea?: string | null
   serviceIds: string[]
   packageId: string | null
   quantities: Record<string, number>
   priceOptionIds: Record<string, string>
+  /** Snapshot lines for artist services (no salon catalog lookup). */
+  serviceLines?: Record<string, CartServiceLine>
+}
+
+export type ToggleServiceMeta = {
+  priceOptionId?: string | null
+  kind?: "salon" | "artist"
+  providerName?: string
+  providerImageUrl?: string | null
+  providerArea?: string | null
+  serviceName?: string
+  servicePrice?: number
+  serviceDurationMin?: number
 }
 
 type CartContextValue = {
@@ -33,7 +57,7 @@ type CartContextValue = {
   toggleService: (
     salonId: string,
     serviceId: string,
-    meta?: { priceOptionId?: string | null },
+    meta?: ToggleServiceMeta,
   ) => void
   setServiceQuantity: (
     salonId: string,
@@ -53,11 +77,48 @@ const CartContext = createContext<CartContextValue | null>(null)
 function emptyCart(salonId: string): SalonCart {
   return {
     salonId,
+    kind: "salon",
     serviceIds: [],
     packageId: null,
     quantities: {},
     priceOptionIds: {},
+    serviceLines: {},
   }
+}
+
+function parseServiceLines(value: unknown): Record<string, CartServiceLine> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {}
+  const next: Record<string, CartServiceLine> = {}
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!key || !entry || typeof entry !== "object" || Array.isArray(entry)) continue
+    const row = entry as Record<string, unknown>
+    const name = typeof row.name === "string" ? row.name.trim() : ""
+    const price =
+      typeof row.price === "number"
+        ? row.price
+        : typeof row.price === "string"
+          ? Number(row.price)
+          : NaN
+    if (!name || !Number.isFinite(price)) continue
+    const durationMin =
+      typeof row.durationMin === "number" && Number.isFinite(row.durationMin)
+        ? Math.max(0, Math.floor(row.durationMin))
+        : undefined
+    next[key] = { name, price: Math.max(0, price), durationMin }
+  }
+  return next
+}
+
+function pruneServiceLines(
+  serviceIds: string[],
+  serviceLines: Record<string, CartServiceLine> | undefined,
+) {
+  if (!serviceLines) return {}
+  const next: Record<string, CartServiceLine> = {}
+  for (const id of serviceIds) {
+    if (serviceLines[id]) next[id] = serviceLines[id]
+  }
+  return next
 }
 
 function cartItemCount(cart: SalonCart) {
@@ -123,10 +184,19 @@ function parseCarts(raw: string | null): SalonCart[] {
           ? source.serviceIds.filter((id): id is string => typeof id === "string")
           : []
         const packageId = typeof source.packageId === "string" ? source.packageId : null
+        const kind = source.kind === "artist" ? "artist" : "salon"
         const cart: SalonCart = {
           salonId,
+          kind,
+          providerName:
+            typeof source.providerName === "string" ? source.providerName.trim() : undefined,
+          providerImageUrl:
+            typeof source.providerImageUrl === "string" ? source.providerImageUrl : null,
+          providerArea:
+            typeof source.providerArea === "string" ? source.providerArea.trim() : null,
           serviceIds,
           packageId,
+          serviceLines: pruneServiceLines(serviceIds, parseServiceLines(source.serviceLines)),
           ...pruneCartMeta(
             serviceIds,
             parseQuantityRecord(source.quantities),
@@ -198,16 +268,40 @@ export function CartProvider({ children }: { children: ReactNode }) {
             : [...existing.serviceIds, serviceId]
           const priceOptionIds = { ...existing.priceOptionIds }
           const quantities = { ...existing.quantities }
+          const serviceLines = { ...(existing.serviceLines ?? {}) }
           if (exists) {
             delete priceOptionIds[serviceId]
             delete quantities[serviceId]
-          } else if (meta?.priceOptionId) {
-            priceOptionIds[serviceId] = meta.priceOptionId
+            delete serviceLines[serviceId]
+          } else {
+            if (meta?.priceOptionId) {
+              priceOptionIds[serviceId] = meta.priceOptionId
+            }
+            if (meta?.serviceName && meta.servicePrice != null) {
+              serviceLines[serviceId] = {
+                name: meta.serviceName,
+                price: Math.max(0, Number(meta.servicePrice) || 0),
+                durationMin:
+                  meta.serviceDurationMin != null
+                    ? Math.max(0, Math.floor(meta.serviceDurationMin))
+                    : undefined,
+              }
+            }
           }
+          const kind = meta?.kind === "artist" || existing.kind === "artist" ? "artist" : "salon"
           return replaceCart(prev, {
             salonId,
+            kind,
+            providerName: meta?.providerName?.trim() || existing.providerName,
+            providerImageUrl:
+              meta?.providerImageUrl !== undefined
+                ? meta.providerImageUrl
+                : existing.providerImageUrl,
+            providerArea:
+              meta?.providerArea !== undefined ? meta.providerArea : existing.providerArea,
             packageId: existing.packageId,
             serviceIds,
+            serviceLines: pruneServiceLines(serviceIds, serviceLines),
             ...pruneCartMeta(serviceIds, quantities, priceOptionIds),
           })
         })
@@ -219,9 +313,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (quantity < 1) {
             const serviceIds = existing.serviceIds.filter((id) => id !== serviceId)
             return replaceCart(prev, {
+              ...existing,
               salonId,
               packageId: existing.packageId,
               serviceIds,
+              serviceLines: pruneServiceLines(serviceIds, existing.serviceLines),
               ...pruneCartMeta(serviceIds, existing.quantities, existing.priceOptionIds),
             })
           }
@@ -233,6 +329,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             ? existing.serviceIds
             : [...existing.serviceIds, serviceId]
           return replaceCart(prev, {
+            ...existing,
             salonId,
             packageId: existing.packageId,
             serviceIds,
@@ -253,6 +350,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             ? existing.serviceIds
             : [...existing.serviceIds, serviceId]
           return replaceCart(prev, {
+            ...existing,
             salonId,
             packageId: existing.packageId,
             serviceIds,
@@ -270,6 +368,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           if (!packageId) {
             if (!existing) return prev
             return replaceCart(prev, {
+              ...existing,
               salonId,
               serviceIds: existing.serviceIds,
               packageId: null,
@@ -279,10 +378,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
           return replaceCart(prev, {
             salonId,
+            kind: existing?.kind ?? "salon",
+            providerName: existing?.providerName,
+            providerImageUrl: existing?.providerImageUrl,
+            providerArea: existing?.providerArea,
             serviceIds: [],
             packageId,
             quantities: {},
             priceOptionIds: {},
+            serviceLines: {},
           })
         })
       },

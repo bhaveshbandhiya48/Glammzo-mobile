@@ -10,6 +10,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useCart } from "@/context/CartContext"
+import { isArtistCartId } from "@/lib/artist-cart"
 import { serviceGenderLabel } from "@/lib/gender-audience"
 import { quantityForService } from "@/lib/pricing-unit"
 import { resolveSalonById } from "@/lib/salons-api"
@@ -32,7 +33,22 @@ type Props = {
 export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props) {
   const cart = useCart()
   const salonCart = salonId ? cart.getCart(salonId) : undefined
-  const salon = salonId ? resolveSalonById(salonId) : undefined
+  const isArtist = Boolean(
+    salonId && (salonCart?.kind === "artist" || isArtistCartId(salonId)),
+  )
+  const salon = salonId && !isArtist ? resolveSalonById(salonId) : undefined
+
+  const artistLines =
+    isArtist && salonCart
+      ? salonCart.serviceIds.map((id) => ({
+          id,
+          line: salonCart.serviceLines?.[id],
+        }))
+      : []
+  const artistTotal = artistLines.reduce(
+    (sum, row) => sum + (Number(row.line?.price) || 0),
+    0,
+  )
 
   const services =
     salon && salonCart
@@ -43,7 +59,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
       ? salon.packages.find((item) => item.id === salonCart.packageId)
       : undefined
 
-  const total = salon
+  const salonTotal = salon
     ? cartServicesSubtotal(
         salon.services,
         salonCart?.serviceIds ?? [],
@@ -53,7 +69,9 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
       )
     : 0
 
-  const isEmpty = !salon || !salonCart || (services.length === 0 && !selectedPackage)
+  const isEmpty = isArtist
+    ? !salonCart || salonCart.serviceIds.length === 0
+    : !salon || !salonCart || (services.length === 0 && !selectedPackage)
 
   function removeService(serviceId: string) {
     if (!salonId) return
@@ -76,10 +94,94 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
             Your bag is empty
           </Text>
           <Text muted style={styles.emptyBody}>
-            Add services from a salon to start booking.
+            Add services from a salon or solo artist to start booking.
           </Text>
         </View>
-      ) : (
+      ) : isArtist && salonCart ? (
+        <View style={styles.body}>
+          <View style={styles.salonRow}>
+            {salonCart.providerImageUrl ? (
+              <Image
+                source={{ uri: salonCart.providerImageUrl }}
+                style={styles.salonThumb}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.salonThumb, styles.artistFallback]}>
+                <Text variant="heading" color={colors.coral}>
+                  {(salonCart.providerName ?? "A").slice(0, 1).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text variant="caption" muted>
+                Booking with
+              </Text>
+              <Text variant="bodyStrong" numberOfLines={1}>
+                {salonCart.providerName?.trim() || "Solo artist"}
+              </Text>
+              {salonCart.providerArea ? (
+                <Text variant="caption" muted numberOfLines={1}>
+                  {salonCart.providerArea}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          {artistLines.map(({ id, line }) => (
+            <View key={id} style={styles.itemRow}>
+              <View style={[styles.itemThumb, styles.artistFallback]}>
+                <Icon name="sparkles-outline" size={18} color={colors.coral} />
+              </View>
+              <View style={styles.itemCopy}>
+                <Text variant="bodyStrong" numberOfLines={2}>
+                  {line?.name || "Service"}
+                </Text>
+                {line?.durationMin ? (
+                  <Text variant="caption" muted>
+                    {line.durationMin} min
+                  </Text>
+                ) : null}
+                <Text variant="bodyStrong">
+                  {formatRupees(Number(line?.price) || 0)}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${line?.name || "service"}`}
+                hitSlop={8}
+                onPress={() => removeService(id)}
+                style={styles.removeBtn}
+              >
+                <Icon name="close" size={16} color={colors.textSubtle} />
+              </Pressable>
+            </View>
+          ))}
+
+          <View style={styles.totalRow}>
+            <Text variant="bodyStrong">Total</Text>
+            <Text variant="heading">{formatRupees(artistTotal)}</Text>
+          </View>
+
+          <Button
+            label="Clear bag"
+            variant="secondary"
+            onPress={() => {
+              if (salonId) cart.clearSalon(salonId)
+              onClose()
+            }}
+          />
+          <Button
+            label="Continue booking"
+            style={{ marginTop: spacing.sm }}
+            onPress={() => {
+              if (!salonId) return
+              onClose()
+              onContinue(salonId)
+            }}
+          />
+        </View>
+      ) : salon && salonCart ? (
         <View style={styles.body}>
           <View style={styles.salonRow}>
             <Image
@@ -102,11 +204,13 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
 
           {selectedPackage ? (
             <View style={styles.itemRow}>
-              <Image
-                source={{ uri: selectedPackage.imageUrl }}
-                style={styles.itemThumb}
-                contentFit="cover"
-              />
+              {selectedPackage.imageUrl.trim() ? (
+                <Image
+                  source={{ uri: selectedPackage.imageUrl }}
+                  style={styles.itemThumb}
+                  contentFit="cover"
+                />
+              ) : null}
               <View style={styles.itemCopy}>
                 <Text variant="bodyStrong" numberOfLines={2}>
                   {selectedPackage.name}
@@ -139,11 +243,13 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
             const showQuantity = serviceUsesQuantity(service)
             return (
               <View key={service.id} style={styles.itemRow}>
-                <Image
-                  source={{ uri: service.imageUrl }}
-                  style={styles.itemThumb}
-                  contentFit="cover"
-                />
+                {service.imageUrl.trim() ? (
+                  <Image
+                    source={{ uri: service.imageUrl }}
+                    style={styles.itemThumb}
+                    contentFit="cover"
+                  />
+                ) : null}
                 <View style={styles.itemCopy}>
                   <View style={styles.nameRow}>
                     <Text variant="bodyStrong" numberOfLines={2} style={{ flexShrink: 1 }}>
@@ -200,7 +306,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
 
           <View style={styles.totalRow}>
             <Text variant="bodyStrong">Total</Text>
-            <Text variant="heading">{formatRupees(total)}</Text>
+            <Text variant="heading">{formatRupees(salonTotal)}</Text>
           </View>
 
           <Button
@@ -220,7 +326,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
             }}
           />
         </View>
-      )}
+      ) : null}
     </BottomSheet>
   )
 }
@@ -239,10 +345,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing.sm,
   },
   emptyTitle: {
-    textAlign: "center",
+    marginTop: spacing.sm,
   },
   emptyBody: {
     textAlign: "center",
@@ -255,24 +360,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.md,
-    marginBottom: spacing.sm,
-    paddingBottom: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
   },
   salonThumb: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     borderRadius: radii.md,
     backgroundColor: colors.muted,
+  },
+  artistFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8EDE8",
   },
   itemRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing.md,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingVertical: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   itemThumb: {
     width: 52,
@@ -282,26 +388,22 @@ const styles = StyleSheet.create({
   },
   itemCopy: {
     flex: 1,
-    gap: 2,
     minWidth: 0,
-    paddingRight: spacing.sm,
+    gap: 2,
   },
   nameRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
+    alignItems: "flex-start",
+    gap: spacing.sm,
   },
   genderBadge: {
-    flexShrink: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.pill,
     backgroundColor: colors.muted,
+    borderRadius: radii.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   genderBadgeLabel: {
-    fontSize: 10,
-    lineHeight: 14,
+    fontSize: 11,
   },
   removeBtn: {
     width: 28,
@@ -312,9 +414,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   totalRow: {
-    marginTop: spacing.sm,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
 })

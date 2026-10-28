@@ -38,6 +38,10 @@ const config = {
     supportsTablet: true,
     bundleIdentifier: "com.glammzo.mobile",
     buildNumber: "1",
+    infoPlist: {
+      // HTTPS + Keychain only — skips App Store Connect export-compliance prompt.
+      ITSAppUsesNonExemptEncryption: false,
+    },
     ...(mapsApiKeyIos
       ? {
           config: {

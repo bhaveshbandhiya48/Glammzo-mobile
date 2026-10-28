@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/Input"
 import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
-import { submitSalonReview } from "@/lib/reviews-api"
+import { submitArtistReview, submitSalonReview } from "@/lib/reviews-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 function firstParam(value: string | string[] | undefined) {
@@ -40,38 +40,57 @@ export default function ReviewScreen() {
     appointmentId?: string | string[]
     salonName?: string | string[]
     staffName?: string | string[]
+    kind?: string | string[]
+    artistPublicToken?: string | string[]
   }>()
   const appointmentId = firstParam(params.appointmentId)
   const salonName = firstParam(params.salonName)
   const stylist = firstParam(params.staffName)
+  const kind = firstParam(params.kind)
+  const artistPublicToken = firstParam(params.artistPublicToken)
+  const isArtist = kind === "artist" || Boolean(artistPublicToken)
 
   const [rating, setRating] = useState(5)
   const [chip, setChip] = useState(STAND_OUT[0])
   const [comment, setComment] = useState("")
-  const [includeStaff, setIncludeStaff] = useState(Boolean(stylist))
+  const [includeStaff, setIncludeStaff] = useState(Boolean(stylist) && !isArtist)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
-  const title = salonName || "Salon"
+  const title = salonName || (isArtist ? "Artist" : "Salon")
+  const reviewTargetId = isArtist ? artistPublicToken : appointmentId
   const canSubmit =
-    Boolean(appointmentId) && comment.trim().length >= 3 && rating >= 1
+    Boolean(reviewTargetId) && comment.trim().length >= 3 && rating >= 1
 
   async function handleSubmit() {
-    if (!appointmentId || !canSubmit) return
+    if (!reviewTargetId || !canSubmit) return
     setLoading(true)
     setError(null)
     try {
-      await submitSalonReview({
-        appointmentId,
-        rating,
-        reviewType: chip,
-        comment: comment.trim(),
-        includeStaffReview: Boolean(stylist && includeStaff),
-      })
+      if (isArtist) {
+        await submitArtistReview({
+          publicToken: reviewTargetId,
+          rating,
+          reviewType: chip,
+          comment: comment.trim(),
+        })
+      } else {
+        await submitSalonReview({
+          appointmentId: reviewTargetId,
+          rating,
+          reviewType: chip,
+          comment: comment.trim(),
+          includeStaffReview: Boolean(stylist && includeStaff),
+        })
+      }
       setDone(true)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not submit review.")
+      setError(
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : "Could not submit review.",
+      )
     } finally {
       setLoading(false)
     }
@@ -102,7 +121,7 @@ export default function ReviewScreen() {
     )
   }
 
-  if (!appointmentId) {
+  if (!reviewTargetId) {
     return (
       <Screen>
         <Text variant="title">Review unavailable</Text>
@@ -135,7 +154,7 @@ export default function ReviewScreen() {
         >
           <Text variant="title">Leave a review</Text>
           <Text muted style={styles.gap}>
-            {title}
+            {isArtist ? `How was your experience with ${title}?` : title}
           </Text>
 
           <Text variant="label" muted style={styles.section}>
@@ -184,7 +203,7 @@ export default function ReviewScreen() {
             ))}
           </View>
 
-          {stylist ? (
+          {!isArtist && stylist ? (
             <Pressable
               style={[styles.staffCard, includeStaff && styles.staffCardActive]}
               onPress={() => setIncludeStaff((value) => !value)}

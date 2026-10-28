@@ -84,6 +84,45 @@ export function formatBookingDate(isoDate: string): string {
   })
 }
 
+/** Compact date for list cards, e.g. "Sat, 18 Oct". */
+export function formatBookingDateShort(isoDate: string): string {
+  const d = new Date(`${isoDate}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return isoDate
+  return d.toLocaleDateString("en-IN", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })
+}
+
+/** Today / Tomorrow / Yesterday relative to local calendar, else null. */
+export function relativeBookingDay(isoDate: string, now = new Date()): string | null {
+  const d = new Date(`${isoDate}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return null
+  const startOf = (value: Date) =>
+    new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime()
+  const diffDays = Math.round((startOf(d) - startOf(now)) / 86_400_000)
+  if (diffDays === 0) return "Today"
+  if (diffDays === 1) return "Tomorrow"
+  if (diffDays === -1) return "Yesterday"
+  return null
+}
+
+export function visitTypeLabel(booking: Booking): string | null {
+  if (!isArtistBooking(booking)) return null
+  const note = booking.notes?.trim().toLowerCase() ?? ""
+  if (note.includes("home")) return "Home visit"
+  if (note.includes("studio")) return "Studio visit"
+  return booking.notes?.trim() || null
+}
+
+export function formatBookingWhen(booking: Booking): string {
+  const relative = relativeBookingDay(booking.date)
+  const date = relative ?? formatBookingDateShort(booking.date)
+  const time = booking.time?.trim() || "—"
+  return `${date} · ${time}`
+}
+
 export function formatDuration(totalMin: number): string {
   if (!totalMin || totalMin < 0) return "—"
   if (totalMin < 60) return `${totalMin} min`

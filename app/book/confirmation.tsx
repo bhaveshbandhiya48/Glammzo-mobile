@@ -1,15 +1,18 @@
 import { Image } from "expo-image"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Animated, Easing, StyleSheet, View } from "react-native"
+import { Animated, Easing, Linking, StyleSheet, View } from "react-native"
 
+import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
-import type { BookingStatus, Salon } from "@/data/types"
+import type { Booking, BookingStatus, Salon } from "@/data/types"
 import {
+  bookingDurationMin,
   formatBookingDate,
+  formatDuration,
   getBookingStatusLabel,
   statusBadgeColors,
 } from "@/lib/booking-display"
@@ -17,10 +20,16 @@ import { fetchBookingById } from "@/lib/bookings-api"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
-const PENDING_STEPS = [
+const PENDING_STEPS_SALON = [
   "The salon will review your booking.",
-  "You'll receive confirmation once they respond.",
-  "Your appointment details will remain available in your bookings.",
+  "You'll get a confirmation once they respond.",
+  "You can track or cancel the visit from My bookings.",
+] as const
+
+const PENDING_STEPS_ARTIST = [
+  "Your visit is held with the artist.",
+  "You'll get reminders before the appointment.",
+  "You can cancel from My bookings (at least 2 hours before).",
 ] as const
 
 const CONFETTI = [
@@ -32,7 +41,13 @@ const CONFETTI = [
   { left: "84%", delay: 100, color: "#F9A89A", size: 5 },
 ] as const
 
-function parseStatus(value: string | undefined): BookingStatus {
+function firstParam(value: string | string[] | undefined) {
+  const raw = Array.isArray(value) ? value[0] : value
+  const trimmed = raw?.trim()
+  return trimmed && trimmed.length > 0 ? trimmed : null
+}
+
+function parseStatus(value: string | null | undefined): BookingStatus {
   if (
     value === "pending" ||
     value === "confirmed" ||
@@ -47,17 +62,19 @@ function parseStatus(value: string | undefined): BookingStatus {
   return "confirmed"
 }
 
-function confirmationCopy(status: BookingStatus) {
+function confirmationCopy(status: BookingStatus, artist: boolean) {
+  const provider = artist ? "artist" : "salon"
   switch (status) {
     case "pending":
       return {
-        title: "Booking request sent",
-        description:
-          "Your booking request has been sent successfully. The salon will review it and confirm shortly.",
+        title: artist ? "Booking requested" : "Booking request sent",
+        description: artist
+          ? "Your visit request is in. Details are saved to your account."
+          : "Your request is with the salon. They’ll confirm shortly.",
         panelTitle: "What happens next",
-        panelBody: null as string | null,
-        footerHint:
-          "Need to change your appointment? You can cancel or reschedule once the salon confirms.",
+        footerHint: artist
+          ? "Need to change plans? Cancel from My bookings at least 2 hours before."
+          : "Need to change your appointment? You can cancel or reschedule once the salon confirms.",
       }
     case "declined":
     case "expired":
@@ -74,19 +91,18 @@ function confirmationCopy(status: BookingStatus) {
             ? "This appointment has been cancelled."
             : "This booking is no longer active. You can book another time anytime.",
         panelTitle: "Next steps",
-        panelBody: "Browse the salon again to pick a new slot.",
-        footerHint: "Need a new appointment? Book another time from Explore.",
+        footerHint: `Need a new appointment? Book again from the ${provider} page.`,
       }
     default:
       return {
-        title: "You're all set",
-        description:
-          "Your appointment is confirmed. We've saved the details to your account.",
-        panelTitle: "You're confirmed",
-        panelBody:
-          "Show this booking at the salon. You can manage or cancel from your bookings anytime.",
-        footerHint:
-          "Need to change your appointment? You can cancel or reschedule from Manage booking.",
+        title: "You're booked",
+        description: artist
+          ? "Your solo-artist visit is confirmed. We’ve saved the details to your account."
+          : "Your appointment is confirmed. We’ve saved the details to your account.",
+        panelTitle: "You’re confirmed",
+        footerHint: artist
+          ? "Need to change plans? Cancel from My bookings at least 2 hours before."
+          : "Need to change your appointment? Cancel or reschedule from My bookings.",
       }
   }
 }
@@ -142,39 +158,80 @@ function SuccessConfetti() {
   )
 }
 
+function PassRow({
+  label,
+  value,
+  subvalue,
+  last,
+}: {
+  label: string
+  value: string
+  subvalue?: string | null
+  last?: boolean
+}) {
+  return (
+    <View style={[styles.passRow, last && styles.passRowLast]}>
+      <Text variant="label" muted style={styles.passLabel}>
+        {label}
+      </Text>
+      <View style={styles.passValueCol}>
+        <Text variant="bodyStrong" style={styles.passValue}>
+          {value}
+        </Text>
+        {subvalue ? (
+          <Text variant="caption" muted style={styles.passSub}>
+            {subvalue}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
 export default function BookingConfirmationScreen() {
   const router = useRouter()
-  const {
-    salonId,
-    total,
-    slot,
-    name,
-    bookingId,
-    date,
-    status: statusParam,
-  } = useLocalSearchParams<{
-    salonId: string
-    total: string
-    slot: string
-    name: string
-    bookingId?: string
-    date?: string
-    status?: string
+  const params = useLocalSearchParams<{
+    salonId?: string | string[]
+    total?: string | string[]
+    slot?: string | string[]
+    name?: string | string[]
+    bookingId?: string | string[]
+    date?: string | string[]
+    status?: string | string[]
+    kind?: string | string[]
+    services?: string | string[]
+    visitType?: string | string[]
+    area?: string | string[]
+    providerName?: string | string[]
+    photoUrl?: string | string[]
+    /** Artist advance still to pay (Glammzo web payment page). */
+    payUrl?: string | string[]
   }>()
+
+  const salonId = firstParam(params.salonId)
+  const bookingId = firstParam(params.bookingId)
+  const kindParam = firstParam(params.kind)
+  const isArtist =
+    kindParam === "artist" ||
+    Boolean(bookingId?.startsWith("artist:"))
+
   const [salon, setSalon] = useState<Salon | undefined>()
-  const [status, setStatus] = useState<BookingStatus>(parseStatus(statusParam))
-  const [bookingDate, setBookingDate] = useState(
-    typeof date === "string" ? date : "",
+  const [booking, setBooking] = useState<Booking | null>(null)
+  const [status, setStatus] = useState<BookingStatus>(
+    parseStatus(firstParam(params.status)),
   )
-  const [bookingTime, setBookingTime] = useState(
-    typeof slot === "string" ? slot : "",
+  const [bookingDate, setBookingDate] = useState(firstParam(params.date) ?? "")
+  const [bookingTime, setBookingTime] = useState(firstParam(params.slot) ?? "")
+  const [displayName, setDisplayName] = useState(firstParam(params.name) ?? "Guest")
+  const [displayTotal, setDisplayTotal] = useState(firstParam(params.total) ?? "0")
+  const [servicesLine, setServicesLine] = useState(firstParam(params.services) ?? "")
+  const [visitType, setVisitType] = useState(firstParam(params.visitType) ?? "")
+  const [areaLine, setAreaLine] = useState(firstParam(params.area) ?? "")
+  const [providerName, setProviderName] = useState(
+    firstParam(params.providerName) ?? "",
   )
-  const [displayName, setDisplayName] = useState(
-    typeof name === "string" ? name : "Guest",
-  )
-  const [displayTotal, setDisplayTotal] = useState(
-    typeof total === "string" ? total : "0",
-  )
+  const [photoUrl, setPhotoUrl] = useState(firstParam(params.photoUrl) ?? "")
+
   const iconScale = useRef(new Animated.Value(0.82)).current
   const iconOpacity = useRef(new Animated.Value(0)).current
 
@@ -196,29 +253,40 @@ export default function BookingConfirmationScreen() {
 
   useEffect(() => {
     let active = true
-    if (typeof salonId !== "string") {
+    if (isArtist || !salonId) {
       setSalon(undefined)
       return
     }
     getSalonByIdLive(salonId).then((next) => {
       if (!active) return
       setSalon(next)
+      if (next) {
+        setAreaLine([next.area, next.city].filter(Boolean).join(", "))
+        setProviderName(next.name)
+        setPhotoUrl(next.imageUrl || next.coverImageUrl || "")
+      }
     })
     return () => {
       active = false
     }
-  }, [salonId])
+  }, [salonId, isArtist])
 
   useEffect(() => {
     let active = true
-    if (typeof bookingId !== "string" || !bookingId) return
+    if (!bookingId || isArtist) return
     fetchBookingById(bookingId)
-      .then((booking) => {
-        if (!active || !booking) return
-        setStatus(booking.status)
-        setBookingDate(booking.date)
-        setBookingTime(booking.time)
-        setDisplayTotal(String(booking.price))
+      .then((next) => {
+        if (!active || !next) return
+        setBooking(next)
+        setStatus(next.status)
+        setBookingDate(next.date)
+        setBookingTime(next.time)
+        setDisplayTotal(String(next.price))
+        if (next.services.length > 0) {
+          setServicesLine(next.services.map((s) => s.name).join(" · "))
+        }
+        if (next.salonName) setProviderName(next.salonName)
+        if (next.salonArea) setAreaLine(next.salonArea)
       })
       .catch(() => {
         // Keep route params if refresh fails.
@@ -226,25 +294,72 @@ export default function BookingConfirmationScreen() {
     return () => {
       active = false
     }
-  }, [bookingId])
+  }, [bookingId, isArtist])
 
-  const copy = useMemo(() => confirmationCopy(status), [status])
+  const copy = useMemo(
+    () => confirmationCopy(status, isArtist),
+    [status, isArtist],
+  )
   const badge = statusBadgeColors(status)
   const isPending = status === "pending"
   const isNegative =
     status === "declined" || status === "expired" || status === "cancelled"
   const isSuccess = !isPending && !isNegative
   const bookingReference =
-    typeof bookingId === "string" && bookingId
+    bookingId && !bookingId.startsWith("artist:")
       ? bookingId.slice(0, 8).toUpperCase()
-      : null
+      : bookingId?.startsWith("artist:")
+        ? bookingId.replace(/^artist:/, "").slice(0, 8).toUpperCase()
+        : null
   const dateLabel = bookingDate ? formatBookingDate(bookingDate) : null
+  const durationMin = booking ? bookingDurationMin(booking) : 0
+  const staffLabel = isArtist
+    ? providerName || "Solo artist"
+    : booking?.staffName?.trim() || "Any available"
+  const titleName = providerName || salon?.name || (isArtist ? "Solo artist" : "Salon")
+  const coverUri = salon?.coverImageUrl || salon?.imageUrl || photoUrl || null
+  const thumbUri = photoUrl || salon?.imageUrl || salon?.coverImageUrl || null
+  const pendingSteps = isArtist ? PENDING_STEPS_ARTIST : PENDING_STEPS_SALON
+  const payLabel = isArtist ? "Pay artist directly" : "Pay at salon"
+  const artistInvoiceBooking: Booking | null = isArtist
+    ? {
+        id: bookingId || `artist:${salonId || "booking"}`,
+        salonId: salonId || "",
+        salonName: titleName,
+        salonArea: areaLine || visitType || "Visit",
+        services: servicesLine
+          ? servicesLine.split(" · ").map((name, index) => ({
+              id: `svc-${index}`,
+              name: name.trim() || "Service",
+              price: Number(displayTotal) || 0,
+              durationMin: 0,
+            }))
+          : [
+              {
+                id: "svc-0",
+                name: "Service",
+                price: Number(displayTotal) || 0,
+                durationMin: 0,
+              },
+            ],
+        date: bookingDate,
+        time: bookingTime,
+        price: Number(displayTotal) || 0,
+        durationMin: 0,
+        notes: visitType || areaLine || "Visit",
+        status,
+        createdAt: new Date().toISOString(),
+        kind: "artist",
+        artistSlug: salonId || undefined,
+        artistPublicToken: bookingId?.replace(/^artist:/, "") || undefined,
+      }
+    : null
 
   return (
     <Screen scroll contentStyle={styles.screen}>
       {(isSuccess || isPending) && <SuccessConfetti />}
 
-      <View style={styles.heroCard}>
+      <View style={styles.hero}>
         <Animated.View
           style={[
             styles.iconWrap,
@@ -256,7 +371,7 @@ export default function BookingConfirmationScreen() {
         >
           <Icon
             name={isNegative ? "close-circle" : "checkmark-circle"}
-            size={42}
+            size={40}
             color={
               isPending ? "#B45309" : isNegative ? "#C2410C" : colors.success
             }
@@ -281,91 +396,77 @@ export default function BookingConfirmationScreen() {
         <Text muted style={styles.heroDescription}>
           {copy.description}
         </Text>
-
-        {isPending ? (
-          <View style={styles.nextSteps}>
-            <Text variant="label" muted style={styles.nextStepsTitle}>
-              {copy.panelTitle}
-            </Text>
-            {PENDING_STEPS.map((step, index) => (
-              <View key={step} style={styles.stepRow}>
-                <View style={styles.stepIndex}>
-                  <Text variant="caption" color={colors.coral}>
-                    {index + 1}
-                  </Text>
-                </View>
-                <Text style={styles.stepText}>{step}</Text>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View
-            style={[
-              styles.confirmedPanel,
-              isNegative ? styles.confirmedPanelNegative : styles.confirmedPanelSuccess,
-            ]}
-          >
-            <Text
-              variant="label"
-              style={{
-                color: isNegative ? "#9A3412" : "#065F46",
-                textAlign: "center",
-              }}
-            >
-              {copy.panelTitle}
-            </Text>
-            {copy.panelBody ? (
-              <Text muted style={styles.confirmedBody}>
-                {copy.panelBody}
-              </Text>
-            ) : null}
-            {isSuccess ? (
-              <Text variant="caption" style={styles.reminderLine}>
-                You’ll get SMS reminders 24h and 2h before your visit.
-              </Text>
-            ) : null}
-          </View>
-        )}
       </View>
 
       <View style={styles.pass}>
-        {salon ? (
+        {coverUri && !isArtist ? (
           <Image
-            source={{ uri: salon.coverImageUrl || salon.imageUrl }}
+            source={{ uri: coverUri }}
             style={styles.passCover}
             contentFit="cover"
             transition={200}
           />
         ) : null}
+
         <View style={styles.passBody}>
-          <View style={styles.salonRow}>
-            {salon ? (
+          <View style={styles.providerRow}>
+            {thumbUri ? (
               <Image
-                source={{ uri: salon.imageUrl || salon.coverImageUrl }}
-                style={styles.salonThumb}
+                source={{ uri: thumbUri }}
+                style={styles.providerThumb}
                 contentFit="cover"
                 transition={200}
               />
-            ) : null}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="heading" numberOfLines={1}>
-                {salon?.name ?? "Salon"}
+            ) : (
+              <View style={[styles.providerThumb, styles.providerThumbFallback]}>
+                <Icon
+                  name={isArtist ? "sparkles-outline" : "storefront-outline"}
+                  size={22}
+                  color={colors.coral}
+                />
+              </View>
+            )}
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.kindRow}>
+                <Text variant="caption" color={colors.coral}>
+                  {isArtist ? "Solo artist" : "Salon"}
+                </Text>
+              </View>
+              <Text variant="heading" numberOfLines={2}>
+                {titleName}
               </Text>
-              <Text muted numberOfLines={1}>
-                {salon?.area}
-                {salon?.city ? `, ${salon.city}` : ""}
+              <Text muted numberOfLines={2}>
+                {[areaLine || salon?.area, visitType].filter(Boolean).join(" · ") ||
+                  "—"}
               </Text>
             </View>
           </View>
-          <View style={styles.divider} />
-          <Text variant="bodyStrong">{displayName || "Guest"}</Text>
-          <Text muted>
-            {dateLabel ? `${dateLabel} · ` : ""}
-            {bookingTime || "Time TBD"}
-          </Text>
-          <Text variant="bodyStrong" style={styles.gap}>
-            Pay at salon · ₹{displayTotal || "0"}
-          </Text>
+
+          <View style={styles.passDetails}>
+            <PassRow label="Date" value={dateLabel || "Date TBD"} />
+            <PassRow
+              label="Time"
+              value={bookingTime || "Time TBD"}
+              subvalue={
+                durationMin > 0 ? `About ${formatDuration(durationMin)}` : null
+              }
+            />
+            <PassRow label="Guest" value={displayName || "Guest"} />
+            <PassRow
+              label={isArtist ? "Artist" : "Stylist"}
+              value={staffLabel}
+            />
+            {servicesLine ? (
+              <PassRow label="Services" value={servicesLine} />
+            ) : null}
+            <PassRow
+              label="Total"
+              value={`₹${displayTotal || "0"}`}
+              subvalue={payLabel}
+              last
+            />
+          </View>
+
           {bookingReference ? (
             <View style={styles.refRow}>
               <Text variant="caption" muted>
@@ -379,21 +480,104 @@ export default function BookingConfirmationScreen() {
         </View>
       </View>
 
+      {(isPending || isSuccess) && (
+        <View style={styles.nextCard}>
+          <Text variant="label" muted style={styles.nextTitle}>
+            {copy.panelTitle}
+          </Text>
+          {isPending && firstParam(params.payUrl) ? (
+            <View style={{ gap: 6, marginBottom: 12 }}>
+              <Text variant="caption" muted>
+                Your booking is confirmed once the advance is paid. The time is held for 15 minutes.
+              </Text>
+              <Button label="Pay advance" onPress={() => void Linking.openURL(firstParam(params.payUrl)!)} />
+            </View>
+          ) : null}
+          {isPending ? (
+            <View style={styles.steps}>
+              {pendingSteps.map((step, index) => (
+                <View key={step} style={styles.stepRow}>
+                  <View style={styles.stepIndex}>
+                    <Text variant="caption" color={colors.coral}>
+                      {index + 1}
+                    </Text>
+                  </View>
+                  <Text style={styles.stepText}>{step}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.tips}>
+              <View style={styles.tipRow}>
+                <Icon name="notifications-outline" size={18} color={colors.coral} />
+                <Text style={styles.tipText}>
+                  SMS reminders 24h and 2h before your visit.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <Icon name="calendar-outline" size={18} color={colors.coral} />
+                <Text style={styles.tipText}>
+                  Find this appointment anytime under My bookings.
+                </Text>
+              </View>
+              {!isArtist ? (
+                <View style={styles.tipRow}>
+                  <Icon name="card-outline" size={18} color={colors.coral} />
+                  <Text style={styles.tipText}>
+                    Pay at the salon after your service.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.tipRow}>
+                  <Icon name="cash-outline" size={18} color={colors.coral} />
+                  <Text style={styles.tipText}>
+                    Pay the artist directly for this visit.
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+
+      {isNegative ? (
+        <View style={styles.negativeCard}>
+          <Text variant="bodyStrong">Book another time</Text>
+          <Text muted style={{ marginTop: spacing.xs }}>
+            Browse again and pick a new slot that works for you.
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.actions}>
+        {artistInvoiceBooking && !isNegative ? (
+          <ShareArtistInvoiceButton booking={artistInvoiceBooking} />
+        ) : null}
         <Button
-          label="Manage booking"
+          label="View my bookings"
           onPress={() => router.replace("/(tabs)/bookings")}
         />
         <Button
-          label={isNegative ? "Book again" : "Book another"}
+          label={isNegative ? "Book again" : "Done"}
           variant="secondary"
-          onPress={() =>
-            router.replace(
-              isNegative && typeof salonId === "string"
-                ? `/salon/${salonId}`
-                : "/(tabs)/explore",
-            )
-          }
+          onPress={() => {
+            if (isNegative && salonId) {
+              router.replace(
+                isArtist
+                  ? { pathname: "/artist/[slug]", params: { slug: salonId } }
+                  : { pathname: "/salon/[id]", params: { id: salonId } },
+              )
+              return
+            }
+            if (isArtist && salonId) {
+              router.replace({
+                pathname: "/artist/[slug]",
+                params: { slug: salonId },
+              })
+              return
+            }
+            router.replace("/(tabs)/explore")
+          }}
         />
         <Text variant="caption" muted style={styles.footerHint}>
           {copy.footerHint}
@@ -405,7 +589,8 @@ export default function BookingConfirmationScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xxxl,
   },
   confettiLayer: {
     ...StyleSheet.absoluteFill,
@@ -417,19 +602,14 @@ const styles = StyleSheet.create({
     top: 8,
     borderRadius: radii.pill,
   },
-  heroCard: {
+  hero: {
     alignItems: "center",
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.sm,
     paddingBottom: spacing.xl,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
   },
   iconWrap: {
-    width: 72,
-    height: 72,
+    width: 68,
+    height: 68,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
@@ -470,15 +650,108 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: "center",
     maxWidth: 320,
+    lineHeight: 22,
   },
-  nextSteps: {
+  pass: {
+    borderRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    overflow: "hidden",
+  },
+  passCover: {
     width: "100%",
-    marginTop: spacing.xl,
-    gap: spacing.sm,
+    height: 120,
+    backgroundColor: colors.muted,
   },
-  nextStepsTitle: {
-    textAlign: "center",
-    marginBottom: spacing.xs,
+  passBody: {
+    padding: spacing.xl,
+    gap: spacing.lg,
+  },
+  providerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  providerThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+  },
+  providerThumbFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFF7F5",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#FFD5CE",
+  },
+  kindRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passDetails: {
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  passRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  passRowLast: {
+    borderBottomWidth: 0,
+  },
+  passLabel: {
+    width: 72,
+    marginTop: 2,
+    fontSize: 10,
+  },
+  passValueCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  passValue: {
+    textAlign: "left",
+  },
+  passSub: {
+    lineHeight: 18,
+  },
+  refRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  refChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  nextCard: {
+    marginTop: spacing.xl,
+    padding: spacing.xl,
+    borderRadius: radii.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+    gap: spacing.md,
+  },
+  nextTitle: {
+    textAlign: "left",
+  },
+  steps: {
+    gap: spacing.sm,
   },
   stepRow: {
     flexDirection: "row",
@@ -487,8 +760,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radii.lg,
     backgroundColor: colors.muted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
   },
   stepIndex: {
     width: 24,
@@ -506,83 +777,30 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.text,
   },
-  confirmedPanel: {
-    width: "100%",
-    marginTop: spacing.xl,
-    borderRadius: radii.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  confirmedPanelSuccess: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#A7F3D0",
-  },
-  confirmedPanelNegative: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
-  confirmedBody: {
-    marginTop: spacing.sm,
-    textAlign: "center",
-  },
-  reminderLine: {
-    marginTop: spacing.md,
-    textAlign: "center",
-    color: "#065F46",
-  },
-  gap: {
-    marginTop: spacing.sm,
-  },
-  pass: {
-    marginTop: spacing.xxl,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    overflow: "hidden",
-  },
-  passCover: {
-    width: "100%",
-    height: 140,
-    backgroundColor: colors.muted,
-  },
-  passBody: {
-    padding: spacing.xl,
-    gap: spacing.sm,
-  },
-  salonRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  tips: {
     gap: spacing.md,
   },
-  salonThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-  refRow: {
-    marginTop: spacing.sm,
+  tipRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.md,
   },
-  refChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: radii.pill,
+  tipText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  negativeCard: {
+    marginTop: spacing.xl,
+    padding: spacing.xl,
+    borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: "#FED7AA",
+    backgroundColor: "#FFF7ED",
   },
   actions: {
-    marginTop: spacing.xxxl,
+    marginTop: spacing.xxl,
     gap: spacing.md,
   },
   footerHint: {

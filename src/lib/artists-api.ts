@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 import { apiFetch } from "@/lib/api"
+import type { ArtistLevelId } from "@/lib/artist-level"
 import { CRM_URL } from "@/lib/config"
+import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 
-const HOME_ARTISTS_STORAGE_KEY = "glammzo_home_artists_v1"
+const HOME_ARTISTS_STORAGE_KEY = "glammzo_home_artists_v4"
 const HOME_ARTISTS_TTL_MS = 60_000
 const HOME_ARTISTS_LIMIT = 12
 
@@ -53,6 +55,18 @@ export type ArtistCardData = {
   portfolio: string[]
   distanceKm: number | null
   coversYourArea: boolean | null
+  /** Live artist offer badge, e.g. "10% OFF" / "₹100 OFF". */
+  offerBadge?: string | null
+  averageRating?: number
+  reviewCount?: number
+  /** Studio or travel-base pin for map browse (when geocoded). */
+  latitude?: number | null
+  longitude?: number | null
+  /** Lifetime performance level (Getting started → Top rated). */
+  level?: ArtistLevelId
+  levelLabel?: string
+  isVerified?: boolean
+  isNew?: boolean
 }
 
 export type ArtistWhere = "any" | "home" | "studio"
@@ -67,6 +81,7 @@ export type ArtistQuery = {
   longitude?: number
   sort?: ArtistSort
   offset?: number
+  limit?: number
 }
 
 export type PublicArtistService = {
@@ -78,6 +93,25 @@ export type PublicArtistService = {
   price: number
   locationMode: "studio" | "client_home" | "both"
   homeVisitPriceOverride: number | null
+  /** Discounted studio list price when a live auto-offer applies. */
+  offerPrice?: number | null
+  offerDealLabel?: string | null
+  offerTitle?: string | null
+}
+
+export type PublicArtistOffer = {
+  id: string
+  title: string
+  description: string | null
+  code?: string | null
+  discountType: "percent" | "fixed"
+  discountValue: number
+  appliesTo: "all_services" | "selected_services"
+  serviceIds: string[]
+  dealLabel: string
+  endsAt: string | null
+  autoApplied?: boolean
+  howToApply?: string | null
 }
 
 export type PublicArtistPortfolioItem = {
@@ -117,11 +151,18 @@ export type PublicArtist = {
   travelFeeAmount: number
   advancePaymentRequired: boolean
   cancellationPolicyText: string | null
+  /** Advance refund rules from the artist's policy, in plain language. */
+  cancellationPolicyLines?: string[]
   services: PublicArtistService[]
+  offers?: PublicArtistOffer[]
+  hasPromoCodes?: boolean
   portfolio?: PublicArtistPortfolioItem[]
   averageRating?: number
   reviewCount?: number
   reviews?: PublicArtistReview[]
+  level?: ArtistLevelId
+  levelLabel?: string
+  isVerified?: boolean
   timezone?: string
 }
 
@@ -213,11 +254,43 @@ export async function fetchArtists(query: ArtistQuery, signal?: AbortSignal) {
   }
   if (query.sort) params.set("sort", query.sort)
   if (query.offset) params.set("offset", String(query.offset))
-  params.set("limit", "20")
+  const limit = Math.min(Math.max(query.limit ?? 20, 1), 50)
+  params.set("limit", String(limit))
   return crmGet<{ artists: ArtistCardData[]; total: number; hasMore: boolean }>(
     `/api/public/artists?${params}`,
     signal,
   )
+}
+
+/** Artists with map pins for explore map (nearest when location known). */
+export async function fetchMapArtists(input?: {
+  latitude?: number
+  longitude?: number
+  q?: string
+  signal?: AbortSignal
+}): Promise<ArtistCardData[]> {
+  try {
+    const data = await fetchArtists(
+      {
+        latitude: input?.latitude,
+        longitude: input?.longitude,
+        q: input?.q,
+        sort:
+          input?.latitude != null && input?.longitude != null ? "nearest" : "recommended",
+        limit: 50,
+      },
+      input?.signal,
+    )
+    return (data.artists ?? []).filter(
+      (artist) =>
+        artist.latitude != null &&
+        artist.longitude != null &&
+        Number.isFinite(artist.latitude) &&
+        Number.isFinite(artist.longitude),
+    )
+  } catch {
+    return []
+  }
 }
 
 export function getHomeArtistsSnapshot(latitude?: number, longitude?: number) {
@@ -264,8 +337,8 @@ async function persistHomeArtists(entry: HomeArtistsCache) {
 }
 
 /**
- * Home “Solo artists” strip: cached + parallel category labels.
- * Prefetch from Explore so cards appear with salons, not after them.
+ * Home “Nearby Artists” strip: only artists within NEARBY_RADIUS_KM when
+ * the user has a pin. Hidden (empty) without a location.
  */
 export async function fetchHomeArtists(input?: {
   latitude?: number
@@ -294,12 +367,19 @@ export async function fetchHomeArtists(input?: {
 
   const run = (async (): Promise<HomeArtistsCache | null> => {
     try {
+      // No pin → no “nearby” set; keep the homepage section empty.
+      if (!hasPin) {
+        const empty: HomeArtistsCache = { at: Date.now(), key, artists: [], labels: {} }
+        await persistHomeArtists(empty)
+        return empty
+      }
+
       const [list, categories] = await Promise.all([
         fetchArtists(
           {
-            sort: hasPin ? "nearest" : "recommended",
-            latitude: hasPin ? latitude : undefined,
-            longitude: hasPin ? longitude : undefined,
+            sort: "nearest",
+            latitude,
+            longitude,
           },
           input?.signal,
         ),
@@ -307,10 +387,16 @@ export async function fetchHomeArtists(input?: {
       ])
       const labels: Record<string, string> = {}
       for (const c of categories?.categories ?? []) labels[c.id] = c.label
+      const nearby = (list.artists ?? []).filter(
+        (artist) =>
+          typeof artist.distanceKm === "number" &&
+          Number.isFinite(artist.distanceKm) &&
+          artist.distanceKm <= NEARBY_RADIUS_KM,
+      )
       const entry: HomeArtistsCache = {
         at: Date.now(),
         key,
-        artists: (list.artists ?? []).slice(0, HOME_ARTISTS_LIMIT),
+        artists: nearby.slice(0, HOME_ARTISTS_LIMIT),
         labels,
       }
       await persistHomeArtists(entry)
@@ -401,6 +487,51 @@ export async function verifyArtistBookingOtp(input: {
   return crmPost<{ verificationToken: string }>("/api/public/otp/verify", input)
 }
 
+/** Customer self-serve cancel for a solo-artist booking (CRM public token). */
+export async function cancelArtistPublicBooking(input: {
+  publicToken: string
+  reason?: string
+}) {
+  return crmPost<{ cancelled: boolean; alreadyCancelled?: boolean }>(
+    `/api/public/bookings/${encodeURIComponent(input.publicToken)}/cancel`,
+    { reason: input.reason ?? undefined },
+  )
+}
+
+/** Create artist booking via Glammzo-web so wallet / loyalty / cashback promos apply. */
+export async function createArtistBookingWithRewards(input: {
+  slug: string
+  serviceIds: string[]
+  startAt: string
+  locationType: ArtistLocationType
+  address?: string
+  landmark?: string | null
+  lat?: number
+  lng?: number
+  fullName: string
+  notes?: string | null
+  promoCode?: string
+  useWallet?: boolean
+  useFreeService?: boolean
+}) {
+  return apiFetch<{
+    ok: boolean
+    booking: { token: string; status: string; startsAt: string }
+    quote: ArtistBookingQuote
+    payable: number
+    loyaltyDiscount: number
+    walletUsed: number
+    promoCode: string | null
+    cashbackRupees: number
+    awaitingPayment: boolean
+    /** Glammzo payment page for the artist's advance (Pro Plus), when one is due. */
+    payUrl?: string | null
+  }>("/api/mobile/artist/bookings", {
+    method: "POST",
+    body: input,
+  })
+}
+
 export async function createArtistPublicBooking(input: {
   slug: string
   serviceIds: string[]
@@ -436,6 +567,7 @@ export async function createArtistPublicBooking(input: {
     fullName: input.fullName,
     phone: input.phone,
     verificationToken: input.verificationToken,
+    // Completing a booking implies sharing details with the artist (CRM requires this flag).
     consent: true,
     notes: input.notes ?? null,
   })

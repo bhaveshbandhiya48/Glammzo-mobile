@@ -62,17 +62,27 @@ export default function NotificationsScreen() {
     })
   }, [navigation, notifications.length, clearAll])
 
+  const showEmptyLayout =
+    !loading && (!signedIn || notifications.length === 0)
+
   return (
-    <Screen scroll>
+    <Screen
+      scroll={!showEmptyLayout}
+      contentStyle={showEmptyLayout ? styles.emptyScreen : undefined}
+    >
       {loading && notifications.length === 0 ? (
         <View style={styles.list}>
           <BookingsListSkeleton count={4} />
         </View>
       ) : !signedIn ? (
         <View style={styles.empty}>
-          <Icon name="log-in-outline" size={28} color={colors.textSubtle} />
-          <Text variant="bodyStrong">Sign in to see updates</Text>
-          <Text muted>
+          <View style={styles.emptyIcon}>
+            <Icon name="log-in-outline" size={32} color={colors.coral} />
+          </View>
+          <Text variant="bodyStrong" style={styles.emptyTitle}>
+            Sign in to see updates
+          </Text>
+          <Text muted style={styles.emptyBody}>
             Confirmations, reminders, cancellations, and cashback show up after you
             sign in.
           </Text>
@@ -86,9 +96,13 @@ export default function NotificationsScreen() {
         </View>
       ) : notifications.length === 0 ? (
         <View style={styles.empty}>
-          <Icon name="notifications-outline" size={28} color={colors.textSubtle} />
-          <Text variant="bodyStrong">You&apos;re all caught up</Text>
-          <Text muted>
+          <View style={styles.emptyIcon}>
+            <Icon name="notifications-outline" size={32} color={colors.coral} />
+          </View>
+          <Text variant="bodyStrong" style={styles.emptyTitle}>
+            You&apos;re all caught up
+          </Text>
+          <Text muted style={styles.emptyBody}>
             Booking confirmations, reminders, cancellations, and wallet credits will
             show here.
           </Text>
@@ -194,15 +208,32 @@ const styles = StyleSheet.create({
   time: {
     marginTop: 4,
   },
+  emptyScreen: {
+    flex: 1,
+    justifyContent: "center",
+  },
   empty: {
-    marginTop: spacing.xxxl,
+    alignItems: "center",
+    justifyContent: "center",
     gap: spacing.md,
-    padding: spacing.xl,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-    backgroundColor: colors.card,
-    alignItems: "flex-start",
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.xxxl,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.pill,
+    backgroundColor: "#FFF7F5",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: spacing.sm,
+  },
+  emptyTitle: {
+    textAlign: "center",
+  },
+  emptyBody: {
+    textAlign: "center",
+    maxWidth: 280,
   },
 })
+

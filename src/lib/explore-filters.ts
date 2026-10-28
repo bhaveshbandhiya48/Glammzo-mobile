@@ -1,5 +1,6 @@
 import { BUSINESS_TYPES, type BusinessType } from "@/data/business-types"
 import type { Salon } from "@/data/types"
+import type { ArtistCardData } from "@/lib/artists-api"
 
 export const EXPLORE_SORT_FILTERS = [
   { id: "recommended", label: "Recommended" },
@@ -142,6 +143,52 @@ export function filterExploreSalons(
       // Keep salons without a known distance (same as web).
       if (!(salon.distanceKm > 0)) return true
       return salon.distanceKm <= radiusKm
+    })
+  }
+
+  return result
+}
+
+/** Map/list filters for solo artists (skips salon-only category / open-now). */
+export function filterExploreArtists(
+  artists: ArtistCardData[],
+  state: Pick<ExploreFilterState, "price" | "rating" | "radius">,
+  options?: { query?: string },
+): ArtistCardData[] {
+  let result = artists
+  const query = options?.query?.trim().toLowerCase()
+
+  if (query) {
+    result = result.filter(
+      (artist) =>
+        artist.displayName.toLowerCase().includes(query) ||
+        (artist.area?.toLowerCase().includes(query) ?? false) ||
+        (artist.city?.toLowerCase().includes(query) ?? false) ||
+        artist.categories.some((id) => id.toLowerCase().includes(query)),
+    )
+  }
+
+  if (state.price !== "any") {
+    result = result.filter((artist) =>
+      matchesPriceFilter(Number(artist.startingPrice) || 0, state.price),
+    )
+  }
+
+  if (state.rating !== "any") {
+    result = result.filter((artist) =>
+      matchesRatingFilter(
+        Number(artist.averageRating) || 0,
+        Number(artist.reviewCount) || 0,
+        state.rating,
+      ),
+    )
+  }
+
+  const radiusKm = resolveExploreRadiusKm(state.radius)
+  if (radiusKm != null) {
+    result = result.filter((artist) => {
+      if (artist.distanceKm == null || !(artist.distanceKm > 0)) return true
+      return artist.distanceKm <= radiusKm
     })
   }
 

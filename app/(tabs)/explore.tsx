@@ -34,6 +34,7 @@ import {
   isBusinessType,
 } from "@/data/business-types"
 import type { Salon } from "@/data/types"
+import { salonProfileImageUrl } from "@/data/mocks/salons"
 import { ApiError } from "@/lib/api"
 import {
   countActiveExploreFilters,
@@ -43,6 +44,7 @@ import {
   EXPLORE_RADIUS_FILTERS,
   EXPLORE_RATING_FILTERS,
   EXPLORE_SORT_FILTERS,
+  filterExploreArtists,
   filterExploreSalons,
   sortExploreSalons,
   type ExploreFilterState,
@@ -69,11 +71,17 @@ import {
 } from "@/lib/location-api"
 import {
   getDeviceCoordinates,
+  getDeviceCoordinatesDetailed,
   resolvePlaceFromCoordinates,
 } from "@/lib/device-location"
-import { prefetchHomeArtists } from "@/lib/artists-api"
+import { artistSlugFromCartId, isArtistCartId } from "@/lib/artist-cart"
+import {
+  fetchMapArtists,
+  prefetchHomeArtists,
+  type ArtistCardData,
+} from "@/lib/artists-api"
 import { fetchSalons, getCatalogSnapshot, hydrateCatalogFromStorage, resolveSalonById } from "@/lib/salons-api"
-import { cartServicesSubtotal } from "@/lib/service-pricing"
+import { cartServicesSubtotal, formatRupees } from "@/lib/service-pricing"
 import {
   getPopularSearches,
   getSearchSuggestions,
@@ -140,6 +148,7 @@ export default function ExploreScreen() {
   const [sortOpen, setSortOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
+  const [mapArtistsRaw, setMapArtistsRaw] = useState<ArtistCardData[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const [activeCartSalonId, setActiveCartSalonId] = useState<string | null>(null)
   const [catalog, setCatalog] = useState<Salon[]>([])
@@ -365,6 +374,39 @@ export default function ExploreScreen() {
     return sortExploreSalons(filtered, filters.sort)
   }, [catalog, filters, savedLocation, searchQuery])
 
+  const mapArtists = useMemo(
+    () =>
+      filterExploreArtists(mapArtistsRaw, filters, {
+        query: searchQuery,
+      }),
+    [filters, mapArtistsRaw, searchQuery],
+  )
+
+  const areaMapArtists = useMemo(() => {
+    return mapArtists.filter((artist) => {
+      if (artist.distanceKm == null || !Number.isFinite(artist.distanceKm)) return true
+      return artist.distanceKm <= NEARBY_RADIUS_KM
+    })
+  }, [mapArtists])
+
+  useEffect(() => {
+    if (!mapOpen) return
+    let cancelled = false
+    const controller = new AbortController()
+    void fetchMapArtists({
+      latitude: savedLocation?.latitude,
+      longitude: savedLocation?.longitude,
+      q: searchQuery.trim() || undefined,
+      signal: controller.signal,
+    }).then((artists) => {
+      if (!cancelled) setMapArtistsRaw(artists)
+    })
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [mapOpen, savedLocation?.latitude, savedLocation?.longitude, searchQuery])
+
   const activeFilterCount = countActiveExploreFilters(filters)
   const draftFilterCount = countActiveExploreFilters(draftFilters)
 
@@ -451,6 +493,35 @@ export default function ExploreScreen() {
 
   const cartEntries = useMemo(() => {
     return cart.carts.flatMap((salonCart) => {
+      if (salonCart.kind === "artist" || isArtistCartId(salonCart.salonId)) {
+        const lines = salonCart.serviceIds
+          .map((id) => salonCart.serviceLines?.[id])
+          .filter((line): line is NonNullable<typeof line> => Boolean(line))
+        if (lines.length === 0 && salonCart.serviceIds.length === 0) return []
+        const total = lines.reduce((sum, line) => sum + (Number(line.price) || 0), 0)
+        const preview = lines
+          .map((line) => line.name)
+          .slice(0, 2)
+          .join(", ")
+        const itemCount = salonCart.serviceIds.length
+        if (itemCount === 0) return []
+        return [
+          {
+            salonId: salonCart.salonId,
+            salonName: salonCart.providerName?.trim() || "Solo artist",
+            itemCount,
+            totalLabel: formatRupees(total),
+            imageUrls: salonCart.providerImageUrl ? [salonCart.providerImageUrl] : [],
+            previewLabel: preview || `${itemCount} services`,
+            onPress: () => {
+              setActiveCartSalonId(salonCart.salonId)
+              setCartOpen(true)
+            },
+            onClear: () => cart.clearSalon(salonCart.salonId),
+          },
+        ]
+      }
+
       const salon = resolveSalonById(salonCart.salonId)
       if (!salon) return []
       const services = salon.services.filter((service) =>
@@ -466,10 +537,8 @@ export default function ExploreScreen() {
         salonCart.quantities,
         salonCart.priceOptionIds,
       )
-      const images = [
-        ...services.map((service) => service.imageUrl),
-        ...(selectedPackage ? [selectedPackage.imageUrl] : []),
-      ]
+      const profileImage = salonProfileImageUrl(salon)
+      const images = profileImage ? [profileImage] : []
       const preview = [
         ...services.map((service) => service.name),
         ...(selectedPackage ? [selectedPackage.name] : []),
@@ -682,12 +751,18 @@ export default function ExploreScreen() {
     setNearMeLoading(true)
     setPlacesError(null)
     try {
-      const coords = await getDeviceCoordinates({ promptIfNeeded: true })
-      if (!coords) {
-        setPlacesError("Location permission is required to use current location.")
+      const result = await getDeviceCoordinatesDetailed({ promptIfNeeded: true })
+      if (!result.ok) {
+        if (result.reason === "permission_denied") {
+          setPlacesError("Location permission is required to use current location.")
+        } else if (result.reason === "services_off") {
+          setPlacesError("Turn on location in your phone settings to use current location.")
+        } else {
+          setPlacesError("Could not detect your current location. Try again in a moment.")
+        }
         return
       }
-      const place = await resolvePlaceFromCoordinates(coords)
+      const place = await resolvePlaceFromCoordinates(result.coords)
       await commitLocation({
         label: place.label,
         placeId: place.placeId || undefined,
@@ -998,9 +1073,21 @@ export default function ExploreScreen() {
         visible={cartOpen}
         salonId={activeCartSalonId}
         onClose={() => setCartOpen(false)}
-        onContinue={(salonId) =>
+        onContinue={(salonId) => {
+          const slug = artistSlugFromCartId(salonId)
+          if (slug) {
+            const artistCart = cart.getCart(salonId)
+            router.push({
+              pathname: "/artist/book/[slug]",
+              params: {
+                slug,
+                serviceIds: (artistCart?.serviceIds ?? []).join(","),
+              },
+            })
+            return
+          }
           router.push({ pathname: "/book/[salonId]", params: { salonId } })
-        }
+        }}
       />
 
       <MapOverlay
@@ -1008,11 +1095,16 @@ export default function ExploreScreen() {
         locationLabel={location}
         salons={mapSalons}
         areaSalons={salons}
+        artists={mapArtists}
+        areaArtists={areaMapArtists}
         userLatitude={savedLocation?.latitude}
         userLongitude={savedLocation?.longitude}
         onClose={() => setMapOpen(false)}
         onSelectSalon={(id) => {
           router.push({ pathname: "/salon/[id]", params: { id } })
+        }}
+        onSelectArtist={(slug) => {
+          router.push({ pathname: "/artist/[slug]", params: { slug } })
         }}
       />
 

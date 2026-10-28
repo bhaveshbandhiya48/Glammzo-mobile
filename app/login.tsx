@@ -14,10 +14,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { NameOnboarding } from "@/components/auth/NameOnboarding"
+import { OtpInput } from "@/components/auth/OtpInput"
 import { Logo } from "@/components/brand/Logo"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
 import { ApiError } from "@/lib/api"
 import { requestOtp, verifyOtp } from "@/lib/auth-api"
@@ -31,6 +33,7 @@ type Step = "phone" | "otp" | "name"
 export default function LoginScreen() {
   const router = useRouter()
   const favorites = useFavorites()
+  const artistFavorites = useArtistFavorites()
   const { next } = useLocalSearchParams<{ next?: string }>()
   const [step, setStep] = useState<Step>("phone")
   const [phone, setPhone] = useState("")
@@ -65,6 +68,7 @@ export default function LoginScreen() {
     requestAnimationFrame(() => {
       void registerPushTokenWithServer().catch(() => undefined)
       void favorites.refresh().catch(() => undefined)
+      void artistFavorites.refresh().catch(() => undefined)
     })
   }
 
@@ -299,15 +303,10 @@ export default function LoginScreen() {
                 />
               </View>
             ) : (
-              <TextInput
-                style={styles.otpInput}
-                keyboardType="number-pad"
-                placeholder="6-digit OTP"
-                placeholderTextColor={colors.textSubtle}
+              <OtpInput
                 value={otp}
-                onChangeText={setOtp}
-                maxLength={6}
-                textContentType="oneTimeCode"
+                onChange={setOtp}
+                length={6}
                 autoFocus
                 accessibilityLabel="One-time password"
               />
@@ -461,18 +460,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: typography.bodyStrong.fontFamily,
     color: colors.text,
-  },
-  otpInput: {
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    fontSize: 18,
-    fontFamily: typography.bodyStrong.fontFamily,
-    color: colors.text,
-    textAlign: "center",
   },
   actions: {
     marginTop: spacing.lg,

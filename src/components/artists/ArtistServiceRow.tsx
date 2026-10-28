@@ -44,6 +44,12 @@ export function ArtistServiceRow({
     pricingLocation === "studio" &&
     homePrice != null &&
     homePrice !== studioPrice
+  const offerPrice =
+    pricingLocation === "studio" &&
+    service.offerPrice != null &&
+    service.offerPrice < studioPrice
+      ? service.offerPrice
+      : null
 
   return (
     <View style={[styles.row, selected && styles.rowSelected, isLast && styles.rowLast]}>
@@ -75,16 +81,33 @@ export function ArtistServiceRow({
               <Text variant="caption" muted>
                 ·
               </Text>
-              <Text variant="caption" color={colors.text}>
-                {formatRupees(unitPrice)}
-                {pricingLocation === "client_home" ? " at your place" : ""}
-              </Text>
+              {offerPrice != null ? (
+                <>
+                  <Text variant="caption" muted style={styles.strike}>
+                    {formatRupees(unitPrice)}
+                  </Text>
+                  <Text variant="caption" color={colors.coral}>
+                    {formatRupees(offerPrice)}
+                  </Text>
+                </>
+              ) : (
+                <Text variant="caption" color={colors.text}>
+                  {formatRupees(unitPrice)}
+                  {pricingLocation === "client_home" ? " at your place" : ""}
+                </Text>
+              )}
               {showHomeHint ? (
                 <Text variant="caption" muted>
                   · {formatRupees(homePrice!)} if artist visits you
                 </Text>
               ) : null}
             </View>
+            {offerPrice != null && service.offerDealLabel ? (
+              <Text variant="caption" color={colors.coral}>
+                {service.offerDealLabel}
+                {service.offerTitle ? ` · ${service.offerTitle}` : ""}
+              </Text>
+            ) : null}
           </View>
         </Pressable>
 
@@ -154,5 +177,8 @@ const styles = StyleSheet.create({
   },
   addBtnLabel: {
     fontWeight: "600",
+  },
+  strike: {
+    textDecorationLine: "line-through",
   },
 })

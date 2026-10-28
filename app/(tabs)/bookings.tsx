@@ -5,6 +5,7 @@ import { formatRupees } from "@/lib/service-pricing"
 
 import { BookingTimeline } from "@/components/bookings/BookingTimeline"
 import { RefundPreview } from "@/components/bookings/RefundPreview"
+import { WaitlistStrip } from "@/components/bookings/WaitlistStrip"
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
@@ -475,6 +476,7 @@ export default function BookingsScreen() {
           <Text variant="caption">{toast}</Text>
         </View>
       ) : null}
+      <WaitlistStrip />
 
       <View style={styles.filtersWrap}>
         <ScrollView

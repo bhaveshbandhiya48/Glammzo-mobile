@@ -13,6 +13,7 @@ import {
 import { BookingConfirmSheet } from "@/components/book/BookingConfirmSheet"
 import { BookingDateSheet } from "@/components/book/BookingDateSheet"
 import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
+import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
 import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import {
   PromoSuccessCelebration,
@@ -989,6 +990,14 @@ export default function BookingScreen() {
             }
             onPress={() => setTimeSheetOpen(true)}
           />
+          {selectedDate && !slotsLoading && !noStaffForServices && hasSelection && slots.length === 0 && salonId ? (
+            <WaitlistPrompt
+              kind="salon"
+              provider={salonId}
+              date={selectedDate}
+              serviceIds={cart.getCart(salonId)?.serviceIds ?? []}
+            />
+          ) : null}
           <Input
             label="Notes"
             value={notes}

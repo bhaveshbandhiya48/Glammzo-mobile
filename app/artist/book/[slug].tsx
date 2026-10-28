@@ -14,6 +14,7 @@ import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
 import { HomeVisitMapPicker } from "@/components/artists/HomeVisitMapPicker"
 import { BookingDateSheet } from "@/components/book/BookingDateSheet"
 import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
+import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
 import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
@@ -900,6 +901,9 @@ export default function ArtistBookScreen() {
                 }
                 onPress={() => setTimeSheetOpen(true)}
               />
+              {date && !slotsLoading && !homeIncompatible && !slotMessage && timeOptions.length === 0 ? (
+                <WaitlistPrompt kind="artist" provider={artist.slug} date={date} serviceIds={selectedIds} />
+              ) : null}
             </View>
 
             <View style={styles.card}>

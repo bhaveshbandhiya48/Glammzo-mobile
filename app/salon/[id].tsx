@@ -13,6 +13,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type ScrollViewInstance,
 } from "react-native"
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -168,8 +169,8 @@ export default function SalonDetailScreen() {
   const [galleryIndex, setGalleryIndex] = useState(0)
   const [glammzoOffers, setGlammzoOffers] = useState<GlammzoOfferCard[]>([])
   const [genderAudience, setGenderAudience] = useState<ServiceGenderAudience>("men")
-  const sliderRef = useRef<ScrollView>(null)
-  const pageScrollRef = useRef<ScrollView>(null)
+  const sliderRef = useRef<ScrollViewInstance>(null)
+  const pageScrollRef = useRef<ScrollViewInstance>(null)
   const serviceCategoryOffsets = useRef<Record<string, number>>({})
   const serviceCategoryBaseOffset = useRef(0)
   const serviceListOffsets = useRef<Record<string, number>>({})

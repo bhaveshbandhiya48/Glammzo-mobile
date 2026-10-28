@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  type TextInputInstance,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -37,7 +38,7 @@ export function SearchSuggestionsPanel({
   onClose,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const inputRef = useRef<TextInput>(null)
+  const inputRef = useRef<TextInputInstance>(null)
   const [draft, setDraft] = useState(initialQuery)
 
   useEffect(() => {

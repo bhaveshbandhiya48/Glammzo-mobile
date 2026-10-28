@@ -409,7 +409,7 @@ export default function ArtistsScreen() {
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator color={colors.coral} style={{ marginVertical: spacing.lg }} />
-          ) : null
+          ) : undefined
         }
         onEndReached={() => void loadMore()}
         onEndReachedThreshold={0.6}

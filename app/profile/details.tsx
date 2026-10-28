@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type ScrollViewInstance,
 } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -37,7 +38,7 @@ const CONFIRM_WORD = "DELETE"
 export default function ProfileDetailsScreen() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollViewInstance>(null)
   const addressFocusedRef = useRef(false)
   const [profile, setProfile] = useState<ConsumerProfile>({
     name: "",
@@ -288,7 +289,7 @@ export default function ProfileDetailsScreen() {
                 label="Delete account"
                 loading={deleting}
                 disabled={deleteConfirm.trim().toUpperCase() !== CONFIRM_WORD}
-                style={StyleSheet.flatten([styles.modalBtn, styles.deleteConfirmBtn])}
+                style={{ ...styles.modalBtn, ...styles.deleteConfirmBtn }}
                 onPress={async () => {
                   if (deleteConfirm.trim().toUpperCase() !== CONFIRM_WORD) return
                   setDeleting(true)

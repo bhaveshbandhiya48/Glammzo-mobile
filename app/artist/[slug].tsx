@@ -12,6 +12,7 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  type ScrollViewInstance,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -66,7 +67,7 @@ export default function ArtistDetailScreen() {
   const [loading, setLoading] = useState(true)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [detailService, setDetailService] = useState<PublicArtistService | null>(null)
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollViewInstance>(null)
   const portfolioY = useRef(0)
   const reviewsY = useRef(0)
   const didFocusPortfolio = useRef(false)

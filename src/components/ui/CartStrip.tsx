@@ -8,6 +8,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type ScrollViewInstance,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -114,7 +115,7 @@ export function CartStrip({ entries, bottomOffset = 0 }: Props) {
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const [page, setPage] = useState(0)
-  const sliderRef = useRef<ScrollView>(null)
+  const sliderRef = useRef<ScrollViewInstance>(null)
   const sidePad = spacing.lg
   const gap = spacing.sm
   const slideWidth =

@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type ScrollViewInstance,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
@@ -35,7 +36,7 @@ const STAND_OUT = [
 
 export default function ReviewScreen() {
   const router = useRouter()
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollViewInstance>(null)
   const params = useLocalSearchParams<{
     appointmentId?: string | string[]
     salonName?: string | string[]

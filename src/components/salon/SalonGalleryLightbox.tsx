@@ -10,7 +10,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  type ViewToken,
+  type ListViewToken as ViewToken,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 

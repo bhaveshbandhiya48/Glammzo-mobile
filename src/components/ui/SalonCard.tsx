@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   View,
+  type ScrollViewInstance,
 } from "react-native"
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg"
 
@@ -58,7 +59,7 @@ function CardImageSlider({
   /** When false, show cover only — parent carousel owns horizontal swipes. */
   swipeEnabled?: boolean
 }) {
-  const scrollRef = useRef<ScrollView>(null)
+  const scrollRef = useRef<ScrollViewInstance>(null)
   const [width, setWidth] = useState(0)
   const [height, setHeight] = useState(0)
   const [index, setIndex] = useState(0)

@@ -5,6 +5,7 @@ import {
   TextInput,
   View,
   type TextInputProps,
+  type TextInputInstance,
 } from "react-native"
 
 import { Text } from "@/components/ui/Text"
@@ -27,7 +28,7 @@ export function OtpInput({
   accessibilityLabel = "One-time password",
   textContentType = "oneTimeCode",
 }: Props) {
-  const inputRef = useRef<TextInput>(null)
+  const inputRef = useRef<TextInputInstance>(null)
   const digits = value.replace(/\D/g, "").slice(0, length)
   const activeIndex = Math.min(digits.length, length - 1)
 

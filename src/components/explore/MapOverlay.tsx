@@ -13,6 +13,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ScrollViewInstance,
 } from "react-native"
 import MapView, {
   Marker,
@@ -455,7 +456,7 @@ export function MapOverlay({
 }: Props) {
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView | null>(null)
-  const carouselRef = useRef<ScrollView | null>(null)
+  const carouselRef = useRef<ScrollViewInstance | null>(null)
   const programmaticCameraUntilRef = useRef(0)
   const ignoreScrollUntilRef = useRef(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)

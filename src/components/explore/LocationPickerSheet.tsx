@@ -14,6 +14,7 @@ import {
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type TextInputInstance,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
@@ -64,7 +65,7 @@ export function LocationPickerSheet({
   onPickPrediction,
 }: Props) {
   const insets = useSafeAreaInsets()
-  const inputRef = useRef<TextInput>(null)
+  const inputRef = useRef<TextInputInstance>(null)
   const [searchFocused, setSearchFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const dragY = useRef(new Animated.Value(0)).current

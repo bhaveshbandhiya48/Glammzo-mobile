@@ -7,6 +7,7 @@ import {
   View,
   type StyleProp,
   type ViewStyle,
+  type ScrollViewInstance,
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
@@ -22,7 +23,7 @@ type Props = {
   /** Lift content above the keyboard. */
   keyboardAvoiding?: boolean
   keyboardVerticalOffset?: number
-  scrollRef?: RefObject<ScrollView | null>
+  scrollRef?: RefObject<ScrollViewInstance | null>
 }
 
 export function Screen({

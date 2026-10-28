@@ -38,7 +38,7 @@ export function StickyCta({
       ]}
     >
       {error ? (
-        <Text variant="caption" color={colors.coral} style={styles.error}>
+        <Text variant="caption" color={colors.primary} style={styles.error}>
           {error}
         </Text>
       ) : null}

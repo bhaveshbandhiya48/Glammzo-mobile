@@ -28,10 +28,10 @@ type Props = {
 }
 
 const CONFETTI_COLORS = [
-  colors.coral,
-  "#F9A89A",
+  colors.primary,
+  "#BDBDBD",
   colors.sand,
-  "#E8D5C4",
+  "#D4D4D4",
   "#FFD166",
   "#06D6A0",
   "#4ECDC4",
@@ -202,7 +202,7 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
       <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <ConfettiBurst key={burstKey} active={visible} />
 
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Dismiss" />
+        <Pressable accessibilityRole="button" style={styles.backdrop} onPress={onClose} accessibilityLabel="Dismiss" />
 
         <Animated.View
           style={[
@@ -214,10 +214,10 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
           ]}
         >
           <View style={styles.badge}>
-            <Icon name="sparkles" size={28} color={colors.coral} />
+            <Icon name="sparkles" size={28} color={colors.primary} />
           </View>
 
-          <Text variant="label" color={colors.coral} style={styles.kicker}>
+          <Text variant="label" color={colors.primary} style={styles.kicker}>
             Congratulations
           </Text>
           <Text variant="title" style={styles.headline}>
@@ -229,7 +229,7 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
 
           <View style={styles.offerBox}>
             <View style={styles.offerRow}>
-              <Icon name="pricetag" size={18} color={colors.coral} />
+              <Icon name="pricetag" size={18} color={colors.primary} />
               <Text variant="bodyStrong" style={styles.offerCode}>
                 {code}
               </Text>
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF1EE",
+    backgroundColor: "#F1F1F1",
     marginBottom: spacing.lg,
   },
   kicker: {

@@ -111,7 +111,7 @@ function CardImageSlider({
 
   if (!hasMultiple) {
     return (
-      <Pressable onPress={onPress} style={styles.imageFill}>
+      <Pressable accessibilityRole="button" onPress={onPress} style={styles.imageFill}>
         <Image
           source={{ uri: images[0] }}
           style={styles.image}
@@ -155,6 +155,7 @@ function CardImageSlider({
       >
         {loopSlides.map((uri, i) => (
           <Pressable
+            accessibilityRole="button"
             key={`${uri}-loop-${i}`}
             onPress={handlePress}
             style={{ width: width || undefined, flexGrow: width ? 0 : 1 }}
@@ -210,7 +211,7 @@ function FavoriteButton({ salonId }: { salonId: string }) {
       <Icon
         name={favorited ? "heart" : "heart-outline"}
         size={16}
-        color={favorited ? colors.coral : colors.text}
+        color={favorited ? colors.primary : colors.text}
       />
     </Pressable>
   )
@@ -406,7 +407,7 @@ const styles = StyleSheet.create({
   cardActive: {
     borderRadius: radii.lg,
     borderWidth: 2,
-    borderColor: colors.coral,
+    borderColor: colors.primary,
   },
   pressed: {
     opacity: 0.94,
@@ -518,10 +519,10 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   offerBadge: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.sm,

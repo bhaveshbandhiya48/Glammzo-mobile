@@ -108,7 +108,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
               />
             ) : (
               <View style={[styles.salonThumb, styles.artistFallback]}>
-                <Text variant="heading" color={colors.coral}>
+                <Text variant="heading" color={colors.primary}>
                   {(salonCart.providerName ?? "A").slice(0, 1).toUpperCase()}
                 </Text>
               </View>
@@ -131,7 +131,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
           {artistLines.map(({ id, line }) => (
             <View key={id} style={styles.itemRow}>
               <View style={[styles.itemThumb, styles.artistFallback]}>
-                <Icon name="sparkles-outline" size={18} color={colors.coral} />
+                <Icon name="sparkles-outline" size={18} color={colors.primary} />
               </View>
               <View style={styles.itemCopy}>
                 <Text variant="bodyStrong" numberOfLines={2}>
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   artistFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8EDE8",
+    backgroundColor: "#F2F2F2",
   },
   itemRow: {
     flexDirection: "row",

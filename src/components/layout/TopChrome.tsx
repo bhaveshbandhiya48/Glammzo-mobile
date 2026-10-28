@@ -46,7 +46,7 @@ export function TopChrome({
             Book near
           </Text>
           <View style={styles.locationLine}>
-            <Icon name="location" size={16} color={colors.coral} />
+            <Icon name="location" size={16} color={colors.primary} />
             <Text variant="bodyStrong" numberOfLines={1} style={styles.locationText}>
               {locationLabel}
             </Text>
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 4,

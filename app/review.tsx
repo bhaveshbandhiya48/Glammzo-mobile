@@ -177,7 +177,7 @@ export default function ReviewScreen() {
                   <Icon
                     name={filled ? "star" : "star-outline"}
                     size={32}
-                    color={filled ? colors.coral : colors.textSubtle}
+                    color={filled ? colors.primary : colors.textSubtle}
                   />
                 </Pressable>
               )
@@ -190,13 +190,14 @@ export default function ReviewScreen() {
           <View style={styles.chips}>
             {STAND_OUT.map((item) => (
               <Pressable
+                accessibilityRole="button"
                 key={item}
                 style={[styles.chip, chip === item && styles.chipActive]}
                 onPress={() => setChip(item)}
               >
                 <Text
                   variant="caption"
-                  color={chip === item ? colors.coral : colors.text}
+                  color={chip === item ? colors.primary : colors.text}
                 >
                   {item}
                 </Text>
@@ -245,7 +246,7 @@ export default function ReviewScreen() {
           </View>
 
           {error ? (
-            <Text variant="caption" color={colors.coral} style={styles.gap}>
+            <Text variant="caption" color={colors.primary} style={styles.gap}>
               {error}
             </Text>
           ) : null}
@@ -306,8 +307,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   chipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   staffCard: {
     marginTop: spacing.xxl,
@@ -321,8 +322,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   staffCardActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   checkbox: {
     width: 22,
@@ -336,8 +337,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   checkboxChecked: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   staffCopy: {
     flex: 1,

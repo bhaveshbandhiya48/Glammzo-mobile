@@ -136,7 +136,7 @@ export function ArtistOffersStrip({
                   {appliesLabel(offer, services)}
                   {till ? ` · ${till}` : ""}
                 </Text>
-                <Text variant="caption" color={colors.coral} style={styles.how} numberOfLines={2}>
+                <Text variant="caption" color={colors.primary} style={styles.how} numberOfLines={2}>
                   {how}
                 </Text>
                 {offer.code ? (
@@ -151,7 +151,7 @@ export function ArtistOffersStrip({
           const offer = item.offer
           return (
             <View key={item.key} style={[styles.card, styles.cardGlammzo, { width: cardWidth }]}>
-              <Text variant="caption" color={colors.coral}>
+              <Text variant="caption" color={colors.primary}>
                 {offer.eyebrow || "Glammzo offer"}
               </Text>
               <Text variant="bodyStrong" numberOfLines={2}>
@@ -163,7 +163,7 @@ export function ArtistOffersStrip({
                   {offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}
                 </Text>
               ) : null}
-              <Text variant="caption" color={colors.coral} style={styles.how} numberOfLines={2}>
+              <Text variant="caption" color={colors.primary} style={styles.how} numberOfLines={2}>
                 {offer.promoCode
                   ? `Enter code ${offer.promoCode} when you book. Cashback is added after your visit.`
                   : "Cashback is added to your wallet after your completed visit."}
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg,
   },
   card: {
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     borderRadius: radii.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(232, 120, 90, 0.28)",
@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dealBadge: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.sm,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   dotActive: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     width: 16,
   },
 })

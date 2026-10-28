@@ -213,7 +213,7 @@ export function BottomSheet({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.root}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable accessibilityRole="button" style={styles.backdrop} onPress={onClose} />
         <Animated.View
           style={[
             styles.sheet,

@@ -224,7 +224,7 @@ export default function ArtistDetailScreen() {
           <Icon
             name={favorited ? "heart" : "heart-outline"}
             size={22}
-            color={favorited ? colors.coral : colors.text}
+            color={favorited ? colors.primary : colors.text}
           />
         </Pressable>
       </View>
@@ -237,7 +237,7 @@ export default function ArtistDetailScreen() {
       <View style={styles.root}>
         {header}
         <View style={styles.center}>
-          <ActivityIndicator color={colors.coral} />
+          <ActivityIndicator color={colors.primary} />
         </View>
       </View>
     )
@@ -282,7 +282,7 @@ export default function ArtistDetailScreen() {
               <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
             ) : (
               <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text variant="title" color={colors.coral}>
+                <Text variant="title" color={colors.primary}>
                   {artist.displayName.slice(0, 1).toUpperCase()}
                 </Text>
               </View>
@@ -313,7 +313,7 @@ export default function ArtistDetailScreen() {
               accessibilityLabel={`${averageRating.toFixed(1)} out of 5, ${reviewCount} reviews. Jump to reviews.`}
               style={({ pressed }) => [styles.ratingRow, pressed && { opacity: 0.7 }]}
             >
-              <Text variant="bodyStrong" color={colors.coral}>
+              <Text variant="bodyStrong" color={colors.primary}>
                 {averageRating.toFixed(1)}/5
               </Text>
               <Text variant="caption" muted>
@@ -388,11 +388,11 @@ export default function ArtistDetailScreen() {
                   ]}
                 >
                   {portfolioExtra > 0 ? (
-                    <Text variant="caption" color={colors.coral}>
+                    <Text variant="caption" color={colors.primary}>
                       +{portfolioExtra}
                     </Text>
                   ) : null}
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     View all
                   </Text>
                 </Pressable>
@@ -503,11 +503,11 @@ export default function ArtistDetailScreen() {
                   <Text variant="caption" muted style={{ textDecorationLine: "line-through" }}>
                     {formatRupees(detailService.price)}
                   </Text>
-                  <Text variant="title" color={colors.coral}>
+                  <Text variant="title" color={colors.primary}>
                     {formatRupees(detailService.offerPrice)}
                   </Text>
                   {detailService.offerDealLabel ? (
-                    <Text variant="caption" color={colors.coral} style={{ marginTop: 4 }}>
+                    <Text variant="caption" color={colors.primary} style={{ marginTop: 4 }}>
                       {detailService.offerDealLabel}
                       {detailService.offerTitle ? ` · ${detailService.offerTitle}` : ""}
                     </Text>
@@ -694,7 +694,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   ratingPill: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     borderRadius: radii.sm,
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -709,7 +709,7 @@ const styles = StyleSheet.create({
   portfolioViewAll: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8EDE8",
+    backgroundColor: "#F2F2F2",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(232, 120, 90, 0.35)",
     gap: 2,

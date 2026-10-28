@@ -15,8 +15,8 @@ function TabLabel({ label, focused }: { label: string; focused: boolean }) {
       style={{
         fontSize: 10,
         letterSpacing: 0.2,
-        fontFamily: focused ? "Sora_600SemiBold" : "Inter_500Medium",
-        color: focused ? colors.coral : colors.textSubtle,
+        fontFamily: focused ? "Geist_600SemiBold" : "Geist_500Medium",
+        color: focused ? colors.primary : colors.textSubtle,
         marginTop: 4,
       }}
     >
@@ -33,7 +33,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.coral,
+        tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textSubtle,
         tabBarShowLabel: true,
         tabBarStyle: {

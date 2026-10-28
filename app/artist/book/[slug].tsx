@@ -597,13 +597,13 @@ export default function ArtistBookScreen() {
     navigation.setOptions({
       headerLeft: () => (
         <Pressable
+          accessibilityRole="button"
           onPress={() => {
             if (step > 0) setStep((prev) => prev - 1)
             else if (router.canGoBack()) router.back()
             else router.replace("/(tabs)/explore" as Href)
           }}
           hitSlop={8}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
           style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }}
         >
@@ -616,7 +616,7 @@ export default function ArtistBookScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.coral} />
+        <ActivityIndicator color={colors.primary} />
       </View>
     )
   }
@@ -695,7 +695,7 @@ export default function ArtistBookScreen() {
                   />
                 ) : (
                   <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                    <Text variant="heading" color={colors.coral}>
+                    <Text variant="heading" color={colors.primary}>
                       {artist.displayName.slice(0, 1).toUpperCase()}
                     </Text>
                   </View>
@@ -722,6 +722,7 @@ export default function ArtistBookScreen() {
                   Services
                 </Text>
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() =>
                     router.push({
                       pathname: "/artist/[slug]",
@@ -729,7 +730,7 @@ export default function ArtistBookScreen() {
                     } as Href)
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     Edit
                   </Text>
                 </Pressable>
@@ -781,7 +782,7 @@ export default function ArtistBookScreen() {
                     <Icon
                       name="storefront-outline"
                       size={22}
-                      color={locationType === "studio" ? colors.coral : colors.textMuted}
+                      color={locationType === "studio" ? colors.primary : colors.textMuted}
                     />
                     <Text variant="bodyStrong" style={styles.whereCardTitle}>
                       Artist&apos;s studio
@@ -806,7 +807,7 @@ export default function ArtistBookScreen() {
                       name="home-outline"
                       size={22}
                       color={
-                        locationType === "client_home" ? colors.coral : colors.textMuted
+                        locationType === "client_home" ? colors.primary : colors.textMuted
                       }
                     />
                     <Text variant="bodyStrong" style={styles.whereCardTitle}>
@@ -1038,7 +1039,7 @@ export default function ArtistBookScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <Pressable onPress={clearPromo} hitSlop={8}>
+                  <Pressable accessibilityRole="button" onPress={clearPromo} hitSlop={8}>
                     <Text variant="caption" color={colors.destructive}>
                       Remove
                     </Text>
@@ -1054,6 +1055,7 @@ export default function ArtistBookScreen() {
                         setPromoError(null)
                       }}
                       placeholder="Enter code"
+                      accessibilityLabel="Promo code"
                       autoCapitalize="characters"
                     />
                   </View>
@@ -1094,6 +1096,7 @@ export default function ArtistBookScreen() {
               </Text>
 
               <Pressable
+                accessibilityRole="button"
                 style={[
                   styles.rewardRow,
                   useWallet && walletBalance > 0 && styles.rewardRowActive,
@@ -1106,7 +1109,7 @@ export default function ArtistBookScreen() {
                 }}
               >
                 <View style={styles.rewardIcon}>
-                  <Icon name="wallet-outline" size={20} color={colors.coral} />
+                  <Icon name="wallet-outline" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.rewardCopy}>
                   <Text variant="bodyStrong">Wallet credit</Text>
@@ -1130,7 +1133,7 @@ export default function ArtistBookScreen() {
                         ? colors.textSubtle
                         : useWallet
                           ? colors.primaryFg
-                          : colors.coral
+                          : colors.primary
                     }
                   >
                     {walletBalance <= 0 ? "Unavailable" : useWallet ? "Applied" : "Apply"}
@@ -1139,6 +1142,7 @@ export default function ArtistBookScreen() {
               </Pressable>
 
               <Pressable
+                accessibilityRole="button"
                 style={[
                   styles.rewardRow,
                   useLoyalty && loyaltyAvailable && styles.rewardRowActive,
@@ -1151,7 +1155,7 @@ export default function ArtistBookScreen() {
                 }}
               >
                 <View style={styles.rewardIcon}>
-                  <Icon name="ribbon-outline" size={20} color={colors.coral} />
+                  <Icon name="ribbon-outline" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.rewardCopy}>
                   <Text variant="bodyStrong">Loyalty reward</Text>
@@ -1175,7 +1179,7 @@ export default function ArtistBookScreen() {
                         ? colors.textSubtle
                         : useLoyalty
                           ? colors.primaryFg
-                          : colors.coral
+                          : colors.primary
                     }
                   >
                     {!loyaltyAvailable ? "Locked" : useLoyalty ? "Applied" : "Apply"}
@@ -1430,8 +1434,8 @@ const styles = StyleSheet.create({
     minHeight: 104,
   },
   whereCardOn: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   whereCardTitle: { textAlign: "center" },
   whereCardSub: { textAlign: "center" },
@@ -1523,8 +1527,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   rewardRowActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   rewardDisabled: {
     opacity: 0.55,
@@ -1533,7 +1537,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#F1F1F1",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1547,12 +1551,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.coral,
+    borderColor: colors.primary,
     backgroundColor: colors.surface,
   },
   applyChipOn: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   applyChipDisabled: {
     borderColor: colors.border,

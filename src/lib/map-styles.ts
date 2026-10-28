@@ -3,9 +3,9 @@
  * Hides POI clutter so price pins stay readable — similar to Airbnb/explore maps.
  */
 export const GLAMMZO_MAP_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#f5f2ec" }] },
+  { elementType: "geometry", stylers: [{ color: "#F2F2F2" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f2ec" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#F2F2F2" }] },
   {
     featureType: "administrative",
     elementType: "geometry.stroke",

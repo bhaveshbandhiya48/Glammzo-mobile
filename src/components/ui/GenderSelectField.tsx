@@ -93,6 +93,7 @@ export function GenderSelectField({
             const active = value === option
             return (
               <Pressable
+                accessibilityRole="button"
                 key={option}
                 onPress={() => {
                   onChange(option)
@@ -102,12 +103,12 @@ export function GenderSelectField({
               >
                 <Text
                   variant="bodyStrong"
-                  color={active ? colors.coral : colors.text}
+                  color={active ? colors.primary : colors.text}
                 >
                   {genderLabel(option)}
                 </Text>
                 {active ? (
-                  <Icon name="checkmark" size={18} color={colors.coral} />
+                  <Icon name="checkmark" size={18} color={colors.primary} />
                 ) : null}
               </Pressable>
             )
@@ -164,7 +165,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   rowActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
 })

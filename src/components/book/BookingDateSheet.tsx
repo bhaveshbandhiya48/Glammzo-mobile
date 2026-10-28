@@ -37,6 +37,7 @@ export function BookingDateSheet({
             const active = option.date === value && !option.disabled
             return (
               <Pressable
+                accessibilityRole="button"
                 key={option.date}
                 disabled={option.disabled}
                 onPress={() => {
@@ -56,7 +57,7 @@ export function BookingDateSheet({
                     option.disabled
                       ? colors.textSubtle
                       : active
-                        ? colors.coral
+                        ? colors.primary
                         : colors.text
                   }
                 >
@@ -99,8 +100,8 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   rowActive: {
-    borderColor: colors.coral,
-    backgroundColor: `${colors.coral}12`,
+    borderColor: colors.primary,
+    backgroundColor: `${colors.primary}12`,
   },
   rowDisabled: {
     opacity: 0.45,

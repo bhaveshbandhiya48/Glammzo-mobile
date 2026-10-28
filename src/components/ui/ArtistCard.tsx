@@ -172,10 +172,10 @@ export function ArtistCard({ artist, categoryLabel: _categoryLabel, onPress, com
           </View>
         ) : (
           <View style={styles.cta}>
-            <Text variant="bodyStrong" color={colors.coral}>
+            <Text variant="bodyStrong" color={colors.primary}>
               View profile
             </Text>
-            <Icon name="chevron-forward" size={16} color={colors.coral} />
+            <Icon name="chevron-forward" size={16} color={colors.primary} />
           </View>
         )}
       </View>
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#C9B8A8",
+    backgroundColor: "#BDBDBD",
   },
   initials: {
     fontSize: 16,
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   ratingPill: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     borderRadius: radii.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   offerBadge: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.sm,

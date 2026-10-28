@@ -266,9 +266,9 @@ export function HomeVisitMapPicker({
             ]}
           >
             {busy ? (
-              <ActivityIndicator size="small" color={colors.coral} />
+              <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Icon name="locate" size={20} color={colors.coral} />
+              <Icon name="locate" size={20} color={colors.primary} />
             )}
           </Pressable>
           {mode === "inline" ? (
@@ -313,11 +313,11 @@ export function HomeVisitMapPicker({
         accessibilityRole="button"
       >
         {busy ? (
-          <ActivityIndicator size="small" color={colors.coral} />
+          <ActivityIndicator size="small" color={colors.primary} />
         ) : (
-          <Icon name="locate" size={18} color={colors.coral} />
+          <Icon name="locate" size={18} color={colors.primary} />
         )}
-        <Text variant="bodyStrong" color={colors.coral}>
+        <Text variant="bodyStrong" color={colors.primary}>
           Use my current location
         </Text>
       </Pressable>
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 3,
@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 12,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: colors.coral,
+    borderTopColor: colors.primary,
   },
   pinGround: {
     position: "absolute",

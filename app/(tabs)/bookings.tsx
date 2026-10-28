@@ -94,9 +94,9 @@ function KindPill({ artist }: { artist: boolean }) {
       <Icon
         name={artist ? "sparkles-outline" : "storefront-outline"}
         size={12}
-        color={artist ? colors.coral : colors.textMuted}
+        color={artist ? colors.primary : colors.textMuted}
       />
-      <Text variant="caption" color={artist ? colors.coral : colors.textMuted}>
+      <Text variant="caption" color={artist ? colors.primary : colors.textMuted}>
         {artist ? "Solo artist" : "Salon"}
       </Text>
     </View>
@@ -157,6 +157,7 @@ function BookingCard({
 
   return (
     <Pressable
+      accessibilityRole="button"
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
       onPress={onPress}
     >
@@ -181,7 +182,7 @@ function BookingCard({
         <View style={styles.whenBlock}>
           <View style={styles.whenMain}>
             {relative ? (
-              <Text variant="caption" color={colors.coral} style={styles.relative}>
+              <Text variant="caption" color={colors.primary} style={styles.relative}>
                 {relative}
               </Text>
             ) : null}
@@ -441,13 +442,14 @@ export default function BookingsScreen() {
             const active = filter === item
             return (
               <Pressable
+                accessibilityRole="button"
                 key={item}
                 style={[styles.chip, active && styles.chipActive]}
                 onPress={() => setFilter(item)}
               >
                 <Text
                   variant="caption"
-                  color={active ? colors.coral : colors.text}
+                  color={active ? colors.primary : colors.text}
                   style={active ? styles.chipLabelActive : undefined}
                 >
                   {FILTER_LABELS[item]}
@@ -455,7 +457,7 @@ export default function BookingsScreen() {
                 <View style={[styles.countPill, active && styles.countPillActive]}>
                   <Text
                     variant="caption"
-                    color={active ? colors.coral : colors.textMuted}
+                    color={active ? colors.primary : colors.textMuted}
                     style={styles.countText}
                   >
                     {counts[item]}
@@ -865,11 +867,12 @@ export default function BookingsScreen() {
           {cancelReasonsFor(selected && isArtistBooking(selected) ? "artist" : "salon").map(
             (reason) => (
               <Pressable
+                accessibilityRole="button"
                 key={reason.id}
                 style={[styles.reasonRow, cancelReason === reason.id && styles.chipActive]}
                 onPress={() => setCancelReason(reason.id)}
               >
-                <Text color={cancelReason === reason.id ? colors.coral : colors.text}>
+                <Text color={cancelReason === reason.id ? colors.primary : colors.text}>
                   {reason.label}
                 </Text>
               </Pressable>
@@ -953,7 +956,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     padding: spacing.md,
     borderRadius: radii.md,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
   },
@@ -987,11 +990,11 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   chipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   chipLabelActive: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
   },
   countPill: {
     minWidth: 20,
@@ -1001,7 +1004,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   countPillActive: {
-    backgroundColor: "#FFE8E3",
+    backgroundColor: "#F1F1F1",
   },
   countText: {
     fontSize: 11,
@@ -1065,7 +1068,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   relative: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
   },
   staffChip: {
     flexDirection: "row",
@@ -1087,7 +1090,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   kindPillArtist: {
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   badge: {
     flexDirection: "row",
@@ -1122,7 +1125,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   ratingPill: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     borderRadius: radii.sm,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -1239,9 +1242,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.lg,
     borderRadius: radii.lg,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#FFD5CE",
+    borderColor: "#D4D4D4",
   },
   payAmount: {
     fontSize: 24,

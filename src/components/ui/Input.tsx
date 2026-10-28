@@ -20,6 +20,8 @@ export function Input({ label, hint, error, style, ...rest }: Props) {
         </Text>
       ) : null}
       <TextInput
+        accessibilityLabel={rest.accessibilityLabel ?? label?.replace(/\s*\(required\)$/i, "")}
+        accessibilityHint={showError ? error ?? undefined : hint}
         placeholderTextColor={colors.textSubtle}
         style={[styles.input, showError && styles.inputError, style]}
         {...rest}
@@ -43,8 +45,8 @@ const styles = StyleSheet.create({
   },
   input: {
     minHeight: 50,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     paddingHorizontal: spacing.lg,
@@ -54,5 +56,6 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: colors.destructive,
+    borderWidth: 1.5,
   },
 })

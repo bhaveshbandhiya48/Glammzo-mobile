@@ -241,7 +241,7 @@ export default function RescheduleScreen() {
       </View>
 
       {error ? (
-        <Text variant="caption" color={colors.coral} style={styles.gap}>
+        <Text variant="caption" color={colors.primary} style={styles.gap}>
           {error}
         </Text>
       ) : null}

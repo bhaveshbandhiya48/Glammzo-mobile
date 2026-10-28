@@ -686,11 +686,12 @@ export default function BookingScreen() {
               Services / package
             </Text>
             <Pressable
+              accessibilityRole="button"
               onPress={() =>
                 router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
               }
             >
-              <Text variant="caption" color={colors.coral}>
+              <Text variant="caption" color={colors.primary}>
                 Edit
               </Text>
             </Pressable>
@@ -847,7 +848,7 @@ export default function BookingScreen() {
             <Icon
               name={marketingOptIn ? "checkbox" : "square-outline"}
               size={22}
-              color={marketingOptIn ? colors.coral : colors.textSubtle}
+              color={marketingOptIn ? colors.primary : colors.textSubtle}
             />
             <View style={styles.optInCopy}>
               <Text variant="bodyStrong">
@@ -880,6 +881,7 @@ export default function BookingScreen() {
                 <View style={styles.chips}>
                   {bookableStaff.length > 1 ? (
                     <Pressable
+                      accessibilityRole="button"
                       style={[styles.chip, !staffId && styles.chipActive]}
                       onPress={() => setStaffId(null)}
                     >
@@ -888,7 +890,7 @@ export default function BookingScreen() {
                           <Icon
                             name="people-outline"
                             size={16}
-                            color={!staffId ? colors.coral : colors.textMuted}
+                            color={!staffId ? colors.primary : colors.textMuted}
                           />
                         </View>
                         <View style={{ minWidth: 0, maxWidth: 120 }}>
@@ -907,6 +909,7 @@ export default function BookingScreen() {
                       member.imageUrl || salon.gallery[0] || salon.imageUrl
                     return (
                       <Pressable
+                        accessibilityRole="button"
                         key={member.id}
                         style={[
                           styles.chip,
@@ -1014,7 +1017,7 @@ export default function BookingScreen() {
                   </Text>
                 ) : null}
               </View>
-              <Pressable onPress={clearPromo} hitSlop={8} style={styles.removePromo}>
+              <Pressable accessibilityRole="button" onPress={clearPromo} hitSlop={8} style={styles.removePromo}>
                 <Text variant="caption" color={colors.destructive}>
                   Remove
                 </Text>
@@ -1030,6 +1033,7 @@ export default function BookingScreen() {
                     setPromoError(null)
                   }}
                   placeholder="Enter code"
+                  accessibilityLabel="Promo code"
                   autoCapitalize="characters"
                 />
               </View>
@@ -1062,6 +1066,7 @@ export default function BookingScreen() {
           </Text>
 
           <Pressable
+            accessibilityRole="button"
             style={[
               styles.rewardRow,
               useWallet && walletBalance > 0 && styles.rewardRowActive,
@@ -1074,7 +1079,7 @@ export default function BookingScreen() {
             }}
           >
             <View style={styles.rewardIcon}>
-              <Icon name="wallet-outline" size={20} color={colors.coral} />
+              <Icon name="wallet-outline" size={20} color={colors.primary} />
             </View>
             <View style={styles.rewardCopy}>
               <Text variant="bodyStrong">Wallet credit</Text>
@@ -1098,7 +1103,7 @@ export default function BookingScreen() {
                     ? colors.textSubtle
                     : useWallet
                       ? colors.primaryFg
-                      : colors.coral
+                      : colors.primary
                 }
               >
                 {walletBalance <= 0 ? "Unavailable" : useWallet ? "Applied" : "Apply"}
@@ -1107,6 +1112,7 @@ export default function BookingScreen() {
           </Pressable>
 
           <Pressable
+            accessibilityRole="button"
             style={[
               styles.rewardRow,
               useLoyalty && loyaltyAvailable && styles.rewardRowActive,
@@ -1119,7 +1125,7 @@ export default function BookingScreen() {
             }}
           >
             <View style={styles.rewardIcon}>
-              <Icon name="ribbon-outline" size={20} color={colors.coral} />
+              <Icon name="ribbon-outline" size={20} color={colors.primary} />
             </View>
             <View style={styles.rewardCopy}>
               <Text variant="bodyStrong">Loyalty reward</Text>
@@ -1145,7 +1151,7 @@ export default function BookingScreen() {
                     ? colors.textSubtle
                     : useLoyalty
                       ? colors.primaryFg
-                      : colors.coral
+                      : colors.primary
                 }
               >
                 {!loyaltyAvailable
@@ -1363,8 +1369,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   optInRowActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   optInPressed: {
     opacity: 0.94,
@@ -1445,8 +1451,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   chipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   chipDisabled: {
     opacity: 0.45,
@@ -1505,8 +1511,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   rewardRowActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   rewardDisabled: {
     opacity: 0.55,
@@ -1515,7 +1521,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.md,
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#F1F1F1",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1529,12 +1535,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.coral,
+    borderColor: colors.primary,
     backgroundColor: colors.surface,
   },
   applyChipOn: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   applyChipDisabled: {
     borderColor: colors.border,

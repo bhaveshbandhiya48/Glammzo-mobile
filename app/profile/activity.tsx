@@ -71,7 +71,7 @@ export default function WalletActivityScreen() {
       {loading ? (
         <ProfileBlockSkeleton />
       ) : error ? (
-        <Text variant="caption" color={colors.coral} style={styles.gap}>
+        <Text variant="caption" color={colors.primary} style={styles.gap}>
           {error}
         </Text>
       ) : ledger.length === 0 ? (

@@ -852,91 +852,97 @@ export default function ExploreScreen() {
             >
               {filters.category !== "all" ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, category: "all" }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {filters.category}
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
               {filters.price !== "any" ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, price: "any" }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {
                       EXPLORE_PRICE_FILTERS.find((item) => item.id === filters.price)
                         ?.label
                     }
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
               {filters.rating !== "any" ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, rating: "any" }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {
                       EXPLORE_RATING_FILTERS.find(
                         (item) => item.id === filters.rating,
                       )?.label
                     }
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
               {filters.radius !== "any" ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, radius: "any" }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {
                       EXPLORE_RADIUS_FILTERS.find(
                         (item) => item.id === filters.radius,
                       )?.label
                     }
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
               {filters.openOnly ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, openOnly: false }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     Open now
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
               {filters.sort !== "recommended" ? (
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.filterChip, styles.filterChipActive]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, sort: "recommended" }))
                   }
                 >
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {sortLabel}
                   </Text>
-                  <Icon name="close" size={14} color={colors.coral} />
+                  <Icon name="close" size={14} color={colors.primary} />
                 </Pressable>
               ) : null}
             </ScrollView>
@@ -944,13 +950,14 @@ export default function ExploreScreen() {
 
           {homeReady ? (
           <View style={styles.filterBar}>
-            <Pressable style={styles.filterChip} onPress={() => setSortOpen(true)}>
+            <Pressable accessibilityRole="button" style={styles.filterChip} onPress={() => setSortOpen(true)}>
               <Icon name="swap-vertical-outline" size={16} color={colors.text} />
               <Text variant="caption" numberOfLines={1}>
                 {sortLabel}
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               style={[
                 styles.filterChip,
                 activeFilterCount > 0 && styles.filterChipActive,
@@ -964,11 +971,11 @@ export default function ExploreScreen() {
               <Icon
                 name="options-outline"
                 size={16}
-                color={activeFilterCount > 0 ? colors.coral : colors.text}
+                color={activeFilterCount > 0 ? colors.primary : colors.text}
               />
               <Text
                 variant="caption"
-                color={activeFilterCount > 0 ? colors.coral : colors.text}
+                color={activeFilterCount > 0 ? colors.primary : colors.text}
               >
                 Filter
               </Text>
@@ -1057,6 +1064,7 @@ export default function ExploreScreen() {
         </ScrollView>
 
         <Pressable
+          accessibilityRole="button"
           style={[styles.mapPill, showCart && styles.mapPillRaised]}
           onPress={() => setMapOpen(true)}
         >
@@ -1137,6 +1145,7 @@ export default function ExploreScreen() {
           const active = filters.sort === item.id
           return (
             <Pressable
+              accessibilityRole="button"
               key={item.id}
               style={styles.sheetRow}
               onPress={() => {
@@ -1144,9 +1153,9 @@ export default function ExploreScreen() {
                 setSortOpen(false)
               }}
             >
-              <Text color={active ? colors.coral : colors.text}>{item.label}</Text>
+              <Text color={active ? colors.primary : colors.text}>{item.label}</Text>
               {active ? (
-                <Icon name="checkmark" size={18} color={colors.coral} />
+                <Icon name="checkmark" size={18} color={colors.primary} />
               ) : null}
             </Pressable>
           )
@@ -1205,6 +1214,7 @@ export default function ExploreScreen() {
                 (section.id === "availability" && draftFilters.openOnly)
               return (
                 <Pressable
+                  accessibilityRole="button"
                   key={section.id}
                   style={[styles.filterNavItem, active && styles.filterNavItemActive]}
                   onPress={() => setFilterSection(section.id)}
@@ -1217,7 +1227,7 @@ export default function ExploreScreen() {
                     {section.label}
                   </Text>
                   {applied ? (
-                    <Text variant="caption" color={colors.coral} numberOfLines={1}>
+                    <Text variant="caption" color={colors.primary} numberOfLines={1}>
                       Applied
                     </Text>
                   ) : null}
@@ -1241,6 +1251,7 @@ export default function ExploreScreen() {
                   const active = draftFilters.category === item.id
                   return (
                     <Pressable
+                      accessibilityRole="button"
                       key={item.id}
                       style={styles.sheetRow}
                       onPress={() =>
@@ -1251,14 +1262,14 @@ export default function ExploreScreen() {
                       }
                     >
                       <Text
-                        color={active ? colors.coral : colors.text}
+                        color={active ? colors.primary : colors.text}
                         style={styles.filterOptionLabel}
                         numberOfLines={2}
                       >
                         {item.label}
                       </Text>
                       {active ? (
-                        <Icon name="checkmark" size={18} color={colors.coral} />
+                        <Icon name="checkmark" size={18} color={colors.primary} />
                       ) : null}
                     </Pressable>
                   )
@@ -1270,6 +1281,7 @@ export default function ExploreScreen() {
                   const active = draftFilters.price === item.id
                   return (
                     <Pressable
+                      accessibilityRole="button"
                       key={item.id}
                       style={styles.sheetRow}
                       onPress={() =>
@@ -1277,14 +1289,14 @@ export default function ExploreScreen() {
                       }
                     >
                       <Text
-                        color={active ? colors.coral : colors.text}
+                        color={active ? colors.primary : colors.text}
                         style={styles.filterOptionLabel}
                         numberOfLines={2}
                       >
                         {item.label}
                       </Text>
                       {active ? (
-                        <Icon name="checkmark" size={18} color={colors.coral} />
+                        <Icon name="checkmark" size={18} color={colors.primary} />
                       ) : null}
                     </Pressable>
                   )
@@ -1296,6 +1308,7 @@ export default function ExploreScreen() {
                   const active = draftFilters.rating === item.id
                   return (
                     <Pressable
+                      accessibilityRole="button"
                       key={item.id}
                       style={styles.sheetRow}
                       onPress={() =>
@@ -1306,14 +1319,14 @@ export default function ExploreScreen() {
                       }
                     >
                       <Text
-                        color={active ? colors.coral : colors.text}
+                        color={active ? colors.primary : colors.text}
                         style={styles.filterOptionLabel}
                         numberOfLines={2}
                       >
                         {item.label}
                       </Text>
                       {active ? (
-                        <Icon name="checkmark" size={18} color={colors.coral} />
+                        <Icon name="checkmark" size={18} color={colors.primary} />
                       ) : null}
                     </Pressable>
                   )
@@ -1325,6 +1338,7 @@ export default function ExploreScreen() {
                   const active = draftFilters.radius === item.id
                   return (
                     <Pressable
+                      accessibilityRole="button"
                       key={item.id}
                       style={styles.sheetRow}
                       onPress={() =>
@@ -1335,14 +1349,14 @@ export default function ExploreScreen() {
                       }
                     >
                       <Text
-                        color={active ? colors.coral : colors.text}
+                        color={active ? colors.primary : colors.text}
                         style={styles.filterOptionLabel}
                         numberOfLines={2}
                       >
                         {item.label}
                       </Text>
                       {active ? (
-                        <Icon name="checkmark" size={18} color={colors.coral} />
+                        <Icon name="checkmark" size={18} color={colors.primary} />
                       ) : null}
                     </Pressable>
                   )
@@ -1352,35 +1366,37 @@ export default function ExploreScreen() {
             {filterSection === "availability" ? (
               <>
                 <Pressable
+                  accessibilityRole="button"
                   style={styles.sheetRow}
                   onPress={() =>
                     setDraftFilters((prev) => ({ ...prev, openOnly: false }))
                   }
                 >
                   <Text
-                    color={!draftFilters.openOnly ? colors.coral : colors.text}
+                    color={!draftFilters.openOnly ? colors.primary : colors.text}
                     style={styles.filterOptionLabel}
                   >
                     Any time
                   </Text>
                   {!draftFilters.openOnly ? (
-                    <Icon name="checkmark" size={18} color={colors.coral} />
+                    <Icon name="checkmark" size={18} color={colors.primary} />
                   ) : null}
                 </Pressable>
                 <Pressable
+                  accessibilityRole="button"
                   style={styles.sheetRow}
                   onPress={() =>
                     setDraftFilters((prev) => ({ ...prev, openOnly: true }))
                   }
                 >
                   <Text
-                    color={draftFilters.openOnly ? colors.coral : colors.text}
+                    color={draftFilters.openOnly ? colors.primary : colors.text}
                     style={styles.filterOptionLabel}
                   >
                     Open now
                   </Text>
                   {draftFilters.openOnly ? (
-                    <Icon name="checkmark" size={18} color={colors.coral} />
+                    <Icon name="checkmark" size={18} color={colors.primary} />
                   ) : null}
                 </Pressable>
               </>
@@ -1440,8 +1456,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   filterChipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   filterCount: {
     minWidth: 18,
@@ -1450,7 +1466,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 5,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   grid: {
     flexDirection: "row",
@@ -1513,7 +1529,7 @@ const styles = StyleSheet.create({
   filterNavItemActive: {
     backgroundColor: colors.surface,
     borderLeftWidth: 2,
-    borderLeftColor: colors.coral,
+    borderLeftColor: colors.primary,
   },
   filterOptions: {
     flex: 1,

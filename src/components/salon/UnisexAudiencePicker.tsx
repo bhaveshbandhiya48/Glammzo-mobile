@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardSelected: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
 })

@@ -18,15 +18,15 @@ export function BookingsEmptyIllustration({ width = 240, height = 180 }: Props) 
         cx="120"
         cy="92"
         r="68"
-        fill="#FFF7F5"
-        stroke="#F8C9C1"
+        fill="#F1F1F1"
+        stroke="#D4D4D4"
         strokeWidth="1.5"
       />
       <Circle
         cx="120"
         cy="92"
         r="58"
-        stroke={colors.coral}
+        stroke={colors.primary}
         strokeWidth="1.25"
         strokeOpacity={0.28}
         strokeDasharray="5 6"
@@ -41,20 +41,20 @@ export function BookingsEmptyIllustration({ width = 240, height = 180 }: Props) 
         height="78"
         rx="14"
         fill={colors.surface}
-        stroke="#F8C9C1"
+        stroke="#D4D4D4"
         strokeWidth="1.5"
       />
 
       {/* Binding bar */}
       <Path
         d="M74 66V60c0-7.7 6.3-14 14-14h64c7.7 0 14 6.3 14 14v6H74z"
-        fill={colors.coral}
+        fill={colors.primary}
       />
-      <Rect x="74" y="66" width="92" height="10" fill={colors.coral} />
+      <Rect x="74" y="66" width="92" height="10" fill={colors.primary} />
 
       {/* Binder rings sitting through the top bar */}
-      <Rect x="94" y="44" width="8" height="20" rx="4" fill="#FFF7F5" />
-      <Rect x="138" y="44" width="8" height="20" rx="4" fill="#FFF7F5" />
+      <Rect x="94" y="44" width="8" height="20" rx="4" fill="#F1F1F1" />
+      <Rect x="138" y="44" width="8" height="20" rx="4" fill="#F1F1F1" />
       <Circle cx="98" cy="50" r="2.75" fill={colors.sand} />
       <Circle cx="142" cy="50" r="2.75" fill={colors.sand} />
 
@@ -65,12 +65,12 @@ export function BookingsEmptyIllustration({ width = 240, height = 180 }: Props) 
       <Rect x="143" y="88" width="14" height="12" rx="3" fill={colors.muted} />
 
       <Rect x="86" y="106" width="14" height="12" rx="3" fill={colors.muted} />
-      <Rect x="105" y="106" width="14" height="12" rx="3" fill="#F8C9C1" />
+      <Rect x="105" y="106" width="14" height="12" rx="3" fill="#D4D4D4" />
       <Rect x="124" y="106" width="14" height="12" rx="3" fill={colors.muted} />
       <Rect x="143" y="106" width="14" height="12" rx="3" fill={colors.muted} />
 
       {/* Accent dot centered in the highlighted day */}
-      <Circle cx="112" cy="112" r="2.75" fill={colors.coral} />
+      <Circle cx="112" cy="112" r="2.75" fill={colors.primary} />
     </Svg>
   )
 }

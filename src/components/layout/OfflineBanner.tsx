@@ -45,6 +45,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   label: {
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
   },
 })

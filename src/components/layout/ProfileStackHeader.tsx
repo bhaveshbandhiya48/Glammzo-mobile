@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   title: {
     flex: 1,
     textAlign: "center",
-    fontFamily: "Sora_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
     fontSize: 17,
   },
   rightSlot: {

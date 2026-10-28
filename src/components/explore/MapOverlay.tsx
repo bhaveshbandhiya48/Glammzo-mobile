@@ -427,8 +427,8 @@ function MapListingCard({
           <Text variant="bodyStrong">
             {pin.price > 0 ? `${formatRupees(pin.price)}` : "—"}
           </Text>
-          <Pressable onPress={onOpen} hitSlop={8} style={styles.viewBtn}>
-            <Text variant="caption" color={colors.coral}>
+          <Pressable accessibilityRole="button" onPress={onOpen} hitSlop={8} style={styles.viewBtn}>
+            <Text variant="caption" color={colors.primary}>
               View
             </Text>
           </Pressable>
@@ -823,7 +823,7 @@ export function MapOverlay({
           </Pressable>
 
           <View style={styles.locationChip}>
-            <Icon name="location" size={14} color={colors.coral} />
+            <Icon name="location" size={14} color={colors.primary} />
             <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>
               {locationLabel}
               {carouselItems.length > 0 ? ` · ${carouselItems.length}` : ""}
@@ -898,9 +898,9 @@ export function MapOverlay({
           disabled={locating}
         >
           {locating ? (
-            <ActivityIndicator size="small" color={colors.coral} />
+            <ActivityIndicator size="small" color={colors.primary} />
           ) : (
-            <Icon name="locate" size={22} color={colors.coral} />
+            <Icon name="locate" size={22} color={colors.primary} />
           )}
         </Pressable>
 
@@ -1071,8 +1071,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#111111",
   },
   pricePinSelected: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   pricePinText: {
     fontSize: 13,
@@ -1092,7 +1092,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "45deg" }],
   },
   pinCaretDiamondSelected: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   userDotOuter: {
     width: 22,
@@ -1148,7 +1148,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   listingCardActive: {
-    shadowColor: colors.coral,
+    shadowColor: colors.primary,
     shadowOpacity: 0.28,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
@@ -1158,7 +1158,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     borderRadius: radii.lg,
     borderWidth: 2,
-    borderColor: colors.coral,
+    borderColor: colors.primary,
   },
   listingImage: {
     width: 112,
@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
   listingImageFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#C9B8A8",
+    backgroundColor: "#BDBDBD",
   },
   listingBody: {
     flex: 1,

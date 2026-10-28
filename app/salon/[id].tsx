@@ -92,7 +92,7 @@ function StarRow({ rating }: { rating: number }) {
           key={index}
           name={index < Math.round(rating) ? "star" : "star-outline"}
           size={14}
-          color={index < Math.round(rating) ? colors.coral : colors.textSubtle}
+          color={index < Math.round(rating) ? colors.primary : colors.textSubtle}
         />
       ))}
     </View>
@@ -112,7 +112,7 @@ function ReviewCard({ review }: { review: SalonReview }) {
       <View style={styles.reviewHeader}>
         <View style={styles.reviewAuthor}>
           <View style={styles.avatar}>
-            <Text variant="caption" color={colors.coral}>
+            <Text variant="caption" color={colors.primary}>
               {initials}
             </Text>
           </View>
@@ -441,7 +441,7 @@ export default function SalonDetailScreen() {
             name={favorited ? "heart" : "heart-outline"}
             size={20}
             color={
-              favorited ? colors.coral : headerSolid ? colors.text : colors.primaryFg
+              favorited ? colors.primary : headerSolid ? colors.text : colors.primaryFg
             }
           />
         </Pressable>
@@ -512,7 +512,7 @@ export default function SalonDetailScreen() {
               {salon.isOpenNow ? "Open now" : "Closed"}
             </Text>
             {offer ? (
-              <Text variant="caption" color={colors.coral}>
+              <Text variant="caption" color={colors.primary}>
                 {offer.title}
               </Text>
             ) : null}
@@ -624,6 +624,7 @@ export default function SalonDetailScreen() {
                 const active = activeServiceCategory === category
                 return (
                   <Pressable
+                    accessibilityRole="button"
                     key={category}
                     onPress={() => {
                       setActiveServiceCategory(category)
@@ -643,7 +644,7 @@ export default function SalonDetailScreen() {
                   >
                     <Text
                       variant="caption"
-                      color={active ? colors.coral : colors.text}
+                      color={active ? colors.primary : colors.text}
                     >
                       {category}
                     </Text>
@@ -744,7 +745,7 @@ export default function SalonDetailScreen() {
                                   <View style={styles.serviceOfferBadge}>
                                     <Text
                                       variant="caption"
-                                      color={colors.coral}
+                                      color={colors.primary}
                                       style={styles.serviceOfferBadgeLabel}
                                     >
                                       {packageBadge.label}
@@ -1022,7 +1023,7 @@ export default function SalonDetailScreen() {
                 <View style={styles.serviceOfferBadge}>
                   <Text
                     variant="caption"
-                    color={colors.coral}
+                    color={colors.primary}
                     style={styles.serviceOfferBadgeLabel}
                   >
                     {serviceOfferLabels.get(detailService.id)}
@@ -1068,6 +1069,7 @@ export default function SalonDetailScreen() {
                       defaultPriceOptionId(detailService)) === option.id
                   return (
                     <Pressable
+                      accessibilityRole="button"
                       key={option.id}
                       onPress={() => handleServicePriceOption(detailService, option.id)}
                       style={[
@@ -1103,7 +1105,7 @@ export default function SalonDetailScreen() {
                 </Text>
                 {detailService.includes.map((item) => (
                   <View key={item} style={styles.includeRow}>
-                    <Icon name="checkmark-circle" size={18} color={colors.coral} />
+                    <Icon name="checkmark-circle" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>{item}</Text>
                   </View>
                 ))}
@@ -1186,7 +1188,7 @@ export default function SalonDetailScreen() {
                     key={`${detailPackage.id}-${item.serviceId}`}
                     style={styles.includeRow}
                   >
-                    <Icon name="checkmark-circle" size={18} color={colors.coral} />
+                    <Icon name="checkmark-circle" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
                       {item.quantity > 1 ? `${item.quantity}× ` : ""}
                       {item.serviceName}
@@ -1258,6 +1260,7 @@ export default function SalonDetailScreen() {
               ]}
             >
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   setMenuExpandedCategory(
                     menuExpandedCategory === PACKAGES_CATEGORY ? "" : PACKAGES_CATEGORY,
@@ -1276,7 +1279,7 @@ export default function SalonDetailScreen() {
                   name={menuExpandedCategory === PACKAGES_CATEGORY ? "chevron-up" : "chevron-down"}
                   size={18}
                   color={
-                    menuExpandedCategory === PACKAGES_CATEGORY ? colors.coral : colors.textSubtle
+                    menuExpandedCategory === PACKAGES_CATEGORY ? colors.primary : colors.textSubtle
                   }
                 />
               </Pressable>
@@ -1284,6 +1287,7 @@ export default function SalonDetailScreen() {
               {menuExpandedCategory === PACKAGES_CATEGORY
                 ? catalogPackages.map((pkg, index) => (
                     <Pressable
+                      accessibilityRole="button"
                       key={pkg.id}
                       onPress={() => {
                         setMenuOpen(false)
@@ -1322,6 +1326,7 @@ export default function SalonDetailScreen() {
                 style={[styles.menuSection, expanded && styles.menuSectionActive]}
               >
                 <Pressable
+                  accessibilityRole="button"
                   onPress={() => {
                     setMenuExpandedCategory(expanded ? "" : group.category)
                   }}
@@ -1336,13 +1341,14 @@ export default function SalonDetailScreen() {
                   <Icon
                     name={expanded ? "chevron-up" : "chevron-down"}
                     size={18}
-                    color={expanded ? colors.coral : colors.textSubtle}
+                    color={expanded ? colors.primary : colors.textSubtle}
                   />
                 </Pressable>
 
                 {expanded
                   ? group.items.map((service, index) => (
                       <Pressable
+                        accessibilityRole="button"
                         key={service.id}
                         onPress={() => {
                       setMenuOpen(false)
@@ -1368,7 +1374,7 @@ export default function SalonDetailScreen() {
                           <View style={styles.serviceOfferBadge}>
                             <Text
                               variant="caption"
-                              color={colors.coral}
+                              color={colors.primary}
                               style={styles.serviceOfferBadgeLabel}
                             >
                               {serviceOfferLabels.get(service.id)}
@@ -1454,7 +1460,7 @@ const styles = StyleSheet.create({
   stickyTitle: {
     flex: 1,
     textAlign: "center",
-    fontFamily: "Sora_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
     fontSize: 16,
   },
   menuFab: {
@@ -1569,8 +1575,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   rowSelected: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   rowCopy: {
     flex: 1,
@@ -1592,8 +1598,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   serviceCategoryChipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   serviceCategoryList: {
     gap: spacing.xl,
@@ -1626,8 +1632,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   menuSectionActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   menuSheetHeader: {
     minHeight: 52,
@@ -1671,7 +1677,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   serviceRowSelected: {
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   serviceRowLast: {
     borderBottomWidth: 0,
@@ -1705,7 +1711,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: radii.pill,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   serviceOfferBadgeLabel: {
     fontSize: 10,
@@ -1721,7 +1727,7 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1775,8 +1781,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   sheetOptionChipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
   panel: {
     gap: spacing.sm,
@@ -1814,7 +1820,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1864,7 +1870,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radii.pill,
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#F1F1F1",
     alignItems: "center",
     justifyContent: "center",
   },

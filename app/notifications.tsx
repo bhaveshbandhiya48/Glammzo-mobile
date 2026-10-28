@@ -51,7 +51,7 @@ export default function NotificationsScreen() {
                   pressed && styles.clearPressed,
                 ]}
               >
-                <Text variant="caption" color={colors.coral}>
+                <Text variant="caption" color={colors.primary}>
                   Clear all
                 </Text>
               </Pressable>
@@ -77,7 +77,7 @@ export default function NotificationsScreen() {
       ) : !signedIn ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}>
-            <Icon name="log-in-outline" size={32} color={colors.coral} />
+            <Icon name="log-in-outline" size={32} color={colors.primary} />
           </View>
           <Text variant="bodyStrong" style={styles.emptyTitle}>
             Sign in to see updates
@@ -97,7 +97,7 @@ export default function NotificationsScreen() {
       ) : notifications.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}>
-            <Icon name="notifications-outline" size={32} color={colors.coral} />
+            <Icon name="notifications-outline" size={32} color={colors.primary} />
           </View>
           <Text variant="bodyStrong" style={styles.emptyTitle}>
             You&apos;re all caught up
@@ -113,6 +113,7 @@ export default function NotificationsScreen() {
             const accent = notificationAccent(item.type)
             return (
               <Pressable
+                accessibilityRole="button"
                 key={item.id}
                 style={({ pressed }) => [
                   styles.card,
@@ -176,8 +177,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   cardUnread: {
-    backgroundColor: "#FFF7F5",
-    borderColor: "#F8C9C1",
+    backgroundColor: "#F1F1F1",
+    borderColor: "#D4D4D4",
   },
   pressed: {
     opacity: 0.92,
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   time: {
     marginTop: 4,
@@ -223,7 +224,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: radii.pill,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: spacing.sm,

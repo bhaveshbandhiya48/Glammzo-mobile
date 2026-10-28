@@ -188,6 +188,7 @@ export default function CategorySalonsScreen() {
           const active = sort === item.id
           return (
             <Pressable
+              accessibilityRole="button"
               key={item.id}
               style={styles.sortRow}
               onPress={() => {
@@ -195,9 +196,9 @@ export default function CategorySalonsScreen() {
                 setSortOpen(false)
               }}
             >
-              <Text color={active ? colors.coral : colors.text}>{item.label}</Text>
+              <Text color={active ? colors.primary : colors.text}>{item.label}</Text>
               {active ? (
-                <Icon name="checkmark" size={18} color={colors.coral} />
+                <Icon name="checkmark" size={18} color={colors.primary} />
               ) : null}
             </Pressable>
           )

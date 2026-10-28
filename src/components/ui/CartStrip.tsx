@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: radii.sm,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   clearBtn: {
     width: 36,
@@ -274,7 +274,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.2)",
   },
   dotActive: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     width: 14,
   },
 })

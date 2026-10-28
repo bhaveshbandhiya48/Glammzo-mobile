@@ -13,7 +13,7 @@ export const ARTIST_LEVEL_BADGE: Record<
   { fill: string; ink: string; dots: number }
 > = {
   new: { fill: "#B7A99A", ink: "#FFFFFF", dots: 0 },
-  rising: { fill: "#F95C48", ink: "#FFFFFF", dots: 1 },
+  rising: { fill: "#111111", ink: "#FFFFFF", dots: 1 },
   established: { fill: "#5C7C6A", ink: "#FFFFFF", dots: 2 },
   top_rated: { fill: "#C9893A", ink: "#FFFFFF", dots: 3 },
 }

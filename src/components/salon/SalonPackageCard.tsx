@@ -87,7 +87,7 @@ export function SalonPackageCard({
               </View>
             ))}
             {remaining > 0 ? (
-              <Text variant="caption" color={colors.coral} style={styles.more}>
+              <Text variant="caption" color={colors.primary} style={styles.more}>
                 +{remaining} more
               </Text>
             ) : null}
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardSelected: {
-    borderColor: colors.coral,
+    borderColor: colors.primary,
     borderWidth: 1.5,
   },
   pressed: {
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     minHeight: 36,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },

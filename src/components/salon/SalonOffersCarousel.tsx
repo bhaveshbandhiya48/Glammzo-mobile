@@ -131,6 +131,7 @@ export function SalonOffersCarousel({
       >
         {items.map((item) => (
           <Pressable
+            accessibilityRole="button"
             key={item.key}
             onPress={() => setActiveOfferKey(item.key)}
             style={[
@@ -179,7 +180,7 @@ export function SalonOffersCarousel({
                   )}
                 </View>
                 <View style={styles.copy}>
-                  <Text variant="caption" color={colors.coral} style={styles.code}>
+                  <Text variant="caption" color={colors.primary} style={styles.code}>
                     {salonDiscountLabel(item.offer)}
                   </Text>
                   <Text variant="bodyStrong" numberOfLines={2}>
@@ -262,7 +263,7 @@ export function SalonOffersCarousel({
               <View style={styles.sheetFacts}>
                 {activeOffer.offer.cashbackRupees > 0 ? (
                   <View style={styles.factRow}>
-                    <Icon name="wallet-outline" size={18} color={colors.coral} />
+                    <Icon name="wallet-outline" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
                       ₹{activeOffer.offer.cashbackRupees} cashback after visit
                     </Text>
@@ -270,7 +271,7 @@ export function SalonOffersCarousel({
                 ) : null}
                 {activeOffer.offer.minOrderRupees > 0 ? (
                   <View style={styles.factRow}>
-                    <Icon name="pricetag-outline" size={18} color={colors.coral} />
+                    <Icon name="pricetag-outline" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
                       Minimum booking ₹{activeOffer.offer.minOrderRupees}
                     </Text>
@@ -283,7 +284,7 @@ export function SalonOffersCarousel({
               <View style={[styles.sheetHero, styles.iconSalon]}>
                 <Icon name="pricetag" size={24} color={colors.primaryFg} />
               </View>
-              <Text variant="label" color={colors.coral}>
+              <Text variant="label" color={colors.primary}>
                 {salonDiscountLabel(activeOffer.offer)}
               </Text>
               <Text variant="heading">{activeOffer.offer.title}</Text>
@@ -300,11 +301,11 @@ export function SalonOffersCarousel({
               ) : null}
               <View style={styles.sheetFacts}>
                 <View style={styles.factRow}>
-                  <Icon name="cut-outline" size={18} color={colors.coral} />
+                  <Icon name="cut-outline" size={18} color={colors.primary} />
                   <Text style={{ flex: 1 }}>{servicesLine(activeOffer.offer)}</Text>
                 </View>
                 <View style={styles.factRow}>
-                  <Icon name="repeat-outline" size={18} color={colors.coral} />
+                  <Icon name="repeat-outline" size={18} color={colors.primary} />
                   <Text style={{ flex: 1 }}>
                     {activeOffer.offer.customerEligibility === "new_customers_only"
                       ? "New customers only"
@@ -312,13 +313,13 @@ export function SalonOffersCarousel({
                   </Text>
                 </View>
                 <View style={styles.factRow}>
-                  <Icon name="checkmark-circle-outline" size={18} color={colors.coral} />
+                  <Icon name="checkmark-circle-outline" size={18} color={colors.primary} />
                   <Text style={{ flex: 1 }}>Once per customer</Text>
                 </View>
                 {activeOffer.offer.minOrderRupees != null &&
                 activeOffer.offer.minOrderRupees > 0 ? (
                   <View style={styles.factRow}>
-                    <Icon name="cash-outline" size={18} color={colors.coral} />
+                    <Icon name="cash-outline" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
                       Minimum booking ₹{activeOffer.offer.minOrderRupees}
                     </Text>
@@ -326,7 +327,7 @@ export function SalonOffersCarousel({
                 ) : null}
                 {formatExpiry(activeOffer.offer.endsAt) ? (
                   <View style={styles.factRow}>
-                    <Icon name="time-outline" size={18} color={colors.coral} />
+                    <Icon name="time-outline" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
                       Valid till {formatExpiry(activeOffer.offer.endsAt)}
                     </Text>
@@ -371,7 +372,7 @@ const styles = StyleSheet.create({
   },
   cardSalon: {
     borderColor: "rgba(249, 92, 72, 0.25)",
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   cardGlammzo: {
     borderColor: "rgba(0,0,0,0.12)",
@@ -385,7 +386,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   iconSalon: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   iconGlammzo: {
     backgroundColor: colors.text,
@@ -440,7 +441,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sand,
   },
   dotActive: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     width: 16,
   },
 })

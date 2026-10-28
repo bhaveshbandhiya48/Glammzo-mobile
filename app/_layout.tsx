@@ -64,7 +64,7 @@ function RootNavigator() {
           headerShadowVisible: false,
           headerBackButtonDisplayMode: "minimal",
           headerTitleStyle: {
-            fontFamily: "Sora_600SemiBold",
+            fontFamily: "Geist_600SemiBold",
             fontSize: 17,
           },
           contentStyle: { backgroundColor: colors.bg },

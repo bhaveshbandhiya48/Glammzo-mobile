@@ -46,8 +46,8 @@ function OptionChip({
     >
       <Text
         variant="caption"
-        color={selected ? colors.coral : colors.text}
-        style={{ fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium" }}
+        color={selected ? colors.primary : colors.text}
+        style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
       >
         {label}
       </Text>
@@ -199,8 +199,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipOn: {
-    backgroundColor: "#FEEDE9",
-    borderColor: colors.coral,
+    backgroundColor: "#F1F1F1",
+    borderColor: colors.primary,
   },
   footer: {
     flexDirection: "row",

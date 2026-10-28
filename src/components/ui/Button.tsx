@@ -32,17 +32,19 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       disabled={isDisabled}
+      accessibilityLabel={rest.accessibilityLabel ?? label}
+      accessibilityState={{ disabled: Boolean(isDisabled), busy: loading }}
       style={({ pressed }) => [
         styles.base,
         variantStyles[variant],
-        pressed && !isDisabled && styles.pressed,
+        pressed && !isDisabled && (variant === "primary" ? styles.pressedPrimary : styles.pressed),
         isDisabled && styles.disabled,
         style,
       ]}
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.primaryFg : colors.coral} />
+        <ActivityIndicator color={variant === "primary" ? colors.primaryFg : colors.primary} />
       ) : (
         <Text
           variant="bodyStrong"
@@ -50,7 +52,7 @@ export function Button({
             variant === "primary"
               ? colors.primaryFg
               : variant === "ghost"
-                ? colors.coral
+                ? colors.primary
                 : colors.text
           }
         >
@@ -70,21 +72,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   pressed: {
-    opacity: 0.9,
+    backgroundColor: colors.muted,
+  },
+  pressedPrimary: {
+    backgroundColor: colors.primaryPressed,
   },
   disabled: {
-    opacity: 0.4,
+    opacity: 0.35,
   },
 })
 
 const variantStyles = StyleSheet.create({
   primary: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   secondary: {
     backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
   },
   ghost: {
     backgroundColor: "transparent",

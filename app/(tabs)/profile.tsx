@@ -95,7 +95,7 @@ export default function ProfileScreen() {
   if (!ready) {
     return (
       <Screen edges={["top", "left", "right"]} contentStyle={styles.loading}>
-        <ActivityIndicator color={colors.coral} />
+        <ActivityIndicator color={colors.primary} />
       </Screen>
     )
   }
@@ -117,8 +117,8 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.tileRow}>
-        <Pressable style={styles.tile} onPress={() => router.push("/profile/wallet")}>
-          <Icon name="wallet-outline" size={20} color={colors.coral} />
+        <Pressable accessibilityRole="button" style={styles.tile} onPress={() => router.push("/profile/wallet")}>
+          <Icon name="wallet-outline" size={20} color={colors.primary} />
           <Text variant="caption" muted>
             Wallet
           </Text>
@@ -126,8 +126,8 @@ export default function ProfileScreen() {
             {walletRupees == null ? "—" : `${formatRupees(walletRupees)}`}
           </Text>
         </Pressable>
-        <Pressable style={styles.tile} onPress={() => router.push("/profile/loyalty")}>
-          <Icon name="ribbon-outline" size={20} color={colors.coral} />
+        <Pressable accessibilityRole="button" style={styles.tile} onPress={() => router.push("/profile/loyalty")}>
+          <Icon name="ribbon-outline" size={20} color={colors.primary} />
           <Text variant="caption" muted>
             Loyalty
           </Text>
@@ -142,6 +142,7 @@ export default function ProfileScreen() {
       <View style={styles.list}>
         {HUB_ROWS.map((row) => (
           <Pressable
+            accessibilityRole="button"
             key={row.href}
             style={({ pressed }) => [styles.row, pressed && styles.pressed]}
             onPress={() => router.push(row.href)}
@@ -159,6 +160,7 @@ export default function ProfileScreen() {
 
       <View style={[styles.list, styles.supportList]}>
         <Pressable
+          accessibilityRole="button"
           style={({ pressed }) => [styles.row, styles.rowLast, pressed && styles.pressed]}
           onPress={() => router.push("/profile/support")}
         >
@@ -214,7 +216,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },

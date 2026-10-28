@@ -37,7 +37,7 @@ export function notificationAccent(type: AppNotificationType): string {
     case "booking_declined":
       return colors.destructive
     case "cashback":
-      return colors.coral
+      return colors.primary
     default:
       return colors.textMuted
   }

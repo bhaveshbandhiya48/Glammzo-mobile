@@ -86,7 +86,7 @@ export function ArtistServiceRow({
                   <Text variant="caption" muted style={styles.strike}>
                     {formatRupees(unitPrice)}
                   </Text>
-                  <Text variant="caption" color={colors.coral}>
+                  <Text variant="caption" color={colors.primary}>
                     {formatRupees(offerPrice)}
                   </Text>
                 </>
@@ -103,7 +103,7 @@ export function ArtistServiceRow({
               ) : null}
             </View>
             {offerPrice != null && service.offerDealLabel ? (
-              <Text variant="caption" color={colors.coral}>
+              <Text variant="caption" color={colors.primary}>
                 {service.offerDealLabel}
                 {service.offerTitle ? ` · ${service.offerTitle}` : ""}
               </Text>
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowSelected: {
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   rowLast: {
     borderBottomWidth: 0,
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     minWidth: 72,
     alignItems: "center",
   },

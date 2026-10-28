@@ -106,10 +106,10 @@ const styles = StyleSheet.create({
   },
   boxFilled: {
     borderColor: "#E8C4BC",
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   boxFocused: {
-    borderColor: colors.coral,
+    borderColor: colors.primary,
     borderWidth: 1.5,
   },
   digit: {
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     width: 2,
     height: 22,
     borderRadius: 1,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
   },
   hiddenInput: {
     ...StyleSheet.absoluteFill,

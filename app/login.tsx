@@ -314,12 +314,12 @@ export default function LoginScreen() {
           </View>
 
           {__DEV__ && debugOtp && step === "otp" ? (
-            <Text variant="caption" color={colors.coral} style={styles.gap}>
+            <Text variant="caption" color={colors.primary} style={styles.gap}>
               Dev OTP: {debugOtp}
             </Text>
           ) : null}
           {error ? (
-            <Text variant="caption" color={colors.coral} style={styles.gap}>
+            <Text variant="caption" color={colors.primary} style={styles.gap}>
               {error}
             </Text>
           ) : null}
@@ -368,7 +368,7 @@ export default function LoginScreen() {
                 By continuing, you agree to Glammzo{" "}
                 <Text
                   variant="caption"
-                  color={colors.coral}
+                  color={colors.primary}
                   onPress={() => void Linking.openURL(LEGAL.termsUrl)}
                 >
                   Terms
@@ -376,7 +376,7 @@ export default function LoginScreen() {
                 {" & "}
                 <Text
                   variant="caption"
-                  color={colors.coral}
+                  color={colors.primary}
                   onPress={() => void Linking.openURL(LEGAL.privacyUrl)}
                 >
                   Privacy Policy

@@ -106,7 +106,7 @@ export default function ServicesScreen() {
 
       {loading && availableTypes.length === 0 ? (
         <View style={styles.loading}>
-          <ActivityIndicator color={colors.coral} />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : availableTypes.length === 0 ? (
         <View style={styles.empty}>
@@ -119,12 +119,13 @@ export default function ServicesScreen() {
         <View style={styles.grid}>
           {availableTypes.map((item) => (
             <Pressable
+              accessibilityRole="button"
               key={item.label}
               style={({ pressed }) => [styles.card, pressed && styles.pressed]}
               onPress={() => openCategory(item.label)}
             >
               <View style={styles.iconWrap}>
-                <Icon name={item.icon} size={22} color={colors.coral} />
+                <Icon name={item.icon} size={22} color={colors.primary} />
               </View>
               <View style={styles.copy}>
                 <Text variant="bodyStrong">{item.label}</Text>
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: radii.md,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     alignItems: "center",
     justifyContent: "center",
   },

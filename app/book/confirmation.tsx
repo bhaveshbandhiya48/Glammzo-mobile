@@ -33,12 +33,12 @@ const PENDING_STEPS_ARTIST = [
 ] as const
 
 const CONFETTI = [
-  { left: "14%", delay: 0, color: colors.coral, size: 6 },
-  { left: "28%", delay: 80, color: "#F9A89A", size: 5 },
+  { left: "14%", delay: 0, color: colors.primary, size: 6 },
+  { left: "28%", delay: 80, color: "#BDBDBD", size: 5 },
   { left: "42%", delay: 40, color: colors.sand, size: 7 },
-  { left: "56%", delay: 120, color: colors.coral, size: 5 },
-  { left: "70%", delay: 60, color: "#E8D5C4", size: 6 },
-  { left: "84%", delay: 100, color: "#F9A89A", size: 5 },
+  { left: "56%", delay: 120, color: colors.primary, size: 5 },
+  { left: "70%", delay: 60, color: "#D4D4D4", size: 6 },
+  { left: "84%", delay: 100, color: "#BDBDBD", size: 5 },
 ] as const
 
 function firstParam(value: string | string[] | undefined) {
@@ -422,13 +422,13 @@ export default function BookingConfirmationScreen() {
                 <Icon
                   name={isArtist ? "sparkles-outline" : "storefront-outline"}
                   size={22}
-                  color={colors.coral}
+                  color={colors.primary}
                 />
               </View>
             )}
             <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
               <View style={styles.kindRow}>
-                <Text variant="caption" color={colors.coral}>
+                <Text variant="caption" color={colors.primary}>
                   {isArtist ? "Solo artist" : "Salon"}
                 </Text>
               </View>
@@ -498,7 +498,7 @@ export default function BookingConfirmationScreen() {
               {pendingSteps.map((step, index) => (
                 <View key={step} style={styles.stepRow}>
                   <View style={styles.stepIndex}>
-                    <Text variant="caption" color={colors.coral}>
+                    <Text variant="caption" color={colors.primary}>
                       {index + 1}
                     </Text>
                   </View>
@@ -509,27 +509,27 @@ export default function BookingConfirmationScreen() {
           ) : (
             <View style={styles.tips}>
               <View style={styles.tipRow}>
-                <Icon name="notifications-outline" size={18} color={colors.coral} />
+                <Icon name="notifications-outline" size={18} color={colors.primary} />
                 <Text style={styles.tipText}>
                   SMS reminders 24h and 2h before your visit.
                 </Text>
               </View>
               <View style={styles.tipRow}>
-                <Icon name="calendar-outline" size={18} color={colors.coral} />
+                <Icon name="calendar-outline" size={18} color={colors.primary} />
                 <Text style={styles.tipText}>
                   Find this appointment anytime under My bookings.
                 </Text>
               </View>
               {!isArtist ? (
                 <View style={styles.tipRow}>
-                  <Icon name="card-outline" size={18} color={colors.coral} />
+                  <Icon name="card-outline" size={18} color={colors.primary} />
                   <Text style={styles.tipText}>
                     Pay at the salon after your service.
                   </Text>
                 </View>
               ) : (
                 <View style={styles.tipRow}>
-                  <Icon name="cash-outline" size={18} color={colors.coral} />
+                  <Icon name="cash-outline" size={18} color={colors.primary} />
                   <Text style={styles.tipText}>
                     Pay the artist directly for this visit.
                   </Text>
@@ -682,9 +682,9 @@ const styles = StyleSheet.create({
   providerThumbFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#FFD5CE",
+    borderColor: "#D4D4D4",
   },
   kindRow: {
     flexDirection: "row",

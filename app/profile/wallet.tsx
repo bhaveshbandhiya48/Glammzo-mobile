@@ -64,7 +64,7 @@ export default function WalletScreen() {
             Wallet credit applies at checkout when you toggle Apply on booking.
           </Text>
           {error ? (
-            <Text variant="caption" color={colors.coral} style={styles.gap}>
+            <Text variant="caption" color={colors.primary} style={styles.gap}>
               {error}
             </Text>
           ) : null}

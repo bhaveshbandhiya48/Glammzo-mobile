@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   stampFilled: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   rule: {
     marginTop: spacing.sm,

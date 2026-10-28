@@ -16,7 +16,7 @@ type Props = {
 }
 
 const TILE_COLORS = [
-  "#FFE4DE", // coral wash
+  "#EBEBEB", // coral wash
   "#E8E0D2", // sand
   "#DCEEE3", // mint
   "#EDE4D6", // warm beige
@@ -53,7 +53,7 @@ export function BusinessTypeStrip({
           <View
             style={[
               styles.iconWrap,
-              { backgroundColor: selected === null ? colors.coral : TILE_COLORS[0] },
+              { backgroundColor: selected === null ? colors.primary : TILE_COLORS[0] },
             ]}
           >
             <Icon
@@ -82,7 +82,7 @@ export function BusinessTypeStrip({
                   styles.iconWrap,
                   {
                     backgroundColor: active
-                      ? colors.coral
+                      ? colors.primary
                       : TILE_COLORS[(index + 1) % TILE_COLORS.length],
                   },
                 ]}

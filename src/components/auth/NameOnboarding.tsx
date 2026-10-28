@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sand,
   },
   dotActive: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     width: 18,
   },
   sparkleWrap: {

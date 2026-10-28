@@ -89,7 +89,7 @@ export function CatalogServiceRow({
                 <View style={styles.offerBadge}>
                   <Text
                     variant="caption"
-                    color={colors.coral}
+                    color={colors.primary}
                     style={styles.offerBadgeLabel}
                   >
                     {offerLabel}
@@ -170,10 +170,10 @@ export function CatalogServiceRow({
                 onPress={() => onPriceOptionChange(option.id)}
                 style={[styles.optionChip, active && styles.optionChipActive]}
               >
-                <Text variant="caption" color={active ? colors.coral : colors.text}>
+                <Text variant="caption" color={active ? colors.primary : colors.text}>
                   {option.name}
                 </Text>
-                <Text variant="caption" color={active ? colors.coral : colors.text}>
+                <Text variant="caption" color={active ? colors.primary : colors.text}>
                   {formatRupees(option.price)}
                 </Text>
               </Pressable>
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   rowSelected: {
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   rowLast: {
     borderBottomWidth: 0,
@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: radii.pill,
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   offerBadgeLabel: {
     fontSize: 10,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     minHeight: 34,
     paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -282,7 +282,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   optionChipActive: {
-    borderColor: colors.coral,
-    backgroundColor: "#FFF7F5",
+    borderColor: colors.primary,
+    backgroundColor: "#F1F1F1",
   },
 })

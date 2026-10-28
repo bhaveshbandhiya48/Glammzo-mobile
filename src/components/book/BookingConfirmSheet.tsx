@@ -159,7 +159,7 @@ export function BookingConfirmSheet({
         </View>
 
         {error ? (
-          <Text variant="caption" color={colors.coral}>
+          <Text variant="caption" color={colors.primary}>
             {error}
           </Text>
         ) : null}

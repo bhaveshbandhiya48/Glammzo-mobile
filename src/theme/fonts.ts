@@ -1,21 +1,13 @@
 import {
-  BricolageGrotesque_700Bold,
-} from "@expo-google-fonts/bricolage-grotesque"
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-} from "@expo-google-fonts/inter"
-import {
-  Sora_600SemiBold,
-  Sora_700Bold,
-} from "@expo-google-fonts/sora"
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
+} from "@expo-google-fonts/geist"
 
 export const appFonts = {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Sora_600SemiBold,
-  Sora_700Bold,
-  BricolageGrotesque_700Bold,
+  Geist_400Regular,
+  Geist_500Medium,
+  Geist_600SemiBold,
+  Geist_700Bold,
 }

@@ -1,5 +1,5 @@
 import type { Booking, BookingStatus } from "@/data/types"
-import { colors } from "@/theme/tokens"
+import { colors, status as statusTint } from "@/theme/tokens"
 
 export const FILTER_LABELS = {
   all: "All",
@@ -15,11 +15,11 @@ export function isArtistBooking(booking: Booking): boolean {
 export function getBookingStatusLabel(status: BookingStatus): string {
   switch (status) {
     case "pending":
-      return "Pending Confirmation"
+      return "Pending"
     case "confirmed":
       return "Confirmed"
     case "declined":
-      return "Rejected"
+      return "Declined"
     case "expired":
       return "Expired"
     case "cancelled":
@@ -33,43 +33,27 @@ export function getBookingStatusLabel(status: BookingStatus): string {
   }
 }
 
+/** Partner-app status tints: pending amber, confirmed blue, completed green, cancelled/declined red. */
 export function statusBadgeColors(status: BookingStatus): {
   text: string
   bg: string
   border: string
   dot: string
 } {
+  const tint = (fg: string, bg: string) => ({ text: fg, bg, border: bg, dot: fg })
   switch (status) {
     case "pending":
-      return { text: "#78350F", bg: "#FFFBEB", border: "#FCD34D", dot: "#F59E0B" }
+      return tint(statusTint.warnFg, statusTint.warnBg)
     case "confirmed":
     case "upcoming":
-      return { text: "#064E3B", bg: "#ECFDF5", border: "#6EE7B7", dot: "#10B981" }
+      return tint(statusTint.infoFg, statusTint.infoBg)
     case "completed":
-      return {
-        text: colors.textMuted,
-        bg: colors.muted,
-        border: colors.border,
-        dot: colors.textSubtle,
-      }
+      return tint(statusTint.successFg, statusTint.successBg)
     case "cancelled":
-      return {
-        text: colors.textMuted,
-        bg: colors.muted,
-        border: colors.border,
-        dot: colors.textSubtle,
-      }
     case "declined":
-      return { text: "#7F1D1D", bg: "#FEF2F2", border: "#FCA5A5", dot: "#EF4444" }
-    case "expired":
-      return { text: "#7C2D12", bg: "#FFF7ED", border: "#FDBA74", dot: "#F97316" }
+      return tint(statusTint.dangerFg, statusTint.dangerBg)
     default:
-      return {
-        text: colors.textMuted,
-        bg: colors.muted,
-        border: colors.border,
-        dot: colors.textSubtle,
-      }
+      return tint(colors.textMuted, colors.muted)
   }
 }
 

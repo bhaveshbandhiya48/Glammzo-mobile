@@ -71,8 +71,8 @@ function FilterPill({
       >
         <Text
           variant="caption"
-          color={selected ? colors.coral : colors.text}
-          style={{ fontFamily: selected ? "Inter_600SemiBold" : "Inter_500Medium" }}
+          color={selected ? colors.primary : colors.text}
+          style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
         >
           {label}
         </Text>
@@ -80,18 +80,19 @@ function FilterPill({
           <Icon
             name="chevron-down"
             size={14}
-            color={selected ? colors.coral : colors.textMuted}
+            color={selected ? colors.primary : colors.textMuted}
           />
         ) : null}
       </Pressable>
       {selected && onClear ? (
         <Pressable
+          accessibilityRole="button"
           onPress={onClear}
           hitSlop={8}
           accessibilityLabel={`Clear ${label}`}
           style={styles.pillClear}
         >
-          <Icon name="close" size={14} color={colors.coral} />
+          <Icon name="close" size={14} color={colors.primary} />
         </Pressable>
       ) : null}
     </View>
@@ -238,13 +239,14 @@ export default function ArtistsScreen() {
           value={search}
           onChangeText={setSearch}
           placeholder="Search by name, area or service"
+          accessibilityLabel="Search artists"
           placeholderTextColor={colors.textSubtle}
           style={styles.searchInput}
           autoCorrect={false}
           returnKeyType="search"
         />
         {search ? (
-          <Pressable onPress={() => setSearch("")} hitSlop={8}>
+          <Pressable accessibilityRole="button" onPress={() => setSearch("")} hitSlop={8}>
             <Icon name="close-circle" size={18} color={colors.textSubtle} />
           </Pressable>
         ) : null}
@@ -264,12 +266,12 @@ export default function ArtistsScreen() {
           <Icon
             name="options-outline"
             size={18}
-            color={activeFilterCount > 0 ? colors.coral : colors.text}
+            color={activeFilterCount > 0 ? colors.primary : colors.text}
           />
           <Text
             variant="caption"
-            color={activeFilterCount > 0 ? colors.coral : colors.text}
-            style={{ fontFamily: "Inter_600SemiBold" }}
+            color={activeFilterCount > 0 ? colors.primary : colors.text}
+            style={{ fontFamily: "Geist_600SemiBold" }}
           >
             Filters
           </Text>
@@ -347,7 +349,7 @@ export default function ArtistsScreen() {
   if (catalog === null || catalog.total === 0) {
     return (
       <View style={[styles.root, styles.empty]}>
-        <Icon name="sparkles-outline" size={40} color={colors.coral} />
+        <Icon name="sparkles-outline" size={40} color={colors.primary} />
         <Text variant="heading" style={{ textAlign: "center" }}>
           Artists are coming soon
         </Text>
@@ -397,8 +399,8 @@ export default function ArtistsScreen() {
                   : "Try clearing filters or searching something else."}
               </Text>
               {activeFilterCount > 0 && !error ? (
-                <Pressable onPress={clearFilters} style={styles.clearLink}>
-                  <Text variant="bodyStrong" color={colors.coral}>
+                <Pressable accessibilityRole="button" onPress={clearFilters} style={styles.clearLink}>
+                  <Text variant="bodyStrong" color={colors.primary}>
                     Clear all filters
                   </Text>
                 </Pressable>
@@ -408,7 +410,7 @@ export default function ArtistsScreen() {
         }
         ListFooterComponent={
           loadingMore ? (
-            <ActivityIndicator color={colors.coral} style={{ marginVertical: spacing.lg }} />
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
           ) : undefined
         }
         onEndReached={() => void loadMore()}
@@ -450,7 +452,7 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Geist_400Regular",
     fontSize: 15,
     color: colors.text,
     paddingVertical: 10,
@@ -472,21 +474,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   filterBtnOn: {
-    backgroundColor: "#FEEDE9",
-    borderColor: colors.coral,
+    backgroundColor: "#F1F1F1",
+    borderColor: colors.primary,
   },
   badge: {
     minWidth: 18,
     height: 18,
     borderRadius: 9,
     paddingHorizontal: 5,
-    backgroundColor: colors.coral,
+    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   badgeText: {
     fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Geist_600SemiBold",
     lineHeight: 14,
   },
   pill: {
@@ -500,8 +502,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   pillOn: {
-    backgroundColor: "#FEEDE9",
-    borderColor: colors.coral,
+    backgroundColor: "#F1F1F1",
+    borderColor: colors.primary,
   },
   pillMain: {
     flexDirection: "row",

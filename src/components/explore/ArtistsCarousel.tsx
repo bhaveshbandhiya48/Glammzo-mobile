@@ -71,8 +71,8 @@ export function ArtistsCarousel({ latitude, longitude }: Props) {
             Within {NEARBY_RADIUS_KM} km · makeup, hair, mehendi and more
           </Text>
         </View>
-        <Pressable onPress={() => router.push("/artists" as Href)} hitSlop={8}>
-          <Text variant="bodyStrong" color={colors.coral}>
+        <Pressable accessibilityRole="button" onPress={() => router.push("/artists" as Href)} hitSlop={8}>
+          <Text variant="bodyStrong" color={colors.primary}>
             See all
           </Text>
         </Pressable>

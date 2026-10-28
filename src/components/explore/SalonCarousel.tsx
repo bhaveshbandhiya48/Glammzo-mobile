@@ -42,8 +42,8 @@ export function SalonCarousel({ title, subtitle, salons, onSeeAll }: Props) {
           ) : null}
         </View>
         {onSeeAll ? (
-          <Pressable onPress={onSeeAll} hitSlop={8}>
-            <Text variant="bodyStrong" color={colors.coral}>
+          <Pressable accessibilityRole="button" onPress={onSeeAll} hitSlop={8}>
+            <Text variant="bodyStrong" color={colors.primary}>
               See all
             </Text>
           </Pressable>

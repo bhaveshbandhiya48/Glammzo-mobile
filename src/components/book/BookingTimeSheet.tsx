@@ -42,6 +42,7 @@ export function BookingTimeSheet({
             const active = value === slot.value && !slot.disabled
             return (
               <Pressable
+                accessibilityRole="button"
                 key={slot.value}
                 disabled={slot.disabled}
                 onPress={() => {
@@ -75,6 +76,7 @@ export function BookingTimeSheet({
       )}
       {value && onClear ? (
         <Pressable
+          accessibilityRole="button"
           onPress={() => {
             onClear()
             onClose()
@@ -118,8 +120,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   slotActive: {
-    backgroundColor: colors.coral,
-    borderColor: colors.coral,
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   slotDisabled: {
     borderStyle: "dashed",

@@ -220,7 +220,7 @@ export function LocationPickerSheet({
               },
         ]}
       >
-        <Pressable style={styles.backdrop} onPress={handleClose} />
+        <Pressable accessibilityRole="button" style={styles.backdrop} onPress={handleClose} />
 
         <Animated.View
           style={[
@@ -281,6 +281,7 @@ export function LocationPickerSheet({
             />
             {query.length > 0 ? (
               <Pressable
+                accessibilityRole="button"
                 onPress={() => {
                   onQueryChange("")
                   inputRef.current?.focus()
@@ -313,6 +314,7 @@ export function LocationPickerSheet({
             {!typing ? (
               <>
                 <Pressable
+                  accessibilityRole="button"
                   style={[styles.nearMe, nearMeLoading && styles.nearMeDisabled]}
                   onPress={() => {
                     if (!nearMeLoading) onUseCurrentLocation()
@@ -320,14 +322,14 @@ export function LocationPickerSheet({
                   disabled={nearMeLoading}
                 >
                   {nearMeLoading ? (
-                    <ActivityIndicator color={colors.coral} />
+                    <ActivityIndicator color={colors.primary} />
                   ) : (
                     <View style={styles.nearMeIcon}>
-                      <Icon name="navigate" size={18} color={colors.coral} />
+                      <Icon name="navigate" size={18} color={colors.primary} />
                     </View>
                   )}
                   <View style={{ flex: 1 }}>
-                    <Text variant="bodyStrong" color={colors.coral}>
+                    <Text variant="bodyStrong" color={colors.primary}>
                       Use current location
                     </Text>
                     <Text variant="caption" muted>
@@ -343,7 +345,7 @@ export function LocationPickerSheet({
                 </Text>
                 {nearbyLoading ? (
                   <View style={styles.loadingRow}>
-                    <ActivityIndicator size="small" color={colors.coral} />
+                    <ActivityIndicator size="small" color={colors.primary} />
                     <Text muted>Finding nearby areas…</Text>
                   </View>
                 ) : null}
@@ -358,6 +360,7 @@ export function LocationPickerSheet({
                       currentLabel.startsWith(`${area.primaryText},`)
                     return (
                       <Pressable
+                        accessibilityRole="button"
                         key={area.placeId || area.primaryText}
                         style={({ pressed }) => [
                           styles.resultRow,
@@ -381,7 +384,7 @@ export function LocationPickerSheet({
                           ) : null}
                         </View>
                         {selected ? (
-                          <Icon name="checkmark" size={18} color={colors.coral} />
+                          <Icon name="checkmark" size={18} color={colors.primary} />
                         ) : null}
                       </Pressable>
                     )
@@ -395,7 +398,7 @@ export function LocationPickerSheet({
                 </Text>
                 {placesLoading ? (
                   <View style={styles.loadingRow}>
-                    <ActivityIndicator size="small" color={colors.coral} />
+                    <ActivityIndicator size="small" color={colors.primary} />
                     <Text muted>Finding places…</Text>
                   </View>
                 ) : null}
@@ -406,6 +409,7 @@ export function LocationPickerSheet({
                 ) : (
                   predictions.map((prediction) => (
                     <Pressable
+                      accessibilityRole="button"
                       key={prediction.placeId}
                       style={({ pressed }) => [
                         styles.resultRow,
@@ -537,7 +541,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFF7F5",
+    backgroundColor: "#F1F1F1",
   },
   divider: {
     height: StyleSheet.hairlineWidth,

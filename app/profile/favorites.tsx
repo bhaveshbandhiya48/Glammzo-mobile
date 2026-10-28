@@ -157,7 +157,7 @@ export default function FavoritesScreen() {
                         />
                       ) : (
                         <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                          <Text variant="heading" color={colors.coral}>
+                          <Text variant="heading" color={colors.primary}>
                             {artist.displayName.slice(0, 1).toUpperCase()}
                           </Text>
                         </View>

@@ -80,7 +80,8 @@ const NO_STAFF_MESSAGE =
 
 export default function BookingScreen() {
   const router = useRouter()
-  const { salonId } = useLocalSearchParams<{ salonId: string }>()
+  // `staffId` comes from Book again: keep the same stylist when they still do these services.
+  const { salonId, staffId: staffParam } = useLocalSearchParams<{ salonId: string; staffId?: string }>()
   const [salon, setSalon] = useState<Salon | undefined>()
   const [salonLoading, setSalonLoading] = useState(true)
   const cart = useCart()
@@ -108,7 +109,7 @@ export default function BookingScreen() {
   const [dateSheetOpen, setDateSheetOpen] = useState(false)
   const [timeSheetOpen, setTimeSheetOpen] = useState(false)
   const [confirmSheetOpen, setConfirmSheetOpen] = useState(false)
-  const [staffId, setStaffId] = useState<string | null>(null)
+  const [staffId, setStaffId] = useState<string | null>(staffParam || null)
   const [useWallet, setUseWallet] = useState(false)
   const [useLoyalty, setUseLoyalty] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -332,7 +333,7 @@ export default function BookingScreen() {
       if (staffId !== onlyId) setStaffId(onlyId)
       return
     }
-    if (staffId && !bookableStaff.some((member) => member.id === staffId)) {
+    if (staffId && bookableStaff.length > 0 && !bookableStaff.some((member) => member.id === staffId)) {
       setStaffId(null)
     }
   }, [bookableStaff, staffId])

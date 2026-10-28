@@ -12,6 +12,7 @@ import { ArtistCard } from "@/components/ui/ArtistCard"
 import { Text } from "@/components/ui/Text"
 import {
   artistCategoryLabel,
+  fetchArtists,
   fetchHomeArtists,
   getHomeArtistsSnapshot,
   type ArtistCardData,
@@ -22,9 +23,11 @@ import { colors, spacing } from "@/theme/tokens"
 type Props = {
   latitude?: number | null
   longitude?: number | null
+  /** Search text from Home: show artists offering that service instead of the nearby list. */
+  query?: string
 }
 
-export function ArtistsCarousel({ latitude, longitude }: Props) {
+export function ArtistsCarousel({ latitude, longitude, query }: Props) {
   const router = useRouter()
   const { width: windowWidth } = useWindowDimensions()
   const lat = latitude ?? undefined
@@ -35,7 +38,28 @@ export function ArtistsCarousel({ latitude, longitude }: Props) {
   )
   const [labels, setLabels] = useState<Record<string, string>>(cached?.labels ?? {})
 
+  const q = query?.trim() ?? ""
+
   useEffect(() => {
+    if (!q) return
+    let cancelled = false
+    const controller = new AbortController()
+    setArtists(null)
+    void fetchArtists({ q, latitude: lat, longitude: lng, sort: "nearest", limit: 10 }, controller.signal)
+      .then((data) => {
+        if (!cancelled) setArtists(data.artists ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setArtists([])
+      })
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [q, lat, lng])
+
+  useEffect(() => {
+    if (q) return
     let cancelled = false
     const snap = getHomeArtistsSnapshot(lat, lng)
     if (snap) {
@@ -52,7 +76,7 @@ export function ArtistsCarousel({ latitude, longitude }: Props) {
     return () => {
       cancelled = true
     }
-  }, [lat, lng])
+  }, [lat, lng, q])
 
   if (!artists || artists.length === 0) return null
 
@@ -66,9 +90,11 @@ export function ArtistsCarousel({ latitude, longitude }: Props) {
     <View style={styles.wrap}>
       <View style={styles.header}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="heading">Nearby Artists</Text>
+          <Text variant="heading">{q ? `Artists for “${q}”` : "Nearby Artists"}</Text>
           <Text variant="caption" muted style={{ marginTop: 2 }}>
-            Within {NEARBY_RADIUS_KM} km · makeup, hair, mehendi and more
+            {q
+              ? "Solo artists who offer this, nearest first"
+              : `Within ${NEARBY_RADIUS_KM} km · makeup, hair, mehendi and more`}
           </Text>
         </View>
         <Pressable accessibilityRole="button" onPress={() => router.push("/artists" as Href)} hitSlop={8}>

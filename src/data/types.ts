@@ -166,9 +166,22 @@ export type Booking = {
   refundStatus?: "none" | "pending" | "processed" | "failed"
   /** Set while a solo artist booking waits for its advance: when the held slot is released. */
   paymentDeadline?: string
+  /** Paid advance on an active artist booking: refund if cancelled now, and when it next drops. */
+  cancelRefund?: {
+    advance: number
+    refund: number
+    percent: number
+    policy: string
+    nextChangeAt?: string
+    nextRefund?: number
+  }
   /** Solo artist with a paid advance: what the client gets back if they cancel now. */
   cancelRefundNote?: string
   staffName?: string
+  /** CRM staff member (salon bookings), for Book again. */
+  staffId?: string
+  /** Solo artist service booked (for Book again). */
+  artistServiceId?: string
   declineReason?: string
   hasVerifiedReview?: boolean
   /** Submitted review details when `hasVerifiedReview` is true. */

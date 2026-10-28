@@ -4,6 +4,7 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { formatRupees } from "@/lib/service-pricing"
 
 import { BookingTimeline } from "@/components/bookings/BookingTimeline"
+import { RefundPreview } from "@/components/bookings/RefundPreview"
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
@@ -34,6 +35,7 @@ import {
 import { cancelArtistPublicBooking } from "@/lib/artists-api"
 import { cancelBooking, fetchBookings } from "@/lib/bookings-api"
 import { CRM_URL } from "@/lib/config"
+import { useCart } from "@/context/CartContext"
 import {
   canCancelWithNotice,
   CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
@@ -266,6 +268,7 @@ function PayAdvanceStrip({ booking }: { booking: Booking }) {
 }
 
 export default function BookingsScreen() {
+  const cart = useCart()
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
   const [authChecked, setAuthChecked] = useState(false)
@@ -419,6 +422,29 @@ export default function BookingsScreen() {
   const selectedArtist = selected ? isArtistBooking(selected) : false
   const selectedVisit = selected ? visitTypeLabel(selected) : null
   const visitDone = selected?.status === "completed"
+  /** Same services (and stylist) as this booking, straight to picking a time. */
+  function bookAgain(booking: Booking) {
+    setSelected(null)
+    if (isArtistBooking(booking)) {
+      const slug = booking.artistSlug || booking.salonId
+      router.push({
+        pathname: "/artist/book/[slug]",
+        params: booking.artistServiceId ? { slug, serviceIds: booking.artistServiceId } : { slug },
+      })
+      return
+    }
+    const serviceIds = booking.services.map((s) => s.id).filter((id) => id && id !== "service")
+    if (serviceIds.length === 0) {
+      router.push({ pathname: "/salon/[id]", params: { id: booking.salonId } })
+      return
+    }
+    cart.clearSalon(booking.salonId)
+    for (const id of serviceIds) cart.toggleService(booking.salonId, id)
+    router.push({
+      pathname: "/book/[salonId]",
+      params: booking.staffId ? { salonId: booking.salonId, staffId: booking.staffId } : { salonId: booking.salonId },
+    })
+  }
   const providerSlug = selected ? selected.artistSlug || selected.salonId : ""
   // After a visit, Review / Book again lead and the profile link drops to the bottom.
   const viewProviderButton =
@@ -744,14 +770,7 @@ export default function BookingsScreen() {
                     <Button
                       label="Book again"
                       variant={visitDone && selected.hasVerifiedReview ? "primary" : "secondary"}
-                      onPress={() => {
-                        const slug = selected.artistSlug || selected.salonId
-                        setSelected(null)
-                        router.push({
-                          pathname: "/artist/book/[slug]",
-                          params: { slug },
-                        })
-                      }}
+                      onPress={() => bookAgain(selected)}
                     />
                   ) : null}
                   {upcomingStatuses.includes(selected.status) ? (
@@ -840,11 +859,7 @@ export default function BookingsScreen() {
                   <Button
                     label="Book again"
                     variant={visitDone && selected.hasVerifiedReview ? "primary" : "secondary"}
-                    onPress={() => {
-                      const id = selected.salonId
-                      setSelected(null)
-                      router.push({ pathname: "/salon/[id]", params: { id } })
-                    }}
+                    onPress={() => bookAgain(selected)}
                   />
                   {visitDone ? viewProviderButton : null}
                 </>
@@ -865,7 +880,9 @@ export default function BookingsScreen() {
               ? "You can cancel until the appointment starts. Tell us why you are cancelling."
               : `Free cancellation until ${selected?.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS} hours before your appointment. Tell us why you are cancelling.`}
           </Text>
-          {selected?.cancelRefundNote ? (
+          {selected?.cancelRefund ? (
+            <RefundPreview booking={selected} />
+          ) : selected?.cancelRefundNote ? (
             <Text style={styles.refundNote}>{selected.cancelRefundNote}</Text>
           ) : null}
           {selected ? (

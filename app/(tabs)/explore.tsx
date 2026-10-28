@@ -817,13 +817,13 @@ export default function ExploreScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.scroll, showCart && styles.scrollWithCart]}
         >
-          {homeReady ? (
+          {homeReady && !searchQuery.trim() ? (
             <View style={styles.section}>
               <NextBookingCard />
             </View>
           ) : null}
 
-          {homeReady ? (
+          {homeReady && !searchQuery.trim() ? (
             <PromoBannerCarousel
               items={offerBanners}
               onPressItem={(item) => {
@@ -1021,6 +1021,13 @@ export default function ExploreScreen() {
               onBrowseCity={() => void browseCity()}
               onChangeLocation={openLocationSheet}
             />
+          ) : searchQuery.trim() && activeFilterCount === 0 && gridSalons.length === 0 ? (
+            <View style={styles.searchEmpty}>
+              <Text variant="bodyStrong">No salons for “{searchQuery.trim()}” nearby</Text>
+              <Text variant="caption" muted>
+                Try another word, like haircut or facial. Solo artists who offer it show below.
+              </Text>
+            </View>
           ) : showFilterEmpty ||
             (gridSalons.length === 0 && featuredSection.salons.length === 0) ? (
             <LocationEmptyState
@@ -1077,6 +1084,14 @@ export default function ExploreScreen() {
               ) : null}
             </>
           )}
+
+          {homeReady && searchQuery.trim() && filters.category === "all" ? (
+            <ArtistsCarousel
+              query={searchQuery}
+              latitude={savedLocation?.latitude}
+              longitude={savedLocation?.longitude}
+            />
+          ) : null}
         </ScrollView>
 
         {showCart ? <CartStrip entries={cartEntries} /> : null}
@@ -1429,6 +1444,10 @@ const styles = StyleSheet.create({
   },
   scrollWithCart: {
     paddingBottom: 180,
+  },
+  searchEmpty: {
+    gap: 4,
+    paddingVertical: spacing.lg,
   },
   section: {
     marginTop: spacing.xl,

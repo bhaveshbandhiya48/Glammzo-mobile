@@ -17,6 +17,8 @@ const REASON_LABELS: Record<string, string> = {
   wallet_restore: "Returned after a cancellation",
   adjustment: "Adjustment by Glammzo",
   referral_reward: "Refer a friend reward",
+  gift_card: "Gift card received",
+  gift_card_expired: "Unused gift card expired",
 }
 
 /** Plain words for a wallet ledger reason code. */
@@ -95,4 +97,31 @@ export async function claimReferral(code: string) {
     body: { code },
   })
   return data.referral
+}
+
+export type GiftCardSummary = {
+  id: string
+  token: string | null
+  direction: "sent" | "received"
+  amountRupees: number
+  remainingRupees: number
+  status: "pending_payment" | "active" | "used" | "expired"
+  otherName: string | null
+  otherPhone: string
+  message: string | null
+  expiresAt: string | null
+  createdAt: string
+}
+
+export async function fetchGiftCards() {
+  return (await apiFetch<{ ok: boolean; giftCards: GiftCardSummary[] }>("/api/mobile/gift-cards")).giftCards ?? []
+}
+
+export async function createGiftCard(input: {
+  amountRupees: number
+  recipientPhone: string
+  recipientName: string
+  message: string
+}) {
+  return (await apiFetch<{ ok: boolean; token: string }>("/api/mobile/gift-cards", { method: "POST", body: input })).token
 }

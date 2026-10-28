@@ -108,6 +108,10 @@ function RootNavigator() {
           options={profileStackOptions("Refer a friend")}
         />
         <Stack.Screen
+          name="profile/gift-cards"
+          options={profileStackOptions("Gift cards")}
+        />
+        <Stack.Screen
           name="profile/activity"
           options={profileStackOptions("Wallet activity")}
         />

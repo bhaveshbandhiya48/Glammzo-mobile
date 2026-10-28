@@ -11,6 +11,7 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
+import { ReviewPhotoPicker } from "@/components/reviews/ReviewPhotoPicker"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
@@ -58,11 +59,13 @@ export default function ReviewScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [photoUrls, setPhotoUrls] = useState<string[]>([])
+  const [photosBusy, setPhotosBusy] = useState(false)
 
   const title = salonName || (isArtist ? "Artist" : "Salon")
   const reviewTargetId = isArtist ? artistPublicToken : appointmentId
   const canSubmit =
-    Boolean(reviewTargetId) && comment.trim().length >= 3 && rating >= 1
+    Boolean(reviewTargetId) && comment.trim().length >= 3 && rating >= 1 && !photosBusy
 
   async function handleSubmit() {
     if (!reviewTargetId || !canSubmit) return
@@ -75,6 +78,7 @@ export default function ReviewScreen() {
           rating,
           reviewType: chip,
           comment: comment.trim(),
+          photoUrls,
         })
       } else {
         await submitSalonReview({
@@ -83,6 +87,7 @@ export default function ReviewScreen() {
           reviewType: chip,
           comment: comment.trim(),
           includeStaffReview: Boolean(stylist && includeStaff),
+          photoUrls,
         })
       }
       setDone(true)
@@ -245,8 +250,12 @@ export default function ReviewScreen() {
             />
           </View>
 
+          <View style={styles.section}>
+            <ReviewPhotoPicker urls={photoUrls} onChange={setPhotoUrls} onBusyChange={setPhotosBusy} />
+          </View>
+
           {error ? (
-            <Text variant="caption" color={colors.primary} style={styles.gap}>
+            <Text variant="caption" color={colors.destructive} style={styles.gap}>
               {error}
             </Text>
           ) : null}

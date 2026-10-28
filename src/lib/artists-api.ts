@@ -133,6 +133,7 @@ export type PublicArtistReview = {
   createdAt: string
   serviceName: string | null
   authorName: string
+  photoUrls?: string[]
 }
 
 export type PublicArtist = {

@@ -23,6 +23,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
+import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
 import { Text } from "@/components/ui/Text"
 import { CatalogServiceRow } from "@/components/salon/CatalogServiceRow"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
@@ -126,6 +127,7 @@ function ReviewCard({ review }: { review: SalonReview }) {
         <StarRow rating={review.rating} />
       </View>
       <Text style={styles.reviewComment}>{review.comment}</Text>
+      <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
       <Text variant="caption" muted>
         {review.serviceName}
         {review.staffMember.name ? ` · with ${review.staffMember.name}` : ""}

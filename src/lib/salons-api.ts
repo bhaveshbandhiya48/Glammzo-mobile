@@ -260,6 +260,9 @@ function mapReview(raw: unknown): SalonReview | null {
     comment: asString(r.comment),
     verified: typeof r.verified === "boolean" ? r.verified : undefined,
     ownerReply: typeof r.ownerReply === "string" ? r.ownerReply : r.ownerReply === null ? null : undefined,
+    photoUrls: Array.isArray(r.photoUrls)
+      ? r.photoUrls.filter((url: unknown): url is string => typeof url === "string").slice(0, 3)
+      : undefined,
     ownerReplyDate:
       typeof r.ownerReplyDate === "string"
         ? r.ownerReplyDate

@@ -83,6 +83,14 @@ const config = {
     "expo-video",
     "@react-native-community/datetimepicker",
     [
+      "expo-image-picker",
+      {
+        photosPermission: "Glammzo needs photo access so you can add photos to your reviews.",
+        cameraPermission: "Glammzo needs the camera so you can take a photo for your review.",
+        microphonePermission: false,
+      },
+    ],
+    [
       "react-native-maps",
       {
         ...(mapsApiKeyAndroid

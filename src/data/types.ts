@@ -85,6 +85,7 @@ export type SalonReview = {
   verified?: boolean
   ownerReply?: string | null
   ownerReplyDate?: string | null
+  photoUrls?: string[]
 }
 
 export type Salon = {

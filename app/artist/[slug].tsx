@@ -24,6 +24,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
+import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useCart } from "@/context/CartContext"
@@ -468,6 +469,7 @@ export default function ArtistDetailScreen() {
                     {review.comment}
                   </Text>
                 ) : null}
+                <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
               </View>
             ))}
           </View>

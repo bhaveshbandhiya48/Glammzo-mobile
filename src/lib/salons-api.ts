@@ -182,6 +182,7 @@ function mapPackage(raw: unknown, fallbackImage = ""): SalonPackage | null {
     items,
     badge: typeof p.badge === "string" ? p.badge : p.badge === null ? null : undefined,
     isFeatured: typeof p.isFeatured === "boolean" ? p.isFeatured : Boolean(p.is_featured),
+    prepaidEnabled: p.prepaidEnabled === true || p.prepaid_enabled === true,
     showComparePrice:
       typeof p.showComparePrice === "boolean"
         ? p.showComparePrice

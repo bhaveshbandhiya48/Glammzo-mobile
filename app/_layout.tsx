@@ -112,6 +112,10 @@ function RootNavigator() {
           options={profileStackOptions("Gift cards")}
         />
         <Stack.Screen
+          name="profile/packages"
+          options={profileStackOptions("My packages")}
+        />
+        <Stack.Screen
           name="profile/activity"
           options={profileStackOptions("Wallet activity")}
         />

@@ -64,6 +64,7 @@ import {
   patchConsumerProfileCache,
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
+import { fetchMyPackages, sessionsLeftAt, type MyPackage } from "@/lib/packages-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 function formatDayChip(dateKey: string) {
@@ -113,6 +114,8 @@ export default function BookingScreen() {
   const [staffId, setStaffId] = useState<string | null>(staffParam || null)
   const [useWallet, setUseWallet] = useState(false)
   const [useLoyalty, setUseLoyalty] = useState(false)
+  const [myPackages, setMyPackages] = useState<MyPackage[]>([])
+  const [usePackage, setUsePackage] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
@@ -155,6 +158,9 @@ export default function BookingScreen() {
         loadProfilePreferApi(),
       ])
       if (!active) return
+      void fetchMyPackages()
+        .then((next) => active && setMyPackages(next))
+        .catch(() => {})
 
       if (loyaltyResult.status === "fulfilled") {
         setLoyalty(loyaltyResult.value)
@@ -352,10 +358,29 @@ export default function BookingScreen() {
       )
     : 0
 
+  // Prepaid package sessions cover whole service lines (the server checks again when booking).
+  const packageLeft = salon ? sessionsLeftAt(myPackages, salon.id) : new Map<string, number>()
+  const packageCovered = selectedPackage
+    ? []
+    : selectedServices.filter(
+        (service) => (packageLeft.get(service.id) ?? 0) >= Math.max(1, salonCart?.quantities[service.id] ?? 1),
+      )
+  const packageActive = usePackage && packageCovered.length > 0
+  const packageDiscount = packageActive
+    ? packageCovered.reduce(
+        (sum, service) =>
+          sum + serviceLineAmount(service, salonCart?.quantities, salonCart?.priceOptionIds[service.id] ?? null),
+        0,
+      )
+    : 0
+
   const loyaltyAvailable = canApplyLoyalty(loyalty)
-  const afterPromo = appliedDiscount?.finalTotal ?? subtotal
-  const promoDiscount = appliedDiscount?.discountAmount ?? 0
-  const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
+  // Promo codes don't stack with package sessions.
+  const afterPromo = packageActive
+    ? Math.max(0, subtotal - packageDiscount)
+    : appliedDiscount?.finalTotal ?? subtotal
+  const promoDiscount = packageActive ? 0 : appliedDiscount?.discountAmount ?? 0
+  const appliedPromoCode = packageActive ? null : appliedDiscount?.code ?? cashbackClaim?.code ?? null
   const loyaltyCredit =
     useLoyalty && loyaltyAvailable && !selectedPackage
       ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(afterPromo, 0))
@@ -534,6 +559,9 @@ export default function BookingScreen() {
 
   const confirmPriceLines = [
     { label: "Subtotal", value: `${formatRupees(subtotal)}` },
+    ...(packageActive
+      ? [{ label: "Prepaid package", value: `−${formatRupees(packageDiscount)}`, success: true }]
+      : []),
     ...(promoDiscount > 0 && appliedDiscount
       ? [
           {
@@ -602,6 +630,7 @@ export default function BookingScreen() {
         promoCode: appliedPromoCode || undefined,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
+        usePackageSessions: packageActive,
         marketingOptIn,
         serviceQuantities: salonCart?.quantities,
         servicePriceOptionIds: salonCart?.priceOptionIds,
@@ -1121,6 +1150,30 @@ export default function BookingScreen() {
             </View>
           </Pressable>
 
+          {packageCovered.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ checked: packageActive }}
+              style={[styles.rewardRow, packageActive && styles.rewardRowActive]}
+              onPress={() => setUsePackage((value) => !value)}
+            >
+              <View style={styles.rewardIcon}>
+                <Icon name="cube-outline" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.rewardCopy}>
+                <Text variant="bodyStrong">Prepaid package</Text>
+                <Text variant="caption" muted>
+                  {`Covers ${packageCovered.map((service) => service.name).join(", ")} · tap to ${packageActive ? "pay instead" : "use"}`}
+                </Text>
+              </View>
+              <View style={[styles.applyChip, packageActive && styles.applyChipOn]}>
+                <Text variant="caption" color={packageActive ? colors.primaryFg : colors.primary}>
+                  {packageActive ? "Applied" : "Use"}
+                </Text>
+              </View>
+            </Pressable>
+          ) : null}
+
           <Pressable
             accessibilityRole="button"
             style={[
@@ -1182,6 +1235,12 @@ export default function BookingScreen() {
             <Text muted>Subtotal</Text>
             <Text>{formatRupees(subtotal)}</Text>
           </View>
+          {packageActive ? (
+            <View style={styles.summaryRow}>
+              <Text muted>Prepaid package</Text>
+              <Text color={colors.success}>−{formatRupees(packageDiscount)}</Text>
+            </View>
+          ) : null}
           {promoDiscount > 0 && appliedDiscount ? (
             <View style={styles.summaryRow}>
               <Text muted>Promo ({appliedDiscount.code})</Text>

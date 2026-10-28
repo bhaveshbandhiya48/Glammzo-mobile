@@ -24,6 +24,7 @@ import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
 import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
+import { BuyAheadButton } from "@/components/salon/BuyAheadButton"
 import { Text } from "@/components/ui/Text"
 import { CatalogServiceRow } from "@/components/salon/CatalogServiceRow"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
@@ -1217,6 +1218,9 @@ export default function SalonDetailScreen() {
                 setDetailPackage(null)
               }}
             />
+            {detailPackage.prepaidEnabled ? (
+              <BuyAheadButton salonId={salon.id} packageId={detailPackage.id} price={detailPackage.packagePrice} />
+            ) : null}
           </View>
         ) : null}
       </BottomSheet>

@@ -34,6 +34,8 @@ export type SalonPackage = {
   badge?: string | null
   isFeatured?: boolean
   showComparePrice?: boolean
+  /** Can be prepaid on Glammzo and used over 12 months. */
+  prepaidEnabled?: boolean
   /** Unisex salon catalogs: men, women, or unisex (both). Null/undefined = infer from included services. */
   genderAudience?: "men" | "women" | "unisex" | null
 }

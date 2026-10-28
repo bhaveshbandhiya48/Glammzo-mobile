@@ -17,6 +17,7 @@ export type CreateBookingInput = {
   promoCode?: string
   useWallet?: boolean
   useFreeService?: boolean
+  usePackageSessions?: boolean
   marketingOptIn?: boolean
   serviceQuantities?: Record<string, number>
   servicePriceOptionIds?: Record<string, string>

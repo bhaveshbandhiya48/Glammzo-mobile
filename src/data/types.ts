@@ -161,6 +161,9 @@ export type Booking = {
   /** Solo artist advance amount, and whether it has been paid. */
   advanceAmount?: number
   advancePaid?: boolean
+  /** Cancelled solo artist booking with a paid advance: amount refunded (rupees) and Razorpay state. */
+  refundAmount?: number
+  refundStatus?: "none" | "pending" | "processed" | "failed"
   /** Set while a solo artist booking waits for its advance: when the held slot is released. */
   paymentDeadline?: string
   /** Solo artist with a paid advance: what the client gets back if they cancel now. */

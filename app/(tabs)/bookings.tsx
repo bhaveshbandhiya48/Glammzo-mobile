@@ -3,6 +3,7 @@ import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
 import { formatRupees } from "@/lib/service-pricing"
 
+import { BookingTimeline } from "@/components/bookings/BookingTimeline"
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
@@ -417,6 +418,24 @@ export default function BookingsScreen() {
 
   const selectedArtist = selected ? isArtistBooking(selected) : false
   const selectedVisit = selected ? visitTypeLabel(selected) : null
+  const visitDone = selected?.status === "completed"
+  const providerSlug = selected ? selected.artistSlug || selected.salonId : ""
+  // After a visit, Review / Book again lead and the profile link drops to the bottom.
+  const viewProviderButton =
+    selected && providerSlug ? (
+      <Button
+        label={selectedArtist ? "View artist" : "View salon"}
+        variant={visitDone ? "secondary" : "primary"}
+        onPress={() => {
+          setSelected(null)
+          if (selectedArtist) {
+            router.push({ pathname: "/artist/[slug]", params: { slug: providerSlug } })
+          } else {
+            router.push({ pathname: "/salon/[id]", params: { id: providerSlug } })
+          }
+        }}
+      />
+    ) : null
   const selectedRelative = selected ? relativeBookingDay(selected.date) : null
 
   return (
@@ -530,6 +549,15 @@ export default function BookingsScreen() {
                   Booking #{selected.id.slice(0, 8).toUpperCase()}
                 </Text>
               ) : null}
+            </View>
+
+            <View style={styles.section}>
+              <Text variant="label" muted style={styles.sectionLabel}>
+                Progress
+              </Text>
+              <View style={[styles.sectionCard, styles.timelineCard]}>
+                <BookingTimeline booking={selected} />
+              </View>
             </View>
 
             <View style={styles.section}>
@@ -686,26 +714,13 @@ export default function BookingsScreen() {
             <View style={styles.actions}>
               {selectedArtist ? (
                 <>
-                  {selected.artistSlug || selected.salonId ? (
-                    <Button
-                      label="View artist"
-                      onPress={() => {
-                        const slug = selected.artistSlug || selected.salonId
-                        setSelected(null)
-                        router.push({
-                          pathname: "/artist/[slug]",
-                          params: { slug },
-                        })
-                      }}
-                    />
-                  ) : null}
+                  {visitDone ? null : viewProviderButton}
                   {selected.status === "completed" &&
                   !selected.hasVerifiedReview &&
                   (selected.artistPublicToken ||
                     selected.id.replace(/^artist:/, "").trim()) ? (
                     <Button
                       label="Leave a review"
-                      variant="secondary"
                       onPress={() => {
                         const token =
                           selected.artistPublicToken?.trim() ||
@@ -728,7 +743,7 @@ export default function BookingsScreen() {
                     selected.status === "completed") ? (
                     <Button
                       label="Book again"
-                      variant="secondary"
+                      variant={visitDone && selected.hasVerifiedReview ? "primary" : "secondary"}
                       onPress={() => {
                         const slug = selected.artistSlug || selected.salonId
                         setSelected(null)
@@ -759,17 +774,11 @@ export default function BookingsScreen() {
                       </Text>
                     )
                   ) : null}
+                  {visitDone ? viewProviderButton : null}
                 </>
               ) : (
                 <>
-                  <Button
-                    label="View salon"
-                    onPress={() => {
-                      const id = selected.salonId
-                      setSelected(null)
-                      router.push({ pathname: "/salon/[id]", params: { id } })
-                    }}
-                  />
+                  {visitDone ? null : viewProviderButton}
                   {upcomingStatuses.includes(selected.status) ? (
                     <>
                       {canRescheduleWithNotice(selected.startsAt).allowed ? (
@@ -812,7 +821,6 @@ export default function BookingsScreen() {
                   {selected.status === "completed" && !selected.hasVerifiedReview ? (
                     <Button
                       label="Leave a review"
-                      variant="secondary"
                       onPress={() => {
                         const appointmentId = selected.id
                         const salonName = selected.salonName
@@ -831,13 +839,14 @@ export default function BookingsScreen() {
                   ) : null}
                   <Button
                     label="Book again"
-                    variant="secondary"
+                    variant={visitDone && selected.hasVerifiedReview ? "primary" : "secondary"}
                     onPress={() => {
                       const id = selected.salonId
                       setSelected(null)
                       router.push({ pathname: "/salon/[id]", params: { id } })
                     }}
                   />
+                  {visitDone ? viewProviderButton : null}
                 </>
               )}
             </View>
@@ -1228,6 +1237,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+  },
+  timelineCard: {
+    padding: spacing.lg,
   },
   payStrip: {
     marginTop: spacing.md,

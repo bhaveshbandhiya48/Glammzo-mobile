@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
   listingImageFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#BDBDBD",
+    backgroundColor: "#5C5C5C",
   },
   listingBody: {
     flex: 1,

@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   avatarFallback: {
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#BDBDBD",
+    backgroundColor: "#5C5C5C",
   },
   initials: {
     fontSize: 16,

@@ -31,6 +31,7 @@ import { artistCartId } from "@/lib/artist-cart"
 import {
   artistLevelLabel,
   parseArtistLevel,
+  showArtistLevelToCustomers,
 } from "@/lib/artist-level"
 import {
   fetchPublicArtist,
@@ -287,9 +288,11 @@ export default function ArtistDetailScreen() {
                 </Text>
               </View>
             )}
-            <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
-              <ArtistLevelBadge level={level} size={28} />
-            </View>
+            {showArtistLevelToCustomers(level) ? (
+              <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+                <ArtistLevelBadge level={level} size={28} />
+              </View>
+            ) : null}
           </View>
           <View style={styles.nameRow}>
             <Text variant="title" style={styles.nameText} numberOfLines={2}>
@@ -298,8 +301,7 @@ export default function ArtistDetailScreen() {
             {showVerified ? <ArtistVerifiedBadge size={20} /> : null}
           </View>
           <Text variant="caption" muted style={{ textAlign: "center" }}>
-            {levelLabel}
-            {where ? ` · ${where}` : ""}
+            {[showArtistLevelToCustomers(level) ? levelLabel : null, where].filter(Boolean).join(" · ")}
           </Text>
           {reviewCount > 0 ? (
             <Pressable

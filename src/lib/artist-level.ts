@@ -25,6 +25,11 @@ export function parseArtistLevel(value: unknown): ArtistLevelId {
   return "new"
 }
 
+/** The starting level is internal; customers only see earned levels. */
+export function showArtistLevelToCustomers(level: ArtistLevelId) {
+  return level !== "new"
+}
+
 export function artistLevelLabel(level: ArtistLevelId, fallback?: string | null) {
   return fallback?.trim() || ARTIST_LEVEL_LABEL[level]
 }

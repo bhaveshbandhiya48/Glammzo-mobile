@@ -18,6 +18,7 @@ import {
 } from "@/lib/booking-display"
 import { fetchBookingById } from "@/lib/bookings-api"
 import { getSalonByIdLive } from "@/lib/salons-api"
+import { directionsUrl, googleCalendarUrl, visitStart } from "@/lib/visit-links"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 const PENDING_STEPS_SALON = [
@@ -549,6 +550,19 @@ export default function BookingConfirmationScreen() {
         </View>
       ) : null}
 
+      {!isNegative && (isPending || isSuccess) ? (
+        <VisitLinks
+          title={`${servicesLine || "Appointment"} at ${providerName || salon?.name || "Glammzo"}`}
+          place={providerName || salon?.name || ""}
+          address={salon?.address || areaLine}
+          latitude={salon?.latitude}
+          longitude={salon?.longitude}
+          start={visitStart(bookingDate, bookingTime, booking?.startsAt)}
+          durationMin={booking?.durationMin ?? 60}
+          homeVisit={/home/i.test(visitType)}
+        />
+      ) : null}
+
       <View style={styles.actions}>
         {artistInvoiceBooking && !isNegative ? (
           <ShareArtistInvoiceButton booking={artistInvoiceBooking} />
@@ -587,7 +601,63 @@ export default function BookingConfirmationScreen() {
   )
 }
 
+/** Add to calendar and directions, side by side. */
+function VisitLinks(props: {
+  title: string
+  place: string
+  address: string
+  latitude?: number
+  longitude?: number
+  start: Date | null
+  durationMin: number
+  homeVisit: boolean
+}) {
+  const location = [props.place, props.address].filter(Boolean).join(", ")
+  return (
+    <View style={styles.linkRow}>
+      {props.start ? (
+        <Button
+          label="Add to calendar"
+          variant="secondary"
+          style={styles.linkBtn}
+          onPress={() =>
+            void Linking.openURL(
+              googleCalendarUrl({
+                title: props.title,
+                start: props.start!,
+                durationMin: props.durationMin,
+                location: props.homeVisit ? undefined : location,
+                details: "Booked on Glammzo. Manage it under My bookings.",
+              }),
+            )
+          }
+        />
+      ) : null}
+      {!props.homeVisit && location ? (
+        <Button
+          label="Directions"
+          variant="secondary"
+          style={styles.linkBtn}
+          onPress={() =>
+            void Linking.openURL(
+              directionsUrl({ latitude: props.latitude, longitude: props.longitude, query: location }),
+            )
+          }
+        />
+      ) : null}
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
+  linkRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
+  linkBtn: {
+    flex: 1,
+  },
   screen: {
     paddingTop: spacing.md,
     paddingBottom: spacing.xxxl,

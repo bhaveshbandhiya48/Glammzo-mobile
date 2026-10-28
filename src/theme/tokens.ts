@@ -50,6 +50,8 @@ export const colors = {
   primaryPressed: palette.primaryPressed,
   primarySoft: palette.primarySoft,
   hero: palette.hero,
+  /** Light grey for small labels on the dark hero card (13:1 on #111111). */
+  accent: "#D4D4D4",
   sand: palette.line,
   border: palette.line,
   inputBorder: palette.inputBorder,

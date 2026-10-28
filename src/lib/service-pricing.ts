@@ -67,6 +67,12 @@ export function cartServicesSubtotal(
   return selectedServiceIds.reduce((sum, serviceId) => sum + lineAmount(serviceId), 0)
 }
 
+/** "★ 4.8", or "New" for a place with no reviews yet (never "★ 0.0"). */
+export function formatRatingLabel(rating: number | null | undefined, reviews?: number | null) {
+  if (!rating || rating <= 0 || reviews === 0) return "New"
+  return `★ ${rating.toFixed(1)}`
+}
+
 /** ₹ with Indian grouping (₹15,000); paise only when the amount has them (₹682.50). */
 export function formatRupees(amount: number) {
   const paise = Math.round(amount * 100)

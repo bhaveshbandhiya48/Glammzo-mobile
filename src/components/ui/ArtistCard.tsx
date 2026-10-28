@@ -8,6 +8,7 @@ import { Text } from "@/components/ui/Text"
 import {
   artistLevelLabel,
   parseArtistLevel,
+  showArtistLevelToCustomers,
 } from "@/lib/artist-level"
 import type { ArtistCardData } from "@/lib/artists-api"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
@@ -49,7 +50,7 @@ export function ArtistCard({ artist, categoryLabel: _categoryLabel, onPress, com
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${artist.displayName}${showVerified ? ", verified" : ""}, ${levelLabel}${placeLine ? `, ${placeLine}` : ""}${(artist.reviewCount ?? 0) > 0 && artist.averageRating != null ? `, ${artist.averageRating.toFixed(1)} stars` : ""}`}
+      accessibilityLabel={`${artist.displayName}${showVerified ? ", verified" : ""}${showArtistLevelToCustomers(level) ? `, ${levelLabel}` : ""}${placeLine ? `, ${placeLine}` : ""}${(artist.reviewCount ?? 0) > 0 && artist.averageRating != null ? `, ${artist.averageRating.toFixed(1)} stars` : ""}`}
       style={({ pressed }) => [
         styles.card,
         compact && styles.cardCompact,
@@ -85,9 +86,11 @@ export function ArtistCard({ artist, categoryLabel: _categoryLabel, onPress, com
               </Text>
             </View>
           )}
-          <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
-            <ArtistLevelBadge level={level} size={compact ? 18 : 20} />
-          </View>
+          {showArtistLevelToCustomers(level) ? (
+            <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+              <ArtistLevelBadge level={level} size={compact ? 18 : 20} />
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.headerCopy}>

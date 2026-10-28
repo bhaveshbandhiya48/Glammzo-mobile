@@ -83,17 +83,17 @@ function StripCard({
                 {entry.salonName}
               </Text>
               <Text variant="caption" color="rgba(255,255,255,0.72)" numberOfLines={1}>
-                {entry.itemCount} {itemWord}
-                {entry.previewLabel ? ` · ${entry.previewLabel}` : ""} · {entry.totalLabel}
+                {entry.totalLabel} · {entry.itemCount} {itemWord}
+                {entry.previewLabel ? ` · ${entry.previewLabel}` : ""}
               </Text>
             </View>
           </View>
 
           <View style={styles.cta}>
-            <Text variant="bodyStrong" color={colors.primaryFg}>
+            <Text variant="bodyStrong" color={colors.primary}>
               {ctaLabel}
             </Text>
-            <Icon name="chevron-forward" size={18} color={colors.primaryFg} />
+            <Icon name="chevron-forward" size={18} color={colors.primary} />
           </View>
         </Pressable>
 
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.md,
     paddingRight: spacing.sm,
     borderRadius: radii.xl,
-    backgroundColor: "#1C1C1C",
+    backgroundColor: colors.hero,
     shadowColor: "#000",
     shadowOpacity: 0.22,
     shadowRadius: 16,
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: radii.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
   },
   clearBtn: {
     width: 36,

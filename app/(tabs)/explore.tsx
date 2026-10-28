@@ -15,6 +15,7 @@ import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
 import { MapOverlay } from "@/components/explore/MapOverlay"
 import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
+import { NextBookingCard } from "@/components/explore/NextBookingCard"
 import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
 import { SalonCarousel } from "@/components/explore/SalonCarousel"
 import { SearchSuggestionsPanel } from "@/components/explore/SearchSuggestionsPanel"
@@ -817,6 +818,12 @@ export default function ExploreScreen() {
           contentContainerStyle={[styles.scroll, showCart && styles.scrollWithCart]}
         >
           {homeReady ? (
+            <View style={styles.section}>
+              <NextBookingCard />
+            </View>
+          ) : null}
+
+          {homeReady ? (
             <PromoBannerCarousel
               items={offerBanners}
               onPressItem={(item) => {
@@ -950,6 +957,15 @@ export default function ExploreScreen() {
 
           {homeReady ? (
           <View style={styles.filterBar}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show salons on a map"
+              style={styles.filterChip}
+              onPress={() => setMapOpen(true)}
+            >
+              <Icon name="map-outline" size={16} color={colors.text} />
+              <Text variant="caption">Map</Text>
+            </Pressable>
             <Pressable accessibilityRole="button" style={styles.filterChip} onPress={() => setSortOpen(true)}>
               <Icon name="swap-vertical-outline" size={16} color={colors.text} />
               <Text variant="caption" numberOfLines={1}>
@@ -1062,17 +1078,6 @@ export default function ExploreScreen() {
             </>
           )}
         </ScrollView>
-
-        <Pressable
-          accessibilityRole="button"
-          style={[styles.mapPill, showCart && styles.mapPillRaised]}
-          onPress={() => setMapOpen(true)}
-        >
-          <Icon name="map" size={18} color={colors.primaryFg} />
-          <Text variant="caption" color={colors.primaryFg}>
-            Map
-          </Text>
-        </Pressable>
 
         {showCart ? <CartStrip entries={cartEntries} /> : null}
       </View>
@@ -1473,21 +1478,6 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: spacing.md,
-  },
-  mapPill: {
-    position: "absolute",
-    alignSelf: "center",
-    bottom: spacing.xl,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: spacing.lg,
-    height: 44,
-    backgroundColor: colors.text,
-    borderRadius: radii.pill,
-  },
-  mapPillRaised: {
-    bottom: 128,
   },
   sheetRow: {
     flexDirection: "row",

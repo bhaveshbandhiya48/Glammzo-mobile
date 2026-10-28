@@ -1,3 +1,4 @@
+import { formatRatingLabel } from "@/lib/service-pricing"
 import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -289,7 +290,7 @@ export function SalonCard({ salon, onPress, layout = "grid", active = false }: P
                 <View style={styles.listMetaRow}>
                   <View style={styles.ratingPill}>
                     <Text variant="caption" color={colors.primaryFg}>
-                      ★ {salon.rating.toFixed(1)}
+                      {formatRatingLabel(salon.rating, salon.reviews)}
                     </Text>
                   </View>
                   <Text variant="caption" color="rgba(255,255,255,0.9)">
@@ -361,7 +362,7 @@ export function SalonCard({ salon, onPress, layout = "grid", active = false }: P
         <View style={[styles.metaRow, isCarousel && styles.metaRowCarousel]}>
           <View style={styles.ratingPill}>
             <Text variant="caption" color={colors.primaryFg}>
-              ★ {salon.rating.toFixed(1)}
+              {formatRatingLabel(salon.rating, salon.reviews)}
             </Text>
           </View>
           <Text

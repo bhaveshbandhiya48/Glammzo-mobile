@@ -522,7 +522,7 @@ export default function SalonDetailScreen() {
             {salon.area}, {salon.city}
           </Text>
           <Text variant="caption" style={styles.meta}>
-            ★ {salon.rating.toFixed(1)} · {salon.reviews} reviews
+            {salon.reviews > 0 ? `★ ${salon.rating.toFixed(1)} · ${salon.reviews} review${salon.reviews === 1 ? "" : "s"}` : "New on Glammzo"}
             {salon.distanceKm > 0 ? ` · ${salon.distanceKm.toFixed(1)} km` : ""}
           </Text>
 
@@ -1478,7 +1478,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   menuFabWithCart: {
-    bottom: 92,
+    bottom: 104,
   },
   stickySpacer: {
     flex: 1,

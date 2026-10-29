@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import { useSheetAnimation } from "@/components/ui/useSheetAnimation"
 import type { PlacePrediction } from "@/lib/location-api"
 import { colors, radii, spacing, typography } from "@/theme/tokens"
 
@@ -69,6 +70,7 @@ export function LocationPickerSheet({
   const [searchFocused, setSearchFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const dragY = useRef(new Animated.Value(0)).current
+  const sheetAnim = useSheetAnimation(visible)
   const scrollOffsetRef = useRef(0)
   const closingRef = useRef(false)
 
@@ -198,9 +200,9 @@ export function LocationPickerSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={sheetAnim.mounted}
       transparent
-      animationType="slide"
+      animationType="none"
       onRequestClose={handleClose}
       statusBarTranslucent
     >
@@ -220,7 +222,14 @@ export function LocationPickerSheet({
               },
         ]}
       >
-        <Pressable accessibilityRole="button" style={styles.backdrop} onPress={handleClose} />
+        <Animated.View style={[styles.backdrop, { opacity: sheetAnim.backdropOpacity }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={StyleSheet.absoluteFill}
+            onPress={handleClose}
+          />
+        </Animated.View>
 
         <Animated.View
           style={[
@@ -231,7 +240,7 @@ export function LocationPickerSheet({
                   height: COLLAPSED_HEIGHT,
                   paddingBottom: Math.max(insets.bottom, spacing.lg),
                 },
-            { transform: [{ translateY: dragY }] },
+            { transform: [{ translateY: Animated.add(sheetAnim.sheetY, dragY) }] },
           ]}
           {...sheetPanResponder.panHandlers}
         >

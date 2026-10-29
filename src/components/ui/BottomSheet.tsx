@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import { useSheetAnimation } from "@/components/ui/useSheetAnimation"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 type Props = {
@@ -73,6 +74,7 @@ export function BottomSheet({
   const dragY = useRef(new Animated.Value(0)).current
   const scrollOffsetRef = useRef(0)
   const closingRef = useRef(false)
+  const { mounted, backdropOpacity, sheetY } = useSheetAnimation(visible)
 
   useEffect(() => {
     if (!visible) {
@@ -211,9 +213,16 @@ export function BottomSheet({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
       <View style={styles.root}>
-        <Pressable accessibilityRole="button" style={styles.backdrop} onPress={onClose} />
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            style={StyleSheet.absoluteFill}
+            onPress={onClose}
+          />
+        </Animated.View>
         <Animated.View
           style={[
             styles.sheet,
@@ -221,7 +230,7 @@ export function BottomSheet({
               maxHeight: sheetMaxHeight,
               height: fillHeight ? sheetMaxHeight : undefined,
               paddingBottom: bottomPad,
-              transform: [{ translateY: dragY }],
+              transform: [{ translateY: Animated.add(sheetY, dragY) }],
             },
           ]}
           {...sheetPanResponder.panHandlers}

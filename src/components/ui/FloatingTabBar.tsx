@@ -6,6 +6,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
 
+const BAR_HEIGHT = 64
+
+/** Bottom space a tab screen should leave so its last content scrolls clear of the floating bar. */
+export function useFloatingTabBarSpace() {
+  const insets = useSafeAreaInsets()
+  return BAR_HEIGHT + Math.max(insets.bottom, spacing.md) + spacing.lg
+}
+
 /**
  * Bottom navigation as a separate rounded bar floating above the screen edge
  * (Instagram-style). The selected tab gets a black pill with its label.
@@ -16,7 +24,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
   const routes = state.routes.filter((route) => route.name !== "index")
 
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
       <View style={styles.bar} accessibilityRole="tablist">
         {routes.map((route) => {
           const index = state.routes.indexOf(route)
@@ -90,16 +98,19 @@ function Tab({
 }
 
 const styles = StyleSheet.create({
+  // Floats over the screen: no strip behind the bar.
   wrap: {
-    backgroundColor: colors.bg,
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.sm,
   },
   bar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    height: 64,
+    height: BAR_HEIGHT,
     paddingHorizontal: spacing.sm,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,

@@ -6,6 +6,7 @@ import { formatRupees } from "@/lib/service-pricing"
 import { BookingTimeline } from "@/components/bookings/BookingTimeline"
 import { RefundPreview } from "@/components/bookings/RefundPreview"
 import { WaitlistStrip } from "@/components/bookings/WaitlistStrip"
+import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
@@ -269,6 +270,7 @@ function PayAdvanceStrip({ booking }: { booking: Booking }) {
 }
 
 export default function BookingsScreen() {
+  const tabBarSpace = useFloatingTabBarSpace()
   const cart = useCart()
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
@@ -394,7 +396,7 @@ export default function BookingsScreen() {
         </Text>
         <ScrollView
           style={styles.listScroll}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
         >
           <BookingsListSkeleton count={3} />
@@ -519,7 +521,7 @@ export default function BookingsScreen() {
       {loading ? (
         <ScrollView
           style={styles.listScroll}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
         >
           <BookingsListSkeleton count={3} />
@@ -537,7 +539,7 @@ export default function BookingsScreen() {
       ) : (
         <ScrollView
           style={styles.listScroll}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
           showsVerticalScrollIndicator={false}
         >
           {list.map((booking) => (

@@ -5,6 +5,7 @@ import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from "react-n
 import { useFocusEffect, useRouter } from "expo-router"
 
 import { Button } from "@/components/ui/Button"
+import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
@@ -85,6 +86,7 @@ const APP_VERSION = [
   .join(" · build ")
 
 export default function ProfileScreen() {
+  const tabBarSpace = useFloatingTabBarSpace()
   const router = useRouter()
   const [ready, setReady] = useState(false)
   const [name, setName] = useState("Guest")
@@ -157,7 +159,7 @@ export default function ProfileScreen() {
   }
 
   return (
-    <Screen scroll edges={["top", "left", "right"]} contentStyle={styles.screen}>
+    <Screen scroll edges={["top", "left", "right"]} contentStyle={[styles.screen, { paddingBottom: tabBarSpace }]}>
       <View style={styles.headerCard}>
         <View style={styles.avatar}>
           <Text variant="heading" color={colors.primary}>

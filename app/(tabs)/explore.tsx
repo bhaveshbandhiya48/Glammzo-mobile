@@ -24,6 +24,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
+import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { Icon } from "@/components/ui/Icon"
 import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
@@ -119,6 +120,7 @@ const FILTER_SECTIONS: Array<{ id: FilterSectionId; label: string }> = [
 ]
 
 export default function ExploreScreen() {
+  const tabBarSpace = useFloatingTabBarSpace()
   const router = useRouter()
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
@@ -815,7 +817,7 @@ export default function ExploreScreen() {
       <View style={styles.content}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scroll, showCart && styles.scrollWithCart]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: tabBarSpace + (showCart ? 88 : spacing.lg) }]}
         >
           {homeReady && !searchQuery.trim() ? <NextBookingCard style={styles.nextVisit} /> : null}
 
@@ -1090,7 +1092,7 @@ export default function ExploreScreen() {
           ) : null}
         </ScrollView>
 
-        {showCart ? <CartStrip entries={cartEntries} /> : null}
+        {showCart ? <CartStrip entries={cartEntries} bottomOffset={tabBarSpace - spacing.sm} /> : null}
       </View>
 
       <CartItemsSheet
@@ -1437,9 +1439,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: 110,
-  },
-  scrollWithCart: {
-    paddingBottom: 180,
   },
   // Owns its gap, so nothing is left above the banner when there is no upcoming visit.
   nextVisit: {

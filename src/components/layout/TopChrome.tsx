@@ -33,56 +33,53 @@ export function TopChrome({
   const { unreadCount } = useNotifications()
   const hasQuery = searchQuery.trim().length > 0
 
+  const firstName = username?.trim().split(/\s+/)[0] ?? ""
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
+
   return (
     <View style={[styles.wrap, { paddingTop: insets.top + spacing.sm }]}>
       <View style={styles.topRow}>
-        <Pressable
-          onPress={onLocationChangePress}
-          style={({ pressed }) => [styles.locationBlock, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Change location"
-        >
+        <View style={styles.locationBlock}>
           <Text variant="caption" muted>
-            Book near
+            {greeting}
           </Text>
-          <View style={styles.locationLine}>
-            <Icon name="location" size={16} color={colors.primary} />
-            <Text variant="bodyStrong" numberOfLines={1} style={styles.locationText}>
+          <Text variant="title" numberOfLines={1} style={styles.greeting}>
+            {firstName || "Welcome to Glammzo"}
+          </Text>
+          <Pressable
+            onPress={onLocationChangePress}
+            hitSlop={8}
+            style={({ pressed }) => [styles.locationLine, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Location: ${locationLabel}. Change location`}
+          >
+            <Icon name="location-outline" size={15} color={colors.textMuted} />
+            <Text variant="caption" muted numberOfLines={1} style={styles.locationText}>
               {locationLabel}
             </Text>
-            <Icon name="chevron-down" size={16} color={colors.text} />
-          </View>
-          {username ? (
-            <Text variant="caption" muted numberOfLines={1}>
-              Hi {username}
-            </Text>
-          ) : null}
-        </Pressable>
+            <Icon name="chevron-down" size={14} color={colors.textMuted} />
+          </Pressable>
+        </View>
 
         <View style={styles.actions}>
           <Pressable
             onPress={onNotificationsPress}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressedBtn]}
             accessibilityRole="button"
-            accessibilityLabel="Notifications"
+            accessibilityLabel={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
           >
-            <Icon name="notifications-outline" size={22} color={colors.text} />
-            {unreadCount > 0 ? (
-              <View style={styles.badge}>
-                <Text variant="caption" color={colors.primaryFg} style={styles.badgeText}>
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Text>
-              </View>
-            ) : null}
+            <Icon name="notifications-outline" size={21} color={colors.text} />
+            {unreadCount > 0 ? <View style={styles.dot} /> : null}
           </Pressable>
 
           <Pressable
             onPress={onCartPress}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressedBtn]}
             accessibilityRole="button"
-            accessibilityLabel="Bag"
+            accessibilityLabel={totalItems > 0 ? `Bag, ${totalItems} items` : "Bag"}
           >
-            <Icon name="bag-handle-outline" size={22} color={colors.text} />
+            <Icon name="bag-handle-outline" size={21} color={colors.text} />
             {totalItems > 0 ? (
               <View style={styles.badge}>
                 <Text variant="caption" color={colors.primaryFg} style={styles.badgeText}>
@@ -99,16 +96,16 @@ export function TopChrome({
           onPress={onSearchPress}
           style={({ pressed }) => [styles.searchHit, pressed && styles.pressed]}
           accessibilityRole="search"
-          accessibilityLabel="Search salons"
+          accessibilityLabel="Search salons, artists and services"
         >
-          <Icon name="search-outline" size={18} color={colors.textSubtle} />
+          <Icon name="search-outline" size={19} color={colors.text} />
           <Text
             variant="body"
             color={hasQuery ? colors.text : colors.textSubtle}
             numberOfLines={1}
             style={styles.searchText}
           >
-            {hasQuery ? searchQuery.trim() : "Search salons, spa, barber…"}
+            {hasQuery ? searchQuery.trim() : "Haircut, facial, bridal makeup…"}
           </Text>
         </Pressable>
         {hasQuery && onClearSearch ? (
@@ -130,15 +127,13 @@ const styles = StyleSheet.create({
   wrap: {
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    gap: spacing.md,
+    backgroundColor: colors.bg,
+    gap: spacing.lg,
     zIndex: 30,
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
   },
@@ -146,14 +141,19 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  greeting: {
+    fontSize: 24,
+    letterSpacing: -0.6,
+  },
   locationLine: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    alignSelf: "flex-start",
+    minHeight: 24,
   },
   locationText: {
     flexShrink: 1,
-    fontSize: 17,
   },
   actions: {
     flexDirection: "row",
@@ -163,15 +163,31 @@ const styles = StyleSheet.create({
   actionBtn: {
     width: 44,
     height: 44,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
   },
+  pressedBtn: {
+    backgroundColor: colors.muted,
+  },
+  dot: {
+    position: "absolute",
+    top: 11,
+    right: 12,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
   badge: {
     position: "absolute",
-    top: -2,
-    right: -2,
+    top: -3,
+    right: -3,
     minWidth: 18,
     height: 18,
     borderRadius: radii.pill,
@@ -188,24 +204,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: spacing.lg,
-    borderRadius: radii.md,
-    backgroundColor: colors.bg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
     borderColor: colors.border,
   },
   searchHit: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    minHeight: 48,
+    gap: spacing.md,
+    minHeight: 52,
   },
   searchText: {
     flex: 1,
   },
   pressed: {
-    opacity: 0.88,
+    opacity: 0.7,
   },
 })

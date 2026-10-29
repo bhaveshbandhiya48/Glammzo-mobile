@@ -107,13 +107,11 @@ export function ArtistCard({ artist, categoryLabel: _categoryLabel, onPress, com
           ) : null}
           {(artist.reviewCount ?? 0) > 0 && artist.averageRating != null ? (
             <View style={styles.ratingRow}>
-              <View style={styles.ratingPill} accessibilityLabel={`${artist.averageRating.toFixed(1)} stars`}>
-                <Text variant="caption" color={colors.primaryFg}>
-                  ★ {artist.averageRating.toFixed(1)}
+              <Text variant="caption" accessibilityLabel={`${artist.averageRating.toFixed(1)} stars, ${artist.reviewCount} reviews`}>
+                ★ {artist.averageRating.toFixed(1)}
+                <Text variant="caption" muted>
+                  {`  ·  ${artist.reviewCount} review${artist.reviewCount === 1 ? "" : "s"}`}
                 </Text>
-              </View>
-              <Text variant="caption" muted>
-                {artist.reviewCount} review{artist.reviewCount === 1 ? "" : "s"}
               </Text>
             </View>
           ) : null}

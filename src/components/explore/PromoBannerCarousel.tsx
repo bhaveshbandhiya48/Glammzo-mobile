@@ -34,7 +34,8 @@ export function PromoBannerCarousel({ items, onPressItem }: Props) {
   // Leave room so ~25% of the next banner peeks in (matches Explore scroll padding).
   const available = windowWidth - spacing.lg * 2
   const gap = spacing.md
-  const cardWidth = Math.round((available - gap) / 1.25)
+  // A single banner fills the row; several peek so the row reads as scrollable.
+  const cardWidth = banners.length === 1 ? available : Math.round((available - gap) / 1.12)
   const imageHeight = Math.round(cardWidth * 0.42)
 
   return (

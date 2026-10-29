@@ -9,6 +9,7 @@ import {
 } from "react-native"
 
 import { ArtistCard } from "@/components/ui/ArtistCard"
+import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import {
   artistCategoryLabel,
@@ -90,17 +91,24 @@ export function ArtistsCarousel({ latitude, longitude, query }: Props) {
     <View style={styles.wrap}>
       <View style={styles.header}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="heading">{q ? `Artists for “${q}”` : "Nearby Artists"}</Text>
+          <Text variant="heading">{q ? `Artists for “${q}”` : "Beauty artists near you"}</Text>
           <Text variant="caption" muted style={{ marginTop: 2 }}>
             {q
               ? "Solo artists who offer this, nearest first"
               : `Within ${NEARBY_RADIUS_KM} km · makeup, hair, mehendi and more`}
           </Text>
         </View>
-        <Pressable accessibilityRole="button" onPress={() => router.push("/artists" as Href)} hitSlop={8}>
-          <Text variant="bodyStrong" color={colors.primary}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="See all artists"
+          onPress={() => router.push("/artists" as Href)}
+          hitSlop={8}
+          style={styles.seeAll}
+        >
+          <Text variant="caption" style={styles.seeAllText}>
             See all
           </Text>
+          <Icon name="arrow-forward" size={14} color={colors.text} />
         </Pressable>
       </View>
 
@@ -142,8 +150,18 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     gap: spacing.md,
+  },
+  seeAll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 32,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontFamily: "Geist_600SemiBold",
   },
   scroller: {
     marginHorizontal: -spacing.lg,

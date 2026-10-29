@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { Pressable, ScrollView, StyleSheet } from "react-native"
 
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
@@ -15,16 +15,6 @@ type Props = {
   availableTypes?: readonly BusinessType[]
 }
 
-const TILE_COLORS = [
-  "#EBEBEB", // coral wash
-  "#E8E0D2", // sand
-  "#DCEEE3", // mint
-  "#EDE4D6", // warm beige
-  "#F0DDDD", // soft rose
-  "#DDE6F2", // soft blue
-  "#E6DFF0", // soft lilac
-]
-
 export function BusinessTypeStrip({
   selected,
   onSelect,
@@ -33,102 +23,64 @@ export function BusinessTypeStrip({
   const items = availableTypes
     ? BUSINESS_TYPE_ITEMS.filter((item) => availableTypes.includes(item.label))
     : BUSINESS_TYPE_ITEMS
+  const chips = [{ label: "All", icon: "grid-outline" as const, value: null }, ...items.map((item) => ({ label: item.label, icon: item.icon, value: item.label }))]
 
   return (
-    <View>
-      <Text variant="heading" style={styles.heading}>
-        Browse by category
-      </Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="All categories"
-          onPress={() => onSelect(null)}
-          style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
-        >
-          <View
-            style={[
-              styles.iconWrap,
-              { backgroundColor: selected === null ? colors.primary : TILE_COLORS[0] },
-            ]}
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.row}
+      style={styles.scroller}
+    >
+      {chips.map((chip) => {
+        const active = selected === chip.value
+        return (
+          <Pressable
+            key={chip.label}
+            accessibilityRole="button"
+            accessibilityLabel={chip.value ? chip.label : "All categories"}
+            accessibilityState={{ selected: active }}
+            onPress={() => onSelect(chip.value === null ? null : active ? null : chip.value)}
+            style={({ pressed }) => [styles.chip, active && styles.chipActive, pressed && !active && styles.pressed]}
           >
-            <Icon
-              name="grid-outline"
-              size={18}
-              color={selected === null ? colors.primaryFg : colors.text}
-            />
-          </View>
-          <Text variant="caption" numberOfLines={2} style={styles.label}>
-            All
-          </Text>
-        </Pressable>
-
-        {items.map((item, index) => {
-          const active = selected === item.label
-          return (
-            <Pressable
-              key={item.label}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              onPress={() => onSelect(active ? null : item.label)}
-              style={({ pressed }) => [styles.tile, pressed && styles.pressed]}
-            >
-              <View
-                style={[
-                  styles.iconWrap,
-                  {
-                    backgroundColor: active
-                      ? colors.primary
-                      : TILE_COLORS[(index + 1) % TILE_COLORS.length],
-                  },
-                ]}
-              >
-                <Icon
-                  name={item.icon}
-                  size={18}
-                  color={active ? colors.primaryFg : colors.text}
-                />
-              </View>
-              <Text variant="caption" numberOfLines={2} style={styles.label}>
-                {item.label}
-              </Text>
-            </Pressable>
-          )
-        })}
-      </ScrollView>
-    </View>
+            <Icon name={chip.icon} size={16} color={active ? colors.primaryFg : colors.text} />
+            <Text variant="caption" color={active ? colors.primaryFg : colors.text} style={styles.label}>
+              {chip.label}
+            </Text>
+          </Pressable>
+        )
+      })}
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  heading: {
-    marginBottom: spacing.md,
+  scroller: {
+    marginHorizontal: -spacing.lg,
   },
   row: {
-    gap: spacing.md,
-    paddingRight: spacing.lg,
-  },
-  tile: {
-    width: 64,
-    alignItems: "center",
     gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.lg,
+  chip: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 6,
+    minHeight: 40,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.inputBorder,
+  },
+  chipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   label: {
-    textAlign: "center",
-    minHeight: 32,
+    fontSize: 14,
   },
   pressed: {
-    opacity: 0.88,
+    backgroundColor: colors.muted,
   },
 })

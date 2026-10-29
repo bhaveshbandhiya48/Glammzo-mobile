@@ -1,4 +1,4 @@
-import { formatRatingLabel } from "@/lib/service-pricing"
+import { formatRatingLabel, formatRupees } from "@/lib/service-pricing"
 import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -352,13 +352,25 @@ export function SalonCard({ salon, onPress, layout = "grid", active = false }: P
           pressed && styles.pressed,
         ]}
       >
-        <Text variant={isCarousel ? "heading" : "bodyStrong"} numberOfLines={1}>
+        <Text variant="bodyStrong" numberOfLines={1} style={isCarousel ? styles.nameCarousel : undefined}>
           {salon.name}
         </Text>
         <Text variant="caption" muted numberOfLines={1}>
           {salon.area}
           {salon.distanceKm > 0 ? ` · ${salon.distanceKm.toFixed(1)} km` : ""}
         </Text>
+        {isCarousel ? (
+          <View style={styles.quietMeta}>
+            <Text variant="caption" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {formatRatingLabel(salon.rating, salon.reviews)}
+              <Text variant="caption" muted>
+                {salon.isOpenNow ? "  ·  Open now" : "  ·  Closed now"}
+              </Text>
+            </Text>
+            <Text variant="bodyStrong">from {formatRupees(salon.priceFrom)}</Text>
+          </View>
+        ) : null}
+        {isCarousel ? null : (
         <View style={[styles.metaRow, isCarousel && styles.metaRowCarousel]}>
           <View style={styles.ratingPill}>
             <Text variant="caption" color={colors.primaryFg}>
@@ -374,9 +386,10 @@ export function SalonCard({ salon, onPress, layout = "grid", active = false }: P
             {salon.isOpenNow ? "Open" : "Closed"}
           </Text>
         </View>
-        <Text variant={isCarousel ? "heading" : "bodyStrong"}>
-          from ₹{salon.priceFrom}
-        </Text>
+        )}
+        {isCarousel ? null : (
+          <Text variant="bodyStrong">from {formatRupees(salon.priceFrom)}</Text>
+        )}
       </Pressable>
       </View>
     </View>
@@ -424,8 +437,15 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   imageWrapCarousel: {
-    height: 96,
+    height: 150,
     aspectRatio: undefined,
+  },
+  nameCarousel: {
+    fontSize: 16,
+  },
+  quietMeta: {
+    marginTop: 6,
+    gap: 6,
   },
   imageFill: {
     ...StyleSheet.absoluteFill,

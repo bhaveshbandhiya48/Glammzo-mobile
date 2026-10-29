@@ -7,6 +7,7 @@ import {
   View,
 } from "react-native"
 
+import { Icon } from "@/components/ui/Icon"
 import { SalonCard } from "@/components/ui/SalonCard"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
@@ -27,8 +28,8 @@ export function SalonCarousel({ title, subtitle, salons, onSeeAll }: Props) {
 
   const gap = spacing.lg
   const padLeft = spacing.lg
-  const peek = Math.round(windowWidth * 0.38)
-  const cardWidth = Math.min(156, windowWidth - padLeft - gap - peek)
+  // One full card and a peek of the next, so the row reads as scrollable.
+  const cardWidth = Math.min(260, Math.round(windowWidth * 0.64))
 
   return (
     <View style={styles.wrap}>
@@ -42,10 +43,11 @@ export function SalonCarousel({ title, subtitle, salons, onSeeAll }: Props) {
           ) : null}
         </View>
         {onSeeAll ? (
-          <Pressable accessibilityRole="button" onPress={onSeeAll} hitSlop={8}>
-            <Text variant="bodyStrong" color={colors.primary}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`See all: ${title}`} onPress={onSeeAll} hitSlop={8} style={styles.seeAll}>
+            <Text variant="caption" style={styles.seeAllText}>
               See all
             </Text>
+            <Icon name="arrow-forward" size={14} color={colors.text} />
           </Pressable>
         ) : null}
       </View>
@@ -80,12 +82,22 @@ export function SalonCarousel({ title, subtitle, salons, onSeeAll }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     gap: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xl,
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
     gap: spacing.md,
+  },
+  seeAll: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    minHeight: 32,
+  },
+  seeAllText: {
+    fontSize: 14,
+    fontFamily: "Geist_600SemiBold",
   },
   scroller: {
     marginHorizontal: -spacing.lg,

@@ -1450,7 +1450,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   section: {
-    marginTop: spacing.xl,
+    marginTop: spacing.lg,
   },
   sectionHeader: {
     marginTop: spacing.xxl,
@@ -1461,8 +1461,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl,
   },
   chipRow: {
     gap: spacing.sm,
@@ -1473,15 +1473,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     paddingHorizontal: spacing.md,
-    height: 36,
+    height: 34,
     borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.muted,
   },
   filterChipActive: {
+    borderWidth: 1,
     borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
+    backgroundColor: colors.surface,
   },
   filterCount: {
     minWidth: 18,

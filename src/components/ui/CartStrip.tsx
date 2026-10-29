@@ -1,8 +1,6 @@
 import { Image } from "expo-image"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import {
-  Animated,
-  Easing,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -113,75 +111,10 @@ function StripCard({
   )
 }
 
-/** Collapsed bag: a small floating pill (photos, count, total). Tap to open the full bar. */
-function MiniBag({ entries, onOpen }: { entries: CartStripEntry[]; onOpen: () => void }) {
-  const count = entries.reduce((sum, entry) => sum + entry.itemCount, 0)
-  const thumbs = entries.flatMap((entry) => entry.imageUrls ?? []).slice(0, 2)
-  const label = entries.length === 1 ? entries[0]!.totalLabel : `${entries.length} places`
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`Bag, ${count} ${count === 1 ? "item" : "items"}, ${label}. Open bag bar`}
-      onPress={onOpen}
-      style={({ pressed }) => [styles.mini, pressed && styles.pressed]}
-    >
-      {thumbs.length > 0 ? (
-        <View style={styles.thumbs}>
-          {thumbs.map((uri, index) => (
-            <Image
-              key={`${uri}-${index}`}
-              source={{ uri }}
-              style={[styles.miniThumb, { marginLeft: index === 0 ? 0 : -12, zIndex: thumbs.length - index }]}
-              contentFit="cover"
-            />
-          ))}
-        </View>
-      ) : (
-        <Icon name="bag-handle" size={20} color={colors.primaryFg} />
-      )}
-      <Text variant="bodyStrong" color={colors.primaryFg}>
-        {label}
-      </Text>
-      <View style={styles.miniCount}>
-        <Text variant="caption" color={colors.primary} style={styles.miniCountText}>
-          {count}
-        </Text>
-      </View>
-    </Pressable>
-  )
-}
-
 export function CartStrip({ entries, bottomOffset = 0 }: Props) {
   const insets = useSafeAreaInsets()
   const { width: windowWidth } = useWindowDimensions()
   const [page, setPage] = useState(0)
-  // Instagram-style: stays a small pill until tapped, then zooms open into the full bar.
-  const [expanded, setExpanded] = useState(false)
-  const zoom = useRef(new Animated.Value(0)).current
-  const itemTotal = entries.reduce((sum, entry) => sum + entry.itemCount, 0)
-  const lastTotal = useRef(itemTotal)
-
-  useEffect(() => {
-    Animated.spring(zoom, {
-      toValue: expanded ? 1 : 0,
-      damping: 18,
-      stiffness: 240,
-      mass: 0.8,
-      useNativeDriver: true,
-    }).start()
-  }, [expanded, zoom])
-
-  // Adding something pops the pill once so it's noticed, without taking over the screen.
-  const pop = useRef(new Animated.Value(1)).current
-  useEffect(() => {
-    if (itemTotal > lastTotal.current && !expanded) {
-      Animated.sequence([
-        Animated.timing(pop, { toValue: 1.12, duration: 120, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-        Animated.spring(pop, { toValue: 1, damping: 10, stiffness: 260, useNativeDriver: true }),
-      ]).start()
-    }
-    lastTotal.current = itemTotal
-  }, [expanded, itemTotal, pop])
   const sliderRef = useRef<ScrollViewInstance>(null)
   const sidePad = spacing.lg
   const gap = spacing.sm
@@ -189,14 +122,6 @@ export function CartStrip({ entries, bottomOffset = 0 }: Props) {
     entries.length > 1 ? windowWidth - sidePad * 2 - 28 : windowWidth - sidePad * 2
 
   if (entries.length === 0) return null
-
-  const barStyle = {
-    opacity: zoom,
-    transform: [
-      { scale: zoom.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
-      { translateY: zoom.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) },
-    ],
-  }
 
   function onMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
     const next = Math.round(event.nativeEvent.contentOffset.x / (slideWidth + gap))
@@ -213,22 +138,6 @@ export function CartStrip({ entries, bottomOffset = 0 }: Props) {
         },
       ]}
     >
-      {!expanded ? (
-        <Animated.View style={[styles.miniWrap, { transform: [{ scale: pop }] }]}>
-          <MiniBag entries={entries} onOpen={() => setExpanded(true)} />
-        </Animated.View>
-      ) : null}
-      {expanded ? (
-        <Animated.View style={barStyle}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Minimise bag bar"
-            hitSlop={8}
-            onPress={() => setExpanded(false)}
-            style={styles.minimise}
-          >
-            <Icon name="chevron-down" size={18} color={colors.text} />
-          </Pressable>
       {entries.length === 1 ? (
         <StripCard entry={entries[0]!} width={slideWidth} />
       ) : (
@@ -259,8 +168,6 @@ export function CartStrip({ entries, bottomOffset = 0 }: Props) {
           </View>
         </>
       )}
-        </Animated.View>
-      ) : null}
     </View>
   )
 }
@@ -278,55 +185,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   slide: {},
-  miniWrap: {
-    alignSelf: "flex-start",
-  },
-  mini: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    minHeight: 48,
-    paddingLeft: 6,
-    paddingRight: 8,
-    borderRadius: radii.pill,
-    backgroundColor: colors.hero,
-    shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  miniThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: colors.hero,
-  },
-  miniCount: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  miniCountText: {
-    fontFamily: "Geist_700Bold",
-  },
-  minimise: {
-    alignSelf: "center",
-    width: 40,
-    height: 26,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
   bar: {
     minHeight: 64,
     flexDirection: "row",

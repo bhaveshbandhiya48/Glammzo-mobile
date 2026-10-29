@@ -4,11 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   FlatList,
+  Linking,
   Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -24,6 +27,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
+import { DetailIntro } from "@/components/detail/DetailIntro"
 import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
@@ -43,6 +47,7 @@ import {
   fetchGlammzoOffersForArtist,
   type GlammzoOfferCard,
 } from "@/lib/glammzo-offers-api"
+import { LEGAL } from "@/lib/legal"
 import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
 
@@ -266,6 +271,9 @@ export default function ArtistDetailScreen() {
   const level = parseArtistLevel(artist.level)
   const levelLabel = artistLevelLabel(level, artist.levelLabel)
   const showVerified = artist.isVerified !== false
+  const coverUrl = portfolio[0]?.imageUrl || artist.profilePhotoUrl
+  const prices = artist.services.map((service) => service.price).filter((price) => price > 0)
+  const startingPrice = prices.length > 0 ? Math.min(...prices) : null
 
   return (
     <View style={styles.root}>
@@ -278,63 +286,91 @@ export default function ArtistDetailScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.avatarWrap}>
-            {artist.profilePhotoUrl ? (
-              <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text variant="title" color={colors.primary}>
-                  {artist.displayName.slice(0, 1).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            {showArtistLevelToCustomers(level) ? (
-              <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
-                <ArtistLevelBadge level={level} size={28} />
-              </View>
-            ) : null}
-          </View>
-          <View style={styles.nameRow}>
-            <Text variant="title" style={styles.nameText} numberOfLines={2}>
-              {artist.displayName}
-            </Text>
-            {showVerified ? <ArtistVerifiedBadge size={20} /> : null}
-          </View>
-          <Text variant="caption" muted style={{ textAlign: "center" }}>
-            {[showArtistLevelToCustomers(level) ? levelLabel : null, where].filter(Boolean).join(" · ")}
-          </Text>
-          {reviewCount > 0 ? (
-            <Pressable
-              onPress={() => {
-                scrollRef.current?.scrollTo({
-                  y: Math.max(0, reviewsY.current - spacing.md),
-                  animated: true,
-                })
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`${averageRating.toFixed(1)} out of 5, ${reviewCount} reviews. Jump to reviews.`}
-              style={({ pressed }) => [styles.ratingRow, pressed && { opacity: 0.7 }]}
-            >
-              <Text variant="bodyStrong" color={colors.primary}>
-                {averageRating.toFixed(1)}/5
-              </Text>
-              <Text variant="caption" muted>
-                · {reviewCount} review{reviewCount === 1 ? "" : "s"}
-              </Text>
-            </Pressable>
-          ) : null}
-          {artist.yearsExperience ? (
-            <Text variant="caption" muted>
-              {artist.yearsExperience}+ years experience
-            </Text>
-          ) : null}
-          {artist.bio ? (
-            <Text variant="body" muted style={{ textAlign: "center", marginTop: spacing.sm }}>
-              {artist.bio}
-            </Text>
+        <View style={[styles.cover, { height: Math.round(width * 0.72) }]}>
+          {coverUrl ? (
+            <Image source={{ uri: coverUrl }} style={styles.coverImage} contentFit="cover" transition={150} />
           ) : null}
         </View>
+        <DetailIntro
+          style={styles.intro}
+          leading={
+            <View style={styles.avatarWrap}>
+              {artist.profilePhotoUrl ? (
+                <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text variant="title" color={colors.primary}>
+                    {artist.displayName.slice(0, 1).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              {showArtistLevelToCustomers(level) ? (
+                <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+                  <ArtistLevelBadge level={level} size={24} />
+                </View>
+              ) : null}
+            </View>
+          }
+          status={{
+            label: artist.offersHomeVisits ? "Home visits & studio" : "Studio visits",
+            tone: "neutral",
+          }}
+          offerLabel={artist.offers?.[0]?.title ?? null}
+          title={artist.displayName}
+          titleAccessory={showVerified ? <ArtistVerifiedBadge size={20} /> : null}
+          subtitle={[showArtistLevelToCustomers(level) ? levelLabel : null, where].filter(Boolean).join(" · ")}
+          stats={[
+            reviewCount > 0
+              ? {
+                  value: `★ ${averageRating.toFixed(1)}`,
+                  label: `${reviewCount} review${reviewCount === 1 ? "" : "s"}`,
+                  onPress: () =>
+                    scrollRef.current?.scrollTo({ y: Math.max(0, reviewsY.current - spacing.md), animated: true }),
+                }
+              : { value: "New", label: "on Glammzo" },
+            ...(artist.yearsExperience ? [{ value: `${artist.yearsExperience}+ yrs`, label: "experience" }] : []),
+            ...(startingPrice != null ? [{ value: formatRupees(startingPrice), label: "starting price" }] : []),
+          ]}
+          actions={[
+            ...(portfolio.length > 0
+              ? [{
+                  icon: "images-outline" as const,
+                  label: "Portfolio",
+                  onPress: () =>
+                    scrollRef.current?.scrollTo({ y: Math.max(0, portfolioY.current - spacing.md), animated: true }),
+                }]
+              : []),
+            ...(reviewCount > 0
+              ? [{
+                  icon: "chatbubble-ellipses-outline" as const,
+                  label: "Reviews",
+                  onPress: () =>
+                    scrollRef.current?.scrollTo({ y: Math.max(0, reviewsY.current - spacing.md), animated: true }),
+                }]
+              : []),
+            ...(artist.instagramHandle
+              ? [{
+                  icon: "logo-instagram" as const,
+                  label: "Instagram",
+                  onPress: () =>
+                    void Linking.openURL(`https://instagram.com/${artist.instagramHandle!.replace(/^@/, "")}`),
+                }]
+              : []),
+            {
+              icon: "share-outline" as const,
+              label: "Share",
+              onPress: () => {
+                const url = `${LEGAL.siteUrl}/a/${encodeURIComponent(artist.slug)}`
+                void Share.share(
+                  Platform.OS === "ios"
+                    ? { message: `Book ${artist.displayName} on Glammzo`, url }
+                    : { message: `Book ${artist.displayName} on Glammzo\n${url}`, title: artist.displayName },
+                ).catch(() => {})
+              },
+            },
+          ]}
+          about={artist.bio}
+        />
 
         {portfolio.length > 0 ? (
           <View
@@ -660,14 +696,33 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  hero: { alignItems: "center", gap: spacing.sm },
+  cover: {
+    marginHorizontal: -spacing.lg,
+    marginTop: -spacing.lg,
+    backgroundColor: colors.muted,
+    overflow: "hidden",
+  },
+  coverImage: {
+    width: "100%",
+    height: "100%",
+  },
+  // Pull the info card up over the cover (the scroll gap is spacing.xl).
+  intro: {
+    marginTop: -(spacing.xl + 28),
+    marginHorizontal: -spacing.lg,
+  },
   avatarWrap: {
     position: "relative",
+    alignSelf: "flex-start",
+    marginTop: -64,
+    marginBottom: spacing.md,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    borderWidth: 4,
+    borderColor: colors.bg,
     backgroundColor: colors.muted,
   },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
@@ -678,24 +733,6 @@ const styles = StyleSheet.create({
     borderRadius: 99,
     backgroundColor: colors.card,
     padding: 2,
-  },
-  nameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    maxWidth: "100%",
-    paddingHorizontal: spacing.sm,
-  },
-  nameText: {
-    textAlign: "center",
-    flexShrink: 1,
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingVertical: 2,
   },
   ratingPill: {
     backgroundColor: colors.primary,

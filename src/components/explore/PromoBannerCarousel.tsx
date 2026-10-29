@@ -76,7 +76,7 @@ export function PromoBannerCarousel({ items, onPressItem }: Props) {
 const styles = StyleSheet.create({
   row: {
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   imageCard: {
     borderRadius: radii.md,

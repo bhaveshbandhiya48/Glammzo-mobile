@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native"
 
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
@@ -26,7 +26,7 @@ function pickNext(bookings: Booking[], now = Date.now()): Booking | null {
  * The one dark "what's next" card on Home (Partner app pattern). Renders
  * nothing when signed out or when there is no upcoming visit.
  */
-export function NextBookingCard() {
+export function NextBookingCard({ style }: { style?: StyleProp<ViewStyle> }) {
   const router = useRouter()
   const [next, setNext] = useState<Booking | null>(null)
 
@@ -60,7 +60,7 @@ export function NextBookingCard() {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Your next visit: ${next.salonName}, ${formatBookingWhen(next)}. ${label}. Open bookings.`}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, style, pressed && styles.pressed]}
       onPress={() => router.push("/(tabs)/bookings")}
     >
       <View style={styles.top}>

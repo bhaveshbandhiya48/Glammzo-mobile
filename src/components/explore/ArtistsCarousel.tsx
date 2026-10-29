@@ -83,9 +83,8 @@ export function ArtistsCarousel({ latitude, longitude, query }: Props) {
 
   const gap = spacing.md
   const padLeft = spacing.lg
-  const peek = Math.round(windowWidth * 0.1)
-  /** Wide enough for the horizontal profile card layout. */
-  const cardWidth = Math.min(300, windowWidth - padLeft - gap - peek)
+  // Same size as the salon cards, so Home reads as one system.
+  const cardWidth = Math.min(260, Math.round(windowWidth * 0.64))
 
   return (
     <View style={styles.wrap}>

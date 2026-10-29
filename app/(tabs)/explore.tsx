@@ -817,11 +817,7 @@ export default function ExploreScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.scroll, showCart && styles.scrollWithCart]}
         >
-          {homeReady && !searchQuery.trim() ? (
-            <View style={styles.section}>
-              <NextBookingCard />
-            </View>
-          ) : null}
+          {homeReady && !searchQuery.trim() ? <NextBookingCard style={styles.nextVisit} /> : null}
 
           {homeReady && !searchQuery.trim() ? (
             <PromoBannerCarousel
@@ -1444,6 +1440,10 @@ const styles = StyleSheet.create({
   },
   scrollWithCart: {
     paddingBottom: 180,
+  },
+  // Owns its gap, so nothing is left above the banner when there is no upcoming visit.
+  nextVisit: {
+    marginBottom: spacing.md,
   },
   searchEmpty: {
     gap: 4,

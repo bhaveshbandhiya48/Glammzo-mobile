@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native"
 
+import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistOffer, PublicArtistService } from "@/lib/artists-api"
 import type { GlammzoOfferCard } from "@/lib/glammzo-offers-api"
@@ -87,7 +88,7 @@ export function ArtistOffersStrip({
 
   return (
     <View style={styles.section}>
-      <Text variant="heading">Offers</Text>
+      <SectionHeader title="Offers" style={sectionHeaderInline} />
 
       <ScrollView
         horizontal
@@ -114,36 +115,40 @@ export function ArtistOffersStrip({
                 ? `Enter code ${offer.code} when you book.`
                 : "Applied automatically when you book — no code needed.")
             return (
-              <View key={item.key} style={[styles.card, { width: cardWidth }]}>
+              <View
+                key={item.key}
+                style={[styles.card, { width: cardWidth }]}
+                accessible
+                accessibilityLabel={`${offer.dealLabel} ${offer.title}. ${appliesLabel(offer, services)}${till ? `, ${till}` : ""}. ${how}`}
+              >
                 <View style={styles.cardTop}>
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Text variant="bodyStrong" numberOfLines={2}>
-                      {offer.title}
-                    </Text>
-                    {offer.description?.trim() ? (
-                      <Text variant="caption" muted numberOfLines={3}>
-                        {offer.description.trim()}
-                      </Text>
-                    ) : null}
-                  </View>
+                  <Text variant="bodyStrong" numberOfLines={1} style={{ flex: 1 }}>
+                    {offer.title}
+                  </Text>
                   <View style={styles.dealBadge}>
                     <Text variant="caption" color={colors.primaryFg} style={styles.dealText}>
                       {offer.dealLabel}
                     </Text>
                   </View>
                 </View>
-                <Text variant="caption" muted style={styles.meta} numberOfLines={2}>
+                <Text variant="caption" muted numberOfLines={1}>
                   {appliesLabel(offer, services)}
                   {till ? ` · ${till}` : ""}
                 </Text>
-                <Text variant="caption" color={colors.primary} style={styles.how} numberOfLines={2}>
-                  {how}
-                </Text>
                 {offer.code ? (
-                  <Text variant="caption" style={styles.code}>
-                    Code: {offer.code}
+                  <View style={styles.codeChip}>
+                    <Text variant="caption" muted>
+                      Code
+                    </Text>
+                    <Text variant="caption" style={styles.codeText}>
+                      {offer.code}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text variant="caption" muted>
+                    Applied automatically
                   </Text>
-                ) : null}
+                )}
               </View>
             )
           }
@@ -163,16 +168,20 @@ export function ArtistOffersStrip({
                   {offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}
                 </Text>
               ) : null}
-              <Text variant="caption" color={colors.primary} style={styles.how} numberOfLines={2}>
-                {offer.promoCode
-                  ? `Enter code ${offer.promoCode} when you book. Cashback is added after your visit.`
-                  : "Cashback is added to your wallet after your completed visit."}
-              </Text>
               {offer.promoCode ? (
-                <Text variant="caption" style={styles.code}>
-                  Code: {offer.promoCode}
+                <View style={styles.codeChip}>
+                  <Text variant="caption" muted>
+                    Code
+                  </Text>
+                  <Text variant="caption" style={styles.codeText}>
+                    {offer.promoCode}
+                  </Text>
+                </View>
+              ) : (
+                <Text variant="caption" muted>
+                  Cashback after your visit
                 </Text>
-              ) : null}
+              )}
             </View>
           )
         })}
@@ -193,10 +202,7 @@ export function ArtistOffersStrip({
 }
 
 const styles = StyleSheet.create({
-  section: {
-    gap: spacing.sm,
-    marginTop: spacing.xl,
-  },
+  section: { gap: spacing.md },
   scroller: {
     marginHorizontal: -spacing.lg,
     marginTop: spacing.xs,
@@ -209,13 +215,30 @@ const styles = StyleSheet.create({
     paddingRight: spacing.lg,
   },
   card: {
-    backgroundColor: "#F1F1F1",
-    borderRadius: radii.md,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(232, 120, 90, 0.28)",
+    borderColor: colors.border,
     padding: spacing.md,
-    gap: 4,
-    minHeight: 132,
+    gap: 6,
+  },
+  codeChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: colors.inputBorder,
+  },
+  codeText: {
+    fontFamily: "Geist_700Bold",
+    letterSpacing: 1,
+    color: colors.text,
   },
   cardGlammzo: {
     backgroundColor: colors.card,
@@ -237,18 +260,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 13,
     fontWeight: "700",
-  },
-  meta: {
-    marginTop: 2,
-  },
-  how: {
-    marginTop: 2,
-    fontWeight: "600",
-  },
-  code: {
-    marginTop: 2,
-    fontWeight: "700",
-    color: colors.text,
   },
   dots: {
     flexDirection: "row",

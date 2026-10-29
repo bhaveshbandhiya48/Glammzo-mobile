@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/Button"
 import { CartStrip } from "@/components/ui/CartStrip"
 import { Icon } from "@/components/ui/Icon"
 import { DetailIntro } from "@/components/detail/DetailIntro"
+import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
 import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
@@ -379,10 +380,12 @@ export default function ArtistDetailScreen() {
               portfolioY.current = e.nativeEvent.layout.y
             }}
           >
-            <Text variant="heading">Portfolio</Text>
-            <Text variant="caption" muted>
-              Tap a photo to browse · {portfolio.length} photos
-            </Text>
+            <SectionHeader
+              title="Portfolio"
+              actionLabel={`See all ${portfolio.length}`}
+              onAction={() => setLightboxIndex(0)}
+              style={sectionHeaderInline}
+            />
             <ScrollView
               horizontal
               nestedScrollEnabled
@@ -447,7 +450,7 @@ export default function ArtistDetailScreen() {
         />
 
         <View style={styles.section}>
-          <Text variant="heading">Services</Text>
+          <SectionHeader title="Services" style={sectionHeaderInline} />
           {artist.services.length === 0 ? (
             <Text variant="body" muted>
               No services are open for online booking yet.
@@ -475,17 +478,22 @@ export default function ArtistDetailScreen() {
               reviewsY.current = e.nativeEvent.layout.y
             }}
           >
-            <Text variant="heading">Reviews</Text>
+            <SectionHeader title="Reviews" style={sectionHeaderInline} />
             <Text variant="caption" muted>
-              {averageRating.toFixed(1)}/5 · {reviewCount} review
-              {reviewCount === 1 ? "" : "s"}
+              ★ {averageRating.toFixed(1)} · {reviewCount} review{reviewCount === 1 ? "" : "s"}
             </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.bleed}
+              contentContainerStyle={styles.reviewRow}
+            >
             {(reviews.length > 0 ? reviews : []).slice(0, 8).map((review) => (
-              <View key={review.id} style={styles.reviewCard}>
+              <View key={review.id} style={[styles.reviewCard, { width: Math.min(300, width * 0.8) }]}>
                 <View style={styles.reviewHead}>
                   <View style={{ flex: 1 }}>
-                    <Text variant="heading">{review.authorName}</Text>
-                    <Text variant="caption" muted>
+                    <Text variant="bodyStrong">{review.authorName}</Text>
+                    <Text variant="caption" muted numberOfLines={1}>
                       {new Date(review.createdAt).toLocaleDateString("en-IN", {
                         day: "numeric",
                         month: "short",
@@ -494,27 +502,26 @@ export default function ArtistDetailScreen() {
                       {review.serviceName ? ` · ${review.serviceName}` : ""}
                     </Text>
                   </View>
-                  <View style={styles.ratingPill}>
-                    <Text variant="caption" color={colors.primaryFg}>
-                      ★ {Number(review.rating).toFixed(1)}
-                    </Text>
-                  </View>
+                  <Text variant="bodyStrong" accessibilityLabel={`${Number(review.rating).toFixed(1)} stars`}>
+                    ★ {Number(review.rating).toFixed(1)}
+                  </Text>
                 </View>
                 {review.comment ? (
-                  <Text variant="body" muted style={{ marginTop: spacing.sm }}>
+                  <Text variant="body" muted numberOfLines={4} style={{ marginTop: spacing.sm }}>
                     {review.comment}
                   </Text>
                 ) : null}
                 <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
               </View>
             ))}
+            </ScrollView>
           </View>
         ) : null}
 
         {artist.cancellationPolicyText ? (
           <View style={styles.section}>
-            <Text variant="heading">Cancellation</Text>
-            <Text variant="body" muted>
+            <SectionHeader title="Cancellation policy" style={sectionHeaderInline} />
+            <Text variant="body" muted numberOfLines={4}>
               {artist.cancellationPolicyText}
             </Text>
           </View>
@@ -740,7 +747,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  section: { gap: spacing.md },
+  section: { gap: spacing.md, marginTop: spacing.md },
+  bleed: { marginHorizontal: -spacing.lg },
+  reviewRow: { gap: spacing.md, paddingHorizontal: spacing.lg },
   portfolioStrip: {
     flexDirection: "row",
     gap: spacing.sm,

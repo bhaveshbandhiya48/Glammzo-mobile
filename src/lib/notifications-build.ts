@@ -1,9 +1,6 @@
 import type { Booking } from "@/data/types"
-import { formatBookingDate } from "@/lib/booking-display"
-import {
-  LOYALTY_VISITS_PER_FREE,
-  type LoyaltySummary,
-} from "@/lib/loyalty"
+import { formatBookingDateShort } from "@/lib/booking-display"
+import type { LoyaltySummary } from "@/lib/loyalty"
 import type { WalletLedgerEntry } from "@/lib/wallet-api"
 
 export type AppNotificationType =
@@ -87,7 +84,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
   for (const booking of bookings) {
     const start = parseBookingStart(booking)
     const startIso = start?.toISOString() ?? booking.createdAt
-    const when = formatBookingDate(booking.date)
+    const when = formatBookingDateShort(booking.date)
     const services = serviceLine(booking)
 
     switch (booking.status) {
@@ -97,7 +94,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             booking,
             "booking_pending",
             "Awaiting salon confirmation",
-            `We sent your request to ${booking.salonName} for ${when}. You'll be notified once they confirm.`,
+            `${booking.salonName}, ${when}. We'll tell you once they confirm.`,
             booking.createdAt,
           ),
         )
@@ -109,7 +106,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             booking,
             "booking_confirmed",
             "Booking confirmed",
-            `${booking.salonName} confirmed ${services} on ${when} at ${booking.time}.`,
+            `${services} at ${booking.salonName}, ${when} at ${booking.time}.`,
             booking.createdAt,
           ),
         )
@@ -125,7 +122,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
                 hours <= 2
                   ? "Reminder · starting soon"
                   : `Reminder · about ${hours}h to go`,
-                `Your visit at ${booking.salonName} is on ${when} at ${booking.time}.`,
+                `${booking.salonName}, ${when} at ${booking.time}.`,
                 startIso,
               ),
             )
@@ -138,7 +135,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             booking,
             "booking_completed",
             "Visit completed",
-            `Thanks for visiting ${booking.salonName}. Leave a review when you have a moment.`,
+            `Thanks for visiting ${booking.salonName}. Tap to leave a review.`,
             startIso,
           ),
         )
@@ -149,7 +146,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             booking,
             "booking_cancelled",
             "Booking cancelled",
-            `Your appointment at ${booking.salonName} for ${when} was cancelled.`,
+            `${booking.salonName}, ${when}.`,
             booking.createdAt,
           ),
         )
@@ -204,7 +201,7 @@ function fromLoyalty(loyalty: LoyaltySummary): AppNotification[] {
         loyalty.freeServiceCredits === 1
           ? "Loyalty credit unlocked"
           : `${loyalty.freeServiceCredits} loyalty credits ready`,
-      body: `You've completed ${loyalty.completedVisits} visits — a reward is ready for your next booking (every ${LOYALTY_VISITS_PER_FREE} visits).`,
+      body: `${loyalty.completedVisits} visits done. A reward is ready for your next booking.`,
       createdAt: new Date().toISOString(),
       read: false,
       href: "/profile/loyalty",

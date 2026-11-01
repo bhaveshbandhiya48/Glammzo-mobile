@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect } from "react"
+import { useCallback, useLayoutEffect, useMemo } from "react"
 import { useFocusEffect, useNavigation, useRouter, type Href } from "expo-router"
 import { Pressable, StyleSheet, View } from "react-native"
 
@@ -11,8 +11,9 @@ import { Text } from "@/components/ui/Text"
 import { useNotifications } from "@/context/NotificationsContext"
 import {
   formatNotificationTime,
-  notificationAccent,
+  notificationGroup,
   notificationIcon,
+  notificationTone,
 } from "@/lib/notifications-display"
 import { colors, radii, spacing } from "@/theme/tokens"
 
@@ -25,8 +26,20 @@ export default function NotificationsScreen() {
     signedIn,
     refresh,
     markRead,
+    markAllRead,
     clearAll,
   } = useNotifications()
+
+  const unreadCount = notifications.filter((item) => !item.read).length
+  const groups = useMemo(() => {
+    const order = ["Today", "Yesterday", "This week", "Earlier"]
+    const map = new Map<string, typeof notifications>()
+    for (const item of notifications) {
+      const key = notificationGroup(item.createdAt)
+      map.set(key, [...(map.get(key) ?? []), item])
+    }
+    return order.filter((title) => map.has(title)).map((title) => ({ title, items: map.get(title)! }))
+  }, [notifications])
 
   useFocusEffect(
     useCallback(() => {
@@ -51,7 +64,7 @@ export default function NotificationsScreen() {
                   pressed && styles.clearPressed,
                 ]}
               >
-                <Text variant="caption" color={colors.primary}>
+                <Text variant="caption" style={styles.markAllText}>
                   Clear all
                 </Text>
               </Pressable>
@@ -109,44 +122,75 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <View style={styles.list}>
-          {notifications.map((item) => {
-            const accent = notificationAccent(item.type)
-            return (
+          {unreadCount > 0 ? (
+            <View style={styles.summaryRow}>
+              <Text variant="caption" muted>
+                {unreadCount} new
+              </Text>
               <Pressable
                 accessibilityRole="button"
-                key={item.id}
-                style={({ pressed }) => [
-                  styles.card,
-                  !item.read && styles.cardUnread,
-                  pressed && styles.pressed,
-                ]}
-                onPress={() => {
-                  markRead(item.id)
-                  if (item.href) {
-                    router.push(item.href as Href)
-                  }
-                }}
+                onPress={markAllRead}
+                hitSlop={8}
+                style={styles.markAll}
               >
-                <View style={[styles.iconWrap, { backgroundColor: `${accent}18` }]}>
-                  <Icon name={notificationIcon(item.type)} size={20} color={accent} />
-                </View>
-                <View style={styles.copy}>
-                  <View style={styles.titleRow}>
-                    <Text variant="bodyStrong" style={{ flex: 1 }} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    {!item.read ? <View style={styles.unreadDot} /> : null}
-                  </View>
-                  <Text muted numberOfLines={3}>
-                    {item.body}
-                  </Text>
-                  <Text variant="caption" muted style={styles.time}>
-                    {formatNotificationTime(item.createdAt)}
-                  </Text>
-                </View>
+                <Text variant="caption" style={styles.markAllText}>
+                  Mark all as read
+                </Text>
               </Pressable>
-            )
-          })}
+            </View>
+          ) : null}
+          {groups.map((group) => (
+            <View key={group.title} style={styles.group}>
+              <Text variant="label" muted accessibilityRole="header" style={styles.groupTitle}>
+                {group.title}
+              </Text>
+              <View style={styles.groupCard}>
+                {group.items.map((item, index) => {
+                  const tone = notificationTone(item.type)
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${item.read ? "" : "New. "}${item.title}. ${item.body} ${formatNotificationTime(item.createdAt)}`}
+                      key={item.id}
+                      style={({ pressed }) => [
+                        styles.row,
+                        index > 0 && styles.rowDivider,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() => {
+                        markRead(item.id)
+                        if (item.href) {
+                          router.push(item.href as Href)
+                        }
+                      }}
+                    >
+                      <View style={[styles.iconWrap, { backgroundColor: tone.bg }]}>
+                        <Icon name={notificationIcon(item.type)} size={20} color={tone.fg} />
+                      </View>
+                      <View style={styles.copy}>
+                        <View style={styles.titleRow}>
+                          <Text
+                            variant={item.read ? "body" : "bodyStrong"}
+                            style={{ flex: 1 }}
+                            numberOfLines={1}
+                          >
+                            {item.title}
+                          </Text>
+                          <Text variant="caption" muted>
+                            {formatNotificationTime(item.createdAt)}
+                          </Text>
+                        </View>
+                        <Text variant="caption" muted numberOfLines={2} style={styles.body}>
+                          {item.body}
+                        </Text>
+                      </View>
+                      {!item.read ? <View style={styles.unreadDot} /> : null}
+                    </Pressable>
+                  )
+                })}
+              </View>
+            </View>
+          ))}
         </View>
       )}
     </Screen>
@@ -164,36 +208,65 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   list: {
-    marginTop: spacing.md,
-    gap: spacing.md,
+    marginTop: spacing.sm,
+    gap: spacing.xl,
+    paddingBottom: spacing.xxl,
   },
-  card: {
+  summaryRow: {
     flexDirection: "row",
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  markAll: {
+    minHeight: 36,
+    justifyContent: "center",
+  },
+  markAllText: {
+    fontFamily: "Geist_600SemiBold",
+    color: colors.text,
+  },
+  group: {
+    gap: spacing.sm,
+  },
+  groupTitle: {
+    paddingHorizontal: spacing.xs,
+  },
+  groupCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
-    backgroundColor: colors.card,
+    overflow: "hidden",
   },
-  cardUnread: {
-    backgroundColor: "#F1F1F1",
-    borderColor: "#D4D4D4",
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    minHeight: 72,
+  },
+  rowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   pressed: {
-    opacity: 0.92,
+    backgroundColor: colors.muted,
   },
   iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
   },
   copy: {
     flex: 1,
-    gap: 4,
+    gap: 2,
     minWidth: 0,
+  },
+  body: {
+    lineHeight: 18,
   },
   titleRow: {
     flexDirection: "row",
@@ -205,9 +278,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: radii.pill,
     backgroundColor: colors.primary,
-  },
-  time: {
-    marginTop: 4,
   },
   emptyScreen: {
     flex: 1,

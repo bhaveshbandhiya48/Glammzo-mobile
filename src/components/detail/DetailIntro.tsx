@@ -20,7 +20,7 @@ type Props = {
   stats: DetailStat[]
   actions: DetailAction[]
   about?: string | null
-  /** Shown first, e.g. an avatar pulled up over the photo. */
+  /** An avatar pulled up over the photo. The title and subtitle sit beside it. */
   leading?: ReactNode
   style?: StyleProp<ViewStyle>
 }
@@ -40,9 +40,30 @@ export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitl
   const aboutText = about?.trim() ?? ""
   const longAbout = aboutText.length > 140
 
+  const heading = (
+    <>
+      <View style={styles.titleRow}>
+        <Text variant="title" style={[styles.title, leading ? styles.titleBeside : null]} numberOfLines={leading ? 2 : undefined}>
+          {title}
+        </Text>
+        {titleAccessory}
+      </View>
+      {subtitle ? (
+        <Text muted style={styles.subtitle} numberOfLines={leading ? 2 : undefined}>
+          {subtitle}
+        </Text>
+      ) : null}
+    </>
+  )
+
   return (
     <View style={[styles.card, style]}>
-      {leading}
+      {leading ? (
+        <View style={styles.leadingRow}>
+          {leading}
+          <View style={styles.leadingCopy}>{heading}</View>
+        </View>
+      ) : null}
       {status || offerLabel ? (
         <View style={styles.chips}>
           {status ? (
@@ -64,17 +85,7 @@ export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitl
         </View>
       ) : null}
 
-      <View style={styles.titleRow}>
-        <Text variant="title" style={styles.title}>
-          {title}
-        </Text>
-        {titleAccessory}
-      </View>
-      {subtitle ? (
-        <Text muted style={styles.subtitle}>
-          {subtitle}
-        </Text>
-      ) : null}
+      {leading ? null : heading}
 
       {stats.length > 0 ? (
         <View style={styles.stats}>
@@ -187,6 +198,17 @@ const styles = StyleSheet.create({
   offerChip: {
     backgroundColor: colors.primary,
   },
+  // Avatar overlaps the photo; the name and place sit beside it, on the card.
+  leadingRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  leadingCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -196,6 +218,11 @@ const styles = StyleSheet.create({
     fontSize: 28,
     letterSpacing: -0.8,
     flexShrink: 1,
+  },
+  titleBeside: {
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
   },
   subtitle: {
     marginTop: 4,

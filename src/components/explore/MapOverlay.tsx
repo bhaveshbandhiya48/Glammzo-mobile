@@ -501,6 +501,14 @@ export function MapOverlay({
 
   const showCarousel = carouselItems.length > 0
   const placeCount = carouselItems.length
+  // Pins arrive just after a move, so wait a moment before saying there are none.
+  const [emptyReady, setEmptyReady] = useState(false)
+  useEffect(() => {
+    setEmptyReady(false)
+    if (!visible || showCarousel) return
+    const timer = setTimeout(() => setEmptyReady(true), 900)
+    return () => clearTimeout(timer)
+  }, [visible, showCarousel, locationLabel])
 
   const markerLatitude = liveUserCoords?.latitude ?? userLatitude
   const markerLongitude = liveUserCoords?.longitude ?? userLongitude
@@ -875,40 +883,45 @@ export function MapOverlay({
               ))}
             </ScrollView>
           </View>
-        ) : (
+        ) : emptyReady ? (
           <View
             style={[styles.emptyCardWrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
             pointerEvents="box-none"
           >
-            <View style={styles.emptyCard}>
+            <View style={styles.emptyCard} accessibilityLiveRegion="polite">
               <View style={styles.emptyCopy}>
                 <Text variant="bodyStrong">
-                  {mappable.length > 0 ? "Nothing in this part of the map" : "No places on the map here yet"}
+                  {areaMappable.length > 0
+                    ? "Nothing in this part of the map"
+                    : `No ${kindFilter === "salon" ? "salons" : kindFilter === "artist" ? "artists" : "salons or artists"} in ${locationLabel}`}
                 </Text>
                 <Text variant="caption" muted>
-                  {mappable.length > 0
+                  {areaMappable.length > 0
                     ? "Move the map or see every place."
                     : kindFilter !== "all"
-                      ? "Try another filter."
-                      : "Try another area from the list."}
+                      ? "See everything here, or try another area."
+                      : "Try a nearby area."}
                 </Text>
               </View>
-              {mappable.length > 0 ? (
-                <Pressable accessibilityRole="button" onPress={showAllPins} hitSlop={8} style={styles.emptyAction}>
-                  <Text variant="caption" style={styles.filterText} color={colors.primaryFg}>
-                    Show all
-                  </Text>
-                </Pressable>
-              ) : kindFilter !== "all" ? (
-                <Pressable accessibilityRole="button" onPress={() => setKindFilter("all")} hitSlop={8} style={styles.emptyAction}>
-                  <Text variant="caption" style={styles.filterText} color={colors.primaryFg}>
-                    Show all
-                  </Text>
-                </Pressable>
-              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                onPress={
+                  areaMappable.length > 0
+                    ? showAllPins
+                    : kindFilter !== "all"
+                      ? () => setKindFilter("all")
+                      : onChangeLocation
+                }
+                hitSlop={8}
+                style={styles.emptyAction}
+              >
+                <Text variant="caption" style={styles.filterText} color={colors.primaryFg}>
+                  {areaMappable.length > 0 || kindFilter !== "all" ? "Show all" : "Change"}
+                </Text>
+              </Pressable>
             </View>
           </View>
-        )}
+        ) : null}
       </View>
     </View>
   )

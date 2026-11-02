@@ -17,12 +17,10 @@ type Props = {
   /** Rendered right after the title, e.g. a verified tick. */
   titleAccessory?: ReactNode
   subtitle?: string | null
-  /** One quiet line under the subtitle, e.g. how the visit works. */
-  note?: string | null
   stats: DetailStat[]
   actions: DetailAction[]
   about?: string | null
-  /** An avatar pulled up over the photo. The title and subtitle sit beside it. */
+  /** An avatar pulled up over the photo. The status and offer chips sit beside it. */
   leading?: ReactNode
   style?: StyleProp<ViewStyle>
 }
@@ -37,28 +35,28 @@ const TONES = {
  * Top of a salon or artist page: a card that overlaps the photo, with status, name,
  * three quick stats, labelled actions and a short "about" that expands.
  */
-export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitle, note, stats, actions, about, leading, style }: Props) {
+export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitle, stats, actions, about, leading, style }: Props) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const aboutText = about?.trim() ?? ""
   const longAbout = aboutText.length > 140
 
-  const heading = (
+  const chips = (
     <>
-      <View style={styles.titleRow}>
-        <Text variant="title" style={[styles.title, leading ? styles.titleBeside : null]} numberOfLines={leading ? 2 : undefined}>
-          {title}
-        </Text>
-        {titleAccessory}
-      </View>
-      {subtitle ? (
-        <Text muted style={styles.subtitle} numberOfLines={leading ? 2 : undefined}>
-          {subtitle}
-        </Text>
+      {status ? (
+        <View style={[styles.chip, { backgroundColor: TONES[status.tone].bg }]}>
+          <View style={[styles.chipDot, { backgroundColor: TONES[status.tone].fg }]} />
+          <Text variant="caption" color={TONES[status.tone].fg}>
+            {status.label}
+          </Text>
+        </View>
       ) : null}
-      {note ? (
-        <Text variant="caption" muted style={styles.note} numberOfLines={1}>
-          {note}
-        </Text>
+      {offerLabel ? (
+        <View style={[styles.chip, styles.offerChip]}>
+          <Icon name="pricetag-outline" size={12} color={colors.primaryFg} />
+          <Text variant="caption" color={colors.primaryFg} numberOfLines={1} style={{ flexShrink: 1 }}>
+            {offerLabel}
+          </Text>
+        </View>
       ) : null}
     </>
   )
@@ -68,31 +66,23 @@ export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitl
       {leading ? (
         <View style={styles.leadingRow}>
           {leading}
-          <View style={styles.leadingCopy}>{heading}</View>
+          <View style={styles.leadingChips}>{chips}</View>
         </View>
-      ) : null}
-      {status || offerLabel ? (
-        <View style={styles.chips}>
-          {status ? (
-            <View style={[styles.chip, { backgroundColor: TONES[status.tone].bg }]}>
-              <View style={[styles.chipDot, { backgroundColor: TONES[status.tone].fg }]} />
-              <Text variant="caption" color={TONES[status.tone].fg}>
-                {status.label}
-              </Text>
-            </View>
-          ) : null}
-          {offerLabel ? (
-            <View style={[styles.chip, styles.offerChip]}>
-              <Icon name="pricetag-outline" size={12} color={colors.primaryFg} />
-              <Text variant="caption" color={colors.primaryFg} numberOfLines={1} style={{ flexShrink: 1 }}>
-                {offerLabel}
-              </Text>
-            </View>
-          ) : null}
-        </View>
+      ) : status || offerLabel ? (
+        <View style={styles.chipsRow}>{chips}</View>
       ) : null}
 
-      {leading ? null : heading}
+      <View style={styles.titleRow}>
+        <Text variant="title" style={styles.title}>
+          {title}
+        </Text>
+        {titleAccessory}
+      </View>
+      {subtitle ? (
+        <Text muted style={styles.subtitle}>
+          {subtitle}
+        </Text>
+      ) : null}
 
       {stats.length > 0 ? (
         <View style={styles.stats}>
@@ -182,7 +172,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
   },
-  chips: {
+  chipsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.sm,
@@ -205,16 +195,19 @@ const styles = StyleSheet.create({
   offerChip: {
     backgroundColor: colors.primary,
   },
-  // Avatar overlaps the photo; the name and place sit beside it, on the card.
+  // Avatar overlaps the photo; its chips sit beside it, on the card.
   leadingRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
+    alignItems: "flex-end",
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
-  leadingCopy: {
+  leadingChips: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.xs,
   },
   titleRow: {
     flexDirection: "row",
@@ -226,16 +219,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
     flexShrink: 1,
   },
-  titleBeside: {
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.4,
-  },
   subtitle: {
     marginTop: 4,
-  },
-  note: {
-    marginTop: 2,
   },
   stats: {
     flexDirection: "row",

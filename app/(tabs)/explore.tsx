@@ -1126,6 +1126,7 @@ export default function ExploreScreen() {
         userLatitude={savedLocation?.latitude}
         userLongitude={savedLocation?.longitude}
         onClose={() => setMapOpen(false)}
+        onChangeLocation={openLocationSheet}
         onSelectSalon={(id) => {
           router.push({ pathname: "/salon/[id]", params: { id } })
         }}
@@ -1136,6 +1137,7 @@ export default function ExploreScreen() {
 
       <LocationPickerSheet
         visible={locationOpen}
+        focusOnOpen={mapOpen}
         onClose={closeLocationSheet}
         query={locationDraft}
         onQueryChange={setLocationDraft}

@@ -54,6 +54,8 @@ type Props = {
   userLatitude?: number
   userLongitude?: number
   onClose: () => void
+  /** Opens the location search. */
+  onChangeLocation: () => void
   onSelectSalon: (salonId: string) => void
   onSelectArtist?: (slug: string) => void
 }
@@ -406,6 +408,7 @@ export function MapOverlay({
   userLatitude,
   userLongitude,
   onClose,
+  onChangeLocation,
   onSelectSalon,
   onSelectArtist,
 }: Props) {
@@ -558,6 +561,18 @@ export function MapOverlay({
     // Intentionally only re-init when the overlay opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible])
+
+  // New location picked while the map is open: move there; its pins follow as they load.
+  const lastCoordsRef = useRef<string | null>(null)
+  useEffect(() => {
+    const coords = `${userLatitude},${userLongitude}`
+    const changed = lastCoordsRef.current != null && lastCoordsRef.current !== coords
+    lastCoordsRef.current = visible ? coords : null
+    if (!visible || !changed || !Number.isFinite(userLatitude) || !Number.isFinite(userLongitude)) return
+    setLiveUserCoords(null)
+    setSelectedId(null)
+    mapRef.current?.animateToRegion(regionAroundPoint(userLatitude!, userLongitude!, NEARBY_RADIUS_KM), 450)
+  }, [visible, userLatitude, userLongitude])
 
   function scrollCarouselToIndex(index: number, animated: boolean) {
     if (index < 0) return
@@ -776,19 +791,20 @@ export function MapOverlay({
             >
               <Icon name="chevron-back" size={22} color={colors.text} />
             </Pressable>
-            <View
-              style={styles.locationChip}
-              accessible
-              accessibilityLabel={`${locationLabel}, ${placeCount} ${placeCount === 1 ? "place" : "places"} in view`}
-              accessibilityLiveRegion="polite"
+            <Pressable
+              onPress={onChangeLocation}
+              style={({ pressed }) => [styles.locationChip, pressed && styles.locationChipPressed]}
+              accessibilityRole="search"
+              accessibilityLabel={`Change location. Now ${locationLabel}, ${placeCount} ${placeCount === 1 ? "place" : "places"} in view`}
             >
+              <Icon name="search" size={18} color={colors.text} />
               <Text variant="bodyStrong" numberOfLines={1} style={styles.locationName}>
                 {locationLabel}
               </Text>
               <Text variant="caption" muted>
                 {placeCount} {placeCount === 1 ? "place" : "places"}
               </Text>
-            </View>
+            </Pressable>
           </View>
           <View style={styles.filters} accessibilityRole="tablist">
             {KIND_FILTERS.map((item) => {
@@ -943,16 +959,18 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing.sm,
     minHeight: 44,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
     ...floating,
   },
+  locationChipPressed: {
+    backgroundColor: colors.muted,
+  },
   locationName: {
-    flexShrink: 1,
+    flex: 1,
   },
   filters: {
     flexDirection: "row",

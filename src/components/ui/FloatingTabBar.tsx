@@ -22,6 +22,10 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
   const insets = useSafeAreaInsets()
   // "index" only redirects to Home; it has no tab.
   const routes = state.routes.filter((route) => route.name !== "index")
+  // A screen can hide the bar, like Home does while its map is open.
+  const focusedKey = state.routes[state.index]?.key
+  const focusedOptions = focusedKey ? descriptors[focusedKey]?.options : undefined
+  if (StyleSheet.flatten(focusedOptions?.tabBarStyle)?.display === "none") return null
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>

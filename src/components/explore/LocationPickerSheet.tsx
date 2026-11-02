@@ -38,6 +38,8 @@ type Props = {
   nearMeLoading: boolean
   onUseCurrentLocation: () => void
   onPickPrediction: (prediction: PlacePrediction) => void
+  /** Open with the keyboard up, ready to type. */
+  focusOnOpen?: boolean
 }
 
 const WINDOW_HEIGHT = Dimensions.get("window").height
@@ -64,9 +66,17 @@ export function LocationPickerSheet({
   nearMeLoading,
   onUseCurrentLocation,
   onPickPrediction,
+  focusOnOpen = false,
 }: Props) {
   const insets = useSafeAreaInsets()
   const inputRef = useRef<TextInputInstance>(null)
+
+  useEffect(() => {
+    if (!visible || !focusOnOpen) return
+    // After the sheet has slid in, or the keyboard interrupts its animation.
+    const timer = setTimeout(() => inputRef.current?.focus(), 280)
+    return () => clearTimeout(timer)
+  }, [focusOnOpen, visible])
   const [searchFocused, setSearchFocused] = useState(false)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const dragY = useRef(new Animated.Value(0)).current

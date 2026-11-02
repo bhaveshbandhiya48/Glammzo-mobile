@@ -6,12 +6,17 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
 
-const BAR_HEIGHT = 64
+const BAR_HEIGHT = 52
+
+/** Gap under the bar: close to the screen edge, just clear of the iPhone home indicator. */
+function barBottomGap(insetBottom: number) {
+  return Math.max(Math.round(insetBottom * 0.5), spacing.sm)
+}
 
 /** Bottom space a tab screen should leave so its last content scrolls clear of the floating bar. */
 export function useFloatingTabBarSpace() {
   const insets = useSafeAreaInsets()
-  return BAR_HEIGHT + Math.max(insets.bottom, spacing.md) + spacing.lg
+  return BAR_HEIGHT + barBottomGap(insets.bottom) + spacing.md
 }
 
 /**
@@ -28,7 +33,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
   if (StyleSheet.flatten(focusedOptions?.tabBarStyle)?.display === "none") return null
 
   return (
-    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+    <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: barBottomGap(insets.bottom) }]}>
       <View style={styles.bar} accessibilityRole="tablist">
         {routes.map((route) => {
           const index = state.routes.indexOf(route)
@@ -40,7 +45,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
               key={route.key}
               label={label}
               focused={focused}
-              icon={options.tabBarIcon?.({ focused, color: focused ? colors.primaryFg : colors.text, size: 22 })}
+              icon={options.tabBarIcon?.({ focused, color: focused ? colors.primaryFg : colors.text, size: 20 })}
               onPress={() => {
                 const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
                 if (!focused && !event.defaultPrevented) navigateToTab(route.key)
@@ -86,7 +91,7 @@ function Tab({
           styles.tab,
           {
             backgroundColor: grow.interpolate({ inputRange: [0, 1], outputRange: ["rgba(17,17,17,0)", colors.primary] }),
-            paddingHorizontal: grow.interpolate({ inputRange: [0, 1], outputRange: [spacing.md, spacing.lg] }),
+            paddingHorizontal: grow.interpolate({ inputRange: [0, 1], outputRange: [spacing.sm, spacing.md] }),
           },
         ]}
       >
@@ -115,7 +120,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-around",
     height: BAR_HEIGHT,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: 6,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
@@ -136,11 +141,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    height: 46,
+    height: 40,
     borderRadius: radii.pill,
   },
   label: {
     fontFamily: "Geist_600SemiBold",
-    fontSize: 13,
+    fontSize: 12,
   },
 })

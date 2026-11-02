@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { Screen } from "@/components/ui/Screen"
 import { BookingsListSkeleton } from "@/components/ui/Skeleton"
+import { SuccessScreen } from "@/components/ui/SuccessScreen"
 import { Text } from "@/components/ui/Text"
 import type { Booking } from "@/data/types"
 import { ApiError } from "@/lib/api"
@@ -17,6 +18,7 @@ import {
   type AvailabilityDay,
   type AvailabilitySlot,
 } from "@/lib/availability-api"
+import { formatBookingWhen, isArtistBooking } from "@/lib/booking-display"
 import { fetchBookingById, rescheduleBooking } from "@/lib/bookings-api"
 import {
   canRescheduleWithNotice,
@@ -160,23 +162,31 @@ export default function RescheduleScreen() {
 
   if (done) {
     return (
-      <Screen>
-        <Text variant="title">Reschedule requested</Text>
-        <Text muted style={styles.gap}>
-          The salon will confirm the new slot.
+      <SuccessScreen
+        title="Reschedule requested"
+        message={`The ${isArtistBooking(booking) ? "artist" : "salon"} will confirm the new time.`}
+        primary={{ label: "View bookings", onPress: () => router.replace("/(tabs)/bookings") }}
+      >
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {booking.salonName}
         </Text>
-        <View style={styles.card}>
-          <Text variant="bodyStrong">{booking.salonName}</Text>
-          <Text muted>
+        <View style={styles.doneRow}>
+          <Text variant="caption" muted>
+            Was
+          </Text>
+          <Text variant="caption" muted style={styles.doneOld}>
+            {formatBookingWhen(booking)}
+          </Text>
+        </View>
+        <View style={styles.doneRow}>
+          <Text variant="caption" muted>
+            Requested
+          </Text>
+          <Text variant="caption" style={styles.doneNew}>
             {selectedDate ? formatDayChip(selectedDate) : "—"} · {selectedSlotLabel}
           </Text>
         </View>
-        <Button
-          label="View bookings"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/bookings")}
-        />
-      </Screen>
+      </SuccessScreen>
     )
   }
 
@@ -296,6 +306,17 @@ export default function RescheduleScreen() {
 }
 
 const styles = StyleSheet.create({
+  doneRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: spacing.md,
+  },
+  doneOld: {
+    textDecorationLine: "line-through",
+  },
+  doneNew: {
+    fontFamily: "Geist_600SemiBold",
+  },
   gap: {
     marginTop: spacing.sm,
   },
@@ -305,14 +326,5 @@ const styles = StyleSheet.create({
   },
   section: {
     marginTop: spacing.xxl,
-  },
-  card: {
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
   },
 })

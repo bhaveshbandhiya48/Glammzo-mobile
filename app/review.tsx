@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
 import { Screen } from "@/components/ui/Screen"
+import { SuccessScreen } from "@/components/ui/SuccessScreen"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
 import { submitArtistReview, submitSalonReview } from "@/lib/reviews-api"
@@ -113,17 +114,31 @@ export default function ReviewScreen() {
 
   if (done) {
     return (
-      <Screen>
-        <Text variant="title">Thanks for the review</Text>
-        <Text muted style={styles.gap}>
-          Your feedback helps other guests choose with confidence.
+      <SuccessScreen
+        title="Thanks for your review"
+        message="Your feedback helps other guests choose with confidence."
+        primary={{ label: "Back to bookings", onPress: () => router.replace("/(tabs)/bookings") }}
+        secondary={{ label: "Go to Home", onPress: () => router.replace("/(tabs)/explore") }}
+      >
+        <View style={styles.doneHead}>
+          <Text variant="bodyStrong" numberOfLines={1} style={{ flex: 1 }}>
+            {title}
+          </Text>
+          <View style={styles.doneStars} accessible accessibilityLabel={`${rating} out of 5 stars`}>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <Icon
+                key={value}
+                name={value <= rating ? "star" : "star-outline"}
+                size={14}
+                color={colors.text}
+              />
+            ))}
+          </View>
+        </View>
+        <Text variant="body" muted numberOfLines={3}>
+          {`“${comment.trim()}”`}
         </Text>
-        <Button
-          label="Back to bookings"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/bookings")}
-        />
-      </Screen>
+      </SuccessScreen>
     )
   }
 
@@ -289,6 +304,15 @@ const styles = StyleSheet.create({
   },
   gap: {
     marginTop: spacing.sm,
+  },
+  doneHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  doneStars: {
+    flexDirection: "row",
+    gap: 2,
   },
   section: {
     marginTop: spacing.xxl,

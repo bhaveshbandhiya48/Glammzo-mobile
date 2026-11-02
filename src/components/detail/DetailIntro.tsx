@@ -17,6 +17,8 @@ type Props = {
   /** Rendered right after the title, e.g. a verified tick. */
   titleAccessory?: ReactNode
   subtitle?: string | null
+  /** One quiet line under the subtitle, e.g. how the visit works. */
+  note?: string | null
   stats: DetailStat[]
   actions: DetailAction[]
   about?: string | null
@@ -35,7 +37,7 @@ const TONES = {
  * Top of a salon or artist page: a card that overlaps the photo, with status, name,
  * three quick stats, labelled actions and a short "about" that expands.
  */
-export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitle, stats, actions, about, leading, style }: Props) {
+export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitle, note, stats, actions, about, leading, style }: Props) {
   const [aboutOpen, setAboutOpen] = useState(false)
   const aboutText = about?.trim() ?? ""
   const longAbout = aboutText.length > 140
@@ -51,6 +53,11 @@ export function DetailIntro({ status, offerLabel, title, titleAccessory, subtitl
       {subtitle ? (
         <Text muted style={styles.subtitle} numberOfLines={leading ? 2 : undefined}>
           {subtitle}
+        </Text>
+      ) : null}
+      {note ? (
+        <Text variant="caption" muted style={styles.note} numberOfLines={1}>
+          {note}
         </Text>
       ) : null}
     </>
@@ -226,6 +233,9 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 4,
+  },
+  note: {
+    marginTop: 2,
   },
   stats: {
     flexDirection: "row",

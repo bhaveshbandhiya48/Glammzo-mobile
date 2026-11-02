@@ -38,6 +38,8 @@ const CARD_GAP = spacing.sm
 const CARD_WIDTH = Dimensions.get("window").width - SIDE_PAD * 2 - spacing.xl
 const CARD_HEIGHT = 104
 const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP
+/** How long after a location change the map keeps framing newly loaded pins. */
+const FIT_NEW_AREA_MS = 6000
 const DEFAULT_CENTER = { latitude: 12.9716, longitude: 77.5946 }
 
 type Props = {
@@ -572,15 +574,40 @@ export function MapOverlay({
 
   // New location picked while the map is open: move there; its pins follow as they load.
   const lastCoordsRef = useRef<string | null>(null)
+  const fitNewAreaUntilRef = useRef(0)
   useEffect(() => {
     const coords = `${userLatitude},${userLongitude}`
     const changed = lastCoordsRef.current != null && lastCoordsRef.current !== coords
     lastCoordsRef.current = visible ? coords : null
     if (!visible || !changed || !Number.isFinite(userLatitude) || !Number.isFinite(userLongitude)) return
+    const target = regionAroundPoint(userLatitude!, userLongitude!, NEARBY_RADIUS_KM)
     setLiveUserCoords(null)
     setSelectedId(null)
-    mapRef.current?.animateToRegion(regionAroundPoint(userLatitude!, userLongitude!, NEARBY_RADIUS_KM), 450)
+    setViewRegion(target)
+    fitNewAreaUntilRef.current = Date.now() + FIT_NEW_AREA_MS
+    programmaticCameraUntilRef.current = Date.now() + 900
+    // The location sheet is still closing; moving under it can get dropped.
+    const timer = setTimeout(() => mapRef.current?.animateToRegion(target, 450), 320)
+    return () => clearTimeout(timer)
   }, [visible, userLatitude, userLongitude])
+
+  // The new area's pins arrive just after the move: frame them once they're here.
+  useEffect(() => {
+    if (!visible || areaMappable.length === 0 || Date.now() > fitNewAreaUntilRef.current) return
+    setSelectedId((current) => current ?? areaMappable[0]?.id ?? null)
+    programmaticCameraUntilRef.current = Date.now() + 900
+    const timer = setTimeout(() => {
+      mapRef.current?.fitToCoordinates(
+        areaMappable.map((item) => ({ latitude: item.latitude, longitude: item.longitude })),
+        {
+          edgePadding: { top: insets.top + 112, right: 40, bottom: CARD_HEIGHT + 64, left: 40 },
+          animated: true,
+        },
+      )
+    }, 340)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, areaMappable])
 
   function scrollCarouselToIndex(index: number, animated: boolean) {
     if (index < 0) return

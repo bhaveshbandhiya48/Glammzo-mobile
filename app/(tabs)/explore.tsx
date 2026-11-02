@@ -1061,7 +1061,7 @@ export default function ExploreScreen() {
                   }
                   salons={localGridSalons}
                   onSeeAll={
-                    searchQuery.trim() ? undefined : () => router.push("/services")
+                    searchQuery.trim() ? undefined : () => router.push("/salons")
                   }
                 />
               ) : null}

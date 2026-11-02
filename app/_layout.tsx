@@ -87,6 +87,7 @@ function RootNavigator() {
         <Stack.Screen name="services" options={{ title: "Services" }} />
         <Stack.Screen name="category/[type]" options={{ title: "Category" }} />
         <Stack.Screen name="artists/index" options={{ title: "Artists" }} />
+        <Stack.Screen name="salons/index" options={{ title: "Salons" }} />
         <Stack.Screen name="artist/[slug]" options={{ headerShown: false }} />
         <Stack.Screen name="artist/book/[slug]" options={{ title: "Booking" }} />
         <Stack.Screen name="review" options={{ title: "Leave a review", presentation: "modal" }} />

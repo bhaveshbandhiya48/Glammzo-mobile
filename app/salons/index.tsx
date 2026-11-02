@@ -131,12 +131,9 @@ export default function SalonsScreen() {
 
   const header = (
     <View style={styles.header}>
-      <View>
-        <Text variant="title">Salons</Text>
-        <Text variant="body" muted style={{ marginTop: 2 }}>
-          {location?.label ? `Near ${location.label}` : "Salons and spas near you."}
-        </Text>
-      </View>
+      <Text variant="body" muted>
+        {location?.label ? `Near ${location.label}` : "Salons and spas near you."}
+      </Text>
 
       <View style={styles.search}>
         <Icon name="search-outline" size={18} color={colors.textSubtle} />
@@ -234,7 +231,7 @@ export default function SalonsScreen() {
           <View style={styles.gridCell}>
             <SalonCard
               salon={item}
-              layout="grid"
+              layout="carousel"
               onPress={() => router.push({ pathname: "/salon/[id]", params: { id: item.id } })}
             />
           </View>

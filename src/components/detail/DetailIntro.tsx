@@ -198,13 +198,15 @@ const styles = StyleSheet.create({
   // Avatar overlaps the photo; its chips sit beside it, on the card.
   leadingRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    alignItems: "flex-start",
+    gap: 6,
+    marginBottom: spacing.xs,
   },
+  // Up near the card's top edge, close to the avatar.
   leadingChips: {
     flex: 1,
     minWidth: 0,
+    marginTop: -spacing.sm,
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.xs,

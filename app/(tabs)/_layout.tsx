@@ -27,7 +27,7 @@ export default function TabsLayout() {
           tabBarAccessibilityLabel: "Home",
           tabBarIcon: ({ focused, color }) => (
             <View style={styles.iconWrap}>
-              <HomeTabIcon color={color} focused={focused} size={20} />
+              <HomeTabIcon color={color} focused={focused} size={22} />
             </View>
           ),
         }}
@@ -39,7 +39,7 @@ export default function TabsLayout() {
           tabBarAccessibilityLabel: "Bookings",
           tabBarIcon: ({ focused, color }) => (
             <View style={styles.iconWrap}>
-              <BookingsTabIcon color={color} focused={focused} size={20} />
+              <BookingsTabIcon color={color} focused={focused} size={22} />
             </View>
           ),
         }}
@@ -51,7 +51,7 @@ export default function TabsLayout() {
           tabBarAccessibilityLabel: "Profile",
           tabBarIcon: ({ focused, color }) => (
             <View style={styles.iconWrap}>
-              <ProfileTabIcon color={color} focused={focused} size={20} />
+              <ProfileTabIcon color={color} focused={focused} size={22} />
             </View>
           ),
         }}

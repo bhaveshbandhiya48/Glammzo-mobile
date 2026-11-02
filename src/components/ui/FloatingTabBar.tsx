@@ -3,17 +3,17 @@ import { useEffect, useRef } from "react"
 import { Animated, Pressable, StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
 
-const BAR_HEIGHT = 52
+// Instagram's measurements: 59pt bar, 5pt inset, 22pt from the sides and bottom.
+const BAR_HEIGHT = 58
 /** Same inset all round, so the selected pill sits evenly inside the bar. */
-const BAR_INSET = 6
-const SELECTED_TAB_FLEX = 1.7
+const BAR_INSET = 5
+const BAR_MARGIN = 22
 
 /** Gap under the bar: close to the screen edge, just clear of the iPhone home indicator. */
 function barBottomGap(insetBottom: number) {
-  return Math.max(Math.round(insetBottom * 0.5), spacing.sm)
+  return Math.max(Math.min(insetBottom, BAR_MARGIN), spacing.lg)
 }
 
 /** Bottom space a tab screen should leave so its last content scrolls clear of the floating bar. */
@@ -24,7 +24,7 @@ export function useFloatingTabBarSpace() {
 
 /**
  * Bottom navigation as a separate rounded bar floating above the screen edge
- * (Instagram-style). The selected tab gets a black pill with its label.
+ * (Instagram-style). The selected tab gets a black pill; screen readers still hear each label.
  */
 export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -48,7 +48,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
               key={route.key}
               label={label}
               focused={focused}
-              icon={options.tabBarIcon?.({ focused, color: focused ? colors.primaryFg : colors.text, size: 20 })}
+              icon={options.tabBarIcon?.({ focused, color: focused ? colors.primaryFg : colors.text, size: 22 })}
               onPress={() => {
                 const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
                 if (!focused && !event.defaultPrevented) navigateToTab(route.key)
@@ -81,34 +81,25 @@ function Tab({
   }, [focused, grow])
 
   return (
-    <Animated.View
-      style={[styles.tabSlot, { flex: grow.interpolate({ inputRange: [0, 1], outputRange: [1, SELECTED_TAB_FLEX] }) }]}
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: focused }}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      style={styles.tabHit}
     >
-      <Pressable
-        accessibilityRole="tab"
-        accessibilityLabel={label}
-        accessibilityState={{ selected: focused }}
-        onPress={onPress}
-        onLongPress={onLongPress}
-        style={styles.tabHit}
+      <Animated.View
+        style={[
+          styles.tab,
+          {
+            backgroundColor: grow.interpolate({ inputRange: [0, 1], outputRange: ["rgba(17,17,17,0)", colors.primary] }),
+          },
+        ]}
       >
-        <Animated.View
-          style={[
-            styles.tab,
-            {
-              backgroundColor: grow.interpolate({ inputRange: [0, 1], outputRange: ["rgba(17,17,17,0)", colors.primary] }),
-            },
-          ]}
-        >
-          {icon}
-          {focused ? (
-            <Text variant="caption" color={colors.primaryFg} style={styles.label} numberOfLines={1}>
-              {label}
-            </Text>
-          ) : null}
-        </Animated.View>
-      </Pressable>
-    </Animated.View>
+        {icon}
+      </Animated.View>
+    </Pressable>
   )
 }
 
@@ -119,7 +110,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: BAR_MARGIN,
   },
   bar: {
     flexDirection: "row",
@@ -136,22 +127,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  tabSlot: {
-    height: "100%",
-  },
   tabHit: {
     flex: 1,
   },
   tab: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
     borderRadius: radii.pill,
-  },
-  label: {
-    fontFamily: "Geist_600SemiBold",
-    fontSize: 12,
   },
 })

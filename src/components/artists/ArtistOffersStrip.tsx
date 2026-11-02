@@ -122,22 +122,22 @@ export function ArtistOffersStrip({
                 accessibilityLabel={`${offer.dealLabel} ${offer.title}. ${appliesLabel(offer, services)}${till ? `, ${till}` : ""}. ${how}`}
               >
                 <View style={styles.cardTop}>
-                  <Text variant="bodyStrong" numberOfLines={1} style={{ flex: 1 }}>
+                  <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={1} style={{ flex: 1 }}>
                     {offer.title}
                   </Text>
                   <View style={styles.dealBadge}>
-                    <Text variant="caption" color={colors.primaryFg} style={styles.dealText}>
+                    <Text variant="caption" color={colors.primary} style={styles.dealText}>
                       {offer.dealLabel}
                     </Text>
                   </View>
                 </View>
-                <Text variant="caption" muted numberOfLines={1}>
+                <Text variant="caption" color={colors.accent} numberOfLines={1}>
                   {appliesLabel(offer, services)}
                   {till ? ` · ${till}` : ""}
                 </Text>
                 {offer.code ? (
                   <View style={styles.codeChip}>
-                    <Text variant="caption" muted>
+                    <Text variant="caption" color={colors.accent}>
                       Code
                     </Text>
                     <Text variant="caption" style={styles.codeText}>
@@ -145,7 +145,7 @@ export function ArtistOffersStrip({
                     </Text>
                   </View>
                 ) : (
-                  <Text variant="caption" muted>
+                  <Text variant="caption" color={colors.accent}>
                     Applied automatically
                   </Text>
                 )}
@@ -155,22 +155,22 @@ export function ArtistOffersStrip({
 
           const offer = item.offer
           return (
-            <View key={item.key} style={[styles.card, styles.cardGlammzo, { width: cardWidth }]}>
-              <Text variant="caption" color={colors.primary}>
+            <View key={item.key} style={[styles.card, { width: cardWidth }]}>
+              <Text variant="caption" color={colors.accent}>
                 {offer.eyebrow || "Glammzo offer"}
               </Text>
-              <Text variant="bodyStrong" numberOfLines={2}>
+              <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={2}>
                 {offer.title}
               </Text>
               {offer.cashbackRupees > 0 ? (
-                <Text variant="caption" muted>
+                <Text variant="caption" color={colors.accent}>
                   ₹{offer.cashbackRupees} cashback
                   {offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}
                 </Text>
               ) : null}
               {offer.promoCode ? (
                 <View style={styles.codeChip}>
-                  <Text variant="caption" muted>
+                  <Text variant="caption" color={colors.accent}>
                     Code
                   </Text>
                   <Text variant="caption" style={styles.codeText}>
@@ -178,7 +178,7 @@ export function ArtistOffersStrip({
                   </Text>
                 </View>
               ) : (
-                <Text variant="caption" muted>
+                <Text variant="caption" color={colors.accent}>
                   Cashback after your visit
                 </Text>
               )}
@@ -214,12 +214,11 @@ const styles = StyleSheet.create({
   rowSingle: {
     paddingRight: spacing.lg,
   },
+  // The one dark block on the page, so an offer can't be missed.
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.hero,
     borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: spacing.md,
+    padding: spacing.lg,
     gap: 6,
   },
   codeChip: {
@@ -233,16 +232,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: colors.inputBorder,
+    borderColor: colors.accent,
   },
   codeText: {
     fontFamily: "Geist_700Bold",
     letterSpacing: 1,
-    color: colors.text,
-  },
-  cardGlammzo: {
-    backgroundColor: colors.card,
-    borderColor: colors.border,
+    color: colors.primaryFg,
   },
   cardTop: {
     flexDirection: "row",
@@ -250,7 +245,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   dealBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radii.sm,

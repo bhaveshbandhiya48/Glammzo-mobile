@@ -7,6 +7,9 @@ import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 const BAR_HEIGHT = 52
+/** Same inset all round, so the selected pill sits evenly inside the bar. */
+const BAR_INSET = 6
+const SELECTED_TAB_FLEX = 1.7
 
 /** Gap under the bar: close to the screen edge, just clear of the iPhone home indicator. */
 function barBottomGap(insetBottom: number) {
@@ -78,31 +81,34 @@ function Tab({
   }, [focused, grow])
 
   return (
-    <Pressable
-      accessibilityRole="tab"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: focused }}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      style={styles.tabHit}
+    <Animated.View
+      style={[styles.tabSlot, { flex: grow.interpolate({ inputRange: [0, 1], outputRange: [1, SELECTED_TAB_FLEX] }) }]}
     >
-      <Animated.View
-        style={[
-          styles.tab,
-          {
-            backgroundColor: grow.interpolate({ inputRange: [0, 1], outputRange: ["rgba(17,17,17,0)", colors.primary] }),
-            paddingHorizontal: grow.interpolate({ inputRange: [0, 1], outputRange: [spacing.sm, spacing.md] }),
-          },
-        ]}
+      <Pressable
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: focused }}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        style={styles.tabHit}
       >
-        {icon}
-        {focused ? (
-          <Text variant="caption" color={colors.primaryFg} style={styles.label} numberOfLines={1}>
-            {label}
-          </Text>
-        ) : null}
-      </Animated.View>
-    </Pressable>
+        <Animated.View
+          style={[
+            styles.tab,
+            {
+              backgroundColor: grow.interpolate({ inputRange: [0, 1], outputRange: ["rgba(17,17,17,0)", colors.primary] }),
+            },
+          ]}
+        >
+          {icon}
+          {focused ? (
+            <Text variant="caption" color={colors.primaryFg} style={styles.label} numberOfLines={1}>
+              {label}
+            </Text>
+          ) : null}
+        </Animated.View>
+      </Pressable>
+    </Animated.View>
   )
 }
 
@@ -113,14 +119,13 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   bar: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
     height: BAR_HEIGHT,
-    paddingHorizontal: 6,
+    padding: BAR_INSET,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
@@ -131,17 +136,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
-  tabHit: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+  tabSlot: {
     height: "100%",
   },
+  tabHit: {
+    flex: 1,
+  },
   tab: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
-    height: 40,
     borderRadius: radii.pill,
   },
   label: {

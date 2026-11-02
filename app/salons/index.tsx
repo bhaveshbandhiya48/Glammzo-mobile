@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
-import { FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native"
+import { Dimensions, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native"
 
 import { SalonsFilterSheet } from "@/components/salon/SalonsFilterSheet"
 import { Button } from "@/components/ui/Button"
@@ -23,6 +23,8 @@ import { salonsInSelectedLocation } from "@/lib/explore-location"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
+
+const GRID_ITEM_WIDTH = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2
 
 function FilterPill({
   label,
@@ -228,7 +230,7 @@ export default function SalonsScreen() {
         columnWrapperStyle={styles.gridRow}
         ListHeaderComponent={header}
         renderItem={({ item }) => (
-          <View style={styles.gridCell}>
+          <View style={styles.gridItem}>
             <SalonCard
               salon={item}
               layout="carousel"
@@ -291,6 +293,10 @@ const styles = StyleSheet.create({
   },
   gridCell: {
     flex: 1,
+  },
+  // Fixed width, so a lone card in the last row stays half width.
+  gridItem: {
+    width: GRID_ITEM_WIDTH,
   },
   header: { gap: spacing.md, marginBottom: spacing.lg },
   search: {

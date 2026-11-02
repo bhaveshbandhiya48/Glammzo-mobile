@@ -88,17 +88,31 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
     const services = serviceLine(booking)
 
     switch (booking.status) {
-      case "pending":
+      case "pending": {
+        // An artist booking is only pending while its advance is unpaid; nobody else needs to confirm it.
+        const payToken = booking.paymentDeadline ? booking.artistPublicToken : undefined
         items.push(
-          bookingNotification(
-            booking,
-            "booking_pending",
-            "Awaiting salon confirmation",
-            `${booking.salonName}, ${when}. We'll tell you once they confirm.`,
-            booking.createdAt,
-          ),
+          payToken
+            ? {
+                ...bookingNotification(
+                  booking,
+                  "booking_pending",
+                  "Complete your payment",
+                  `Pay the advance to confirm ${booking.salonName}, ${when} at ${booking.time}.`,
+                  booking.createdAt,
+                ),
+                href: `/pay/advance/${encodeURIComponent(payToken)}`,
+              }
+            : bookingNotification(
+                booking,
+                "booking_pending",
+                `Awaiting ${booking.kind === "artist" ? "artist" : "salon"} confirmation`,
+                `${booking.salonName}, ${when}. We'll tell you once they confirm.`,
+                booking.createdAt,
+              ),
         )
         break
+      }
       case "confirmed":
       case "upcoming":
         items.push(
@@ -147,6 +161,17 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             "booking_cancelled",
             "Booking cancelled",
             `${booking.salonName}, ${when}.`,
+            booking.createdAt,
+          ),
+        )
+        break
+      case "payment_failed":
+        items.push(
+          bookingNotification(
+            booking,
+            "booking_cancelled",
+            "Payment failed",
+            `The advance wasn't paid in time, so your slot at ${booking.salonName} on ${when} was released.`,
             booking.createdAt,
           ),
         )

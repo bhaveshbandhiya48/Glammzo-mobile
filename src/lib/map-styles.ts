@@ -4,12 +4,12 @@
  */
 export const GLAMMZO_MAP_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#F2F2F2" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#737373" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#F2F2F2" }] },
   {
     featureType: "administrative",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#e7e5e4" }],
+    stylers: [{ color: "#E5E5E5" }],
   },
   {
     featureType: "administrative.land_parcel",
@@ -22,7 +22,7 @@ export const GLAMMZO_MAP_STYLE = [
   {
     featureType: "poi.park",
     elementType: "geometry",
-    stylers: [{ color: "#dce8d4" }, { visibility: "on" }],
+    stylers: [{ color: "#E6E9E4" }, { visibility: "on" }],
   },
   {
     featureType: "poi.park",
@@ -37,7 +37,7 @@ export const GLAMMZO_MAP_STYLE = [
   {
     featureType: "road",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#e5e7eb" }],
+    stylers: [{ color: "#E5E5E5" }],
   },
   {
     featureType: "road",
@@ -47,12 +47,12 @@ export const GLAMMZO_MAP_STYLE = [
   {
     featureType: "road.highway",
     elementType: "geometry",
-    stylers: [{ color: "#fafaf9" }],
+    stylers: [{ color: "#FAFAFA" }],
   },
   {
     featureType: "road.highway",
     elementType: "geometry.stroke",
-    stylers: [{ color: "#d6d3d1" }],
+    stylers: [{ color: "#D4D4D4" }],
   },
   {
     featureType: "transit",
@@ -61,7 +61,7 @@ export const GLAMMZO_MAP_STYLE = [
   {
     featureType: "water",
     elementType: "geometry",
-    stylers: [{ color: "#cfe8f7" }],
+    stylers: [{ color: "#DDE3E8" }],
   },
 ] as Array<{
   elementType?: string

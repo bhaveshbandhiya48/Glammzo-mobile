@@ -1092,7 +1092,7 @@ export default function ExploreScreen() {
           ) : null}
         </ScrollView>
 
-        {showCart ? <CartStrip entries={cartEntries} bottomOffset={tabBarSpace - spacing.sm} /> : null}
+        {showCart ? <CartStrip entries={cartEntries} aboveTabBar /> : null}
       </View>
 
       <CartItemsSheet

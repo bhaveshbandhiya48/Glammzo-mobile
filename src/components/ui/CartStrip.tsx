@@ -12,6 +12,7 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { useFloatingTabBarTop } from "@/components/ui/FloatingTabBar"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -31,6 +32,8 @@ export type CartStripEntry = {
 type Props = {
   entries: CartStripEntry[]
   bottomOffset?: number
+  /** Sits just above the floating bottom bar instead of the screen edge. */
+  aboveTabBar?: boolean
 }
 
 function StripCard({
@@ -111,8 +114,9 @@ function StripCard({
   )
 }
 
-export function CartStrip({ entries, bottomOffset = 0 }: Props) {
+export function CartStrip({ entries, bottomOffset = 0, aboveTabBar = false }: Props) {
   const insets = useSafeAreaInsets()
+  const tabBarTop = useFloatingTabBarTop()
   const { width: windowWidth } = useWindowDimensions()
   const [page, setPage] = useState(0)
   const sliderRef = useRef<ScrollViewInstance>(null)
@@ -134,7 +138,7 @@ export function CartStrip({ entries, bottomOffset = 0 }: Props) {
       style={[
         styles.wrap,
         {
-          paddingBottom: Math.max(insets.bottom, spacing.md) + bottomOffset,
+          paddingBottom: aboveTabBar ? tabBarTop + spacing.sm : Math.max(insets.bottom, spacing.md) + bottomOffset,
         },
       ]}
     >

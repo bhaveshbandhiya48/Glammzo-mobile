@@ -16,6 +16,12 @@ function barBottomGap(insetBottom: number) {
   return Math.max(Math.min(insetBottom, BAR_MARGIN), spacing.lg)
 }
 
+/** Height from the screen's bottom edge to the top of the floating bar. */
+export function useFloatingTabBarTop() {
+  const insets = useSafeAreaInsets()
+  return BAR_HEIGHT + barBottomGap(insets.bottom)
+}
+
 /** Bottom space a tab screen should leave so its last content scrolls clear of the floating bar. */
 export function useFloatingTabBarSpace() {
   const insets = useSafeAreaInsets()

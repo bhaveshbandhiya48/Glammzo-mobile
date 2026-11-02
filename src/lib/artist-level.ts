@@ -4,18 +4,63 @@ export const ARTIST_LEVEL_LABEL: Record<ArtistLevelId, string> = {
   new: "Getting started",
   rising: "Rising",
   established: "Established",
-  top_rated: "Top rated",
+  top_rated: "Signature",
 }
 
-/** Soft medal fills — same shape as CRM artist app. */
+/** Level medals, same as the Partner app: mint, sky, lavender and gold. */
 export const ARTIST_LEVEL_BADGE: Record<
   ArtistLevelId,
-  { fill: string; ink: string; dots: number }
+  {
+    outerTop: string
+    outerBottom: string
+    stroke: string
+    faceTop: string
+    faceBottom: string
+    emblem: string
+    mark: "star" | "crown"
+    chevrons: number
+  }
 > = {
-  new: { fill: "#B7A99A", ink: "#FFFFFF", dots: 0 },
-  rising: { fill: "#111111", ink: "#FFFFFF", dots: 1 },
-  established: { fill: "#5C7C6A", ink: "#FFFFFF", dots: 2 },
-  top_rated: { fill: "#C9893A", ink: "#FFFFFF", dots: 3 },
+  new: {
+    outerTop: "#E3F6EC",
+    outerBottom: "#9FD9B9",
+    stroke: "#6BBF93",
+    faceTop: "#FFFFFF",
+    faceBottom: "#E9F8F0",
+    emblem: "#1F7A4D",
+    mark: "star",
+    chevrons: 0,
+  },
+  rising: {
+    outerTop: "#E3EEFE",
+    outerBottom: "#A3C1F7",
+    stroke: "#6F9BEF",
+    faceTop: "#FFFFFF",
+    faceBottom: "#EAF2FE",
+    emblem: "#1D4ED8",
+    mark: "star",
+    chevrons: 1,
+  },
+  established: {
+    outerTop: "#EEE8FE",
+    outerBottom: "#BBA8F4",
+    stroke: "#9478EA",
+    faceTop: "#FFFFFF",
+    faceBottom: "#F2EEFE",
+    emblem: "#5B3CC4",
+    mark: "star",
+    chevrons: 2,
+  },
+  top_rated: {
+    outerTop: "#FFF4D1",
+    outerBottom: "#F0C860",
+    stroke: "#D9A93A",
+    faceTop: "#FFFDF5",
+    faceBottom: "#FFF3CF",
+    emblem: "#8A5A00",
+    mark: "crown",
+    chevrons: 0,
+  },
 }
 
 export function parseArtistLevel(value: unknown): ArtistLevelId {

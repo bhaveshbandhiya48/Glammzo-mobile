@@ -57,10 +57,13 @@ export function OtpInput({
                 focused && styles.boxFocused,
               ]}
             >
-              <Text variant="heading" style={styles.digit}>
-                {char}
-              </Text>
-              {!char && focused ? <View style={styles.caret} /> : null}
+              {char ? (
+                <Text variant="heading" style={styles.digit}>
+                  {char}
+                </Text>
+              ) : focused ? (
+                <View style={styles.caret} />
+              ) : null}
             </View>
           )
         })}
@@ -114,7 +117,9 @@ const styles = StyleSheet.create({
   },
   digit: {
     fontSize: 22,
+    lineHeight: 28,
     fontFamily: typography.heading.fontFamily,
+    textAlign: "center",
   },
   caret: {
     width: 2,
@@ -122,9 +127,11 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: colors.primary,
   },
+  // Keep focus/autofill working, but fully invisible so the system caret
+  // never peeks through under the boxes.
   hiddenInput: {
     ...StyleSheet.absoluteFill,
-    opacity: 0.02,
+    opacity: 0,
     color: "transparent",
   },
 })

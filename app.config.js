@@ -41,6 +41,8 @@ const config = {
     infoPlist: {
       // HTTPS + Keychain only — skips App Store Connect export-compliance prompt.
       ITSAppUsesNonExemptEncryption: false,
+      // Lets the in-app payment screen find installed UPI apps.
+      LSApplicationQueriesSchemes: ["tez", "phonepe", "paytmmp", "bhim", "credpay"],
     },
     ...(mapsApiKeyIos
       ? {
@@ -52,7 +54,8 @@ const config = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: "#F6F4F1",
+      // Match wordmark icon (white + coral on black) — not cream, which looked like a white bg.
+      backgroundColor: "#000000",
       foregroundImage: "./assets/android-icon-foreground.png",
       backgroundImage: "./assets/android-icon-background.png",
       monochromeImage: "./assets/android-icon-monochrome.png",
@@ -83,10 +86,32 @@ const config = {
     "expo-video",
     "@react-native-community/datetimepicker",
     [
+      // SDK 58 enables R8 minify; WorkManager (via notifications) needs these
+      // constructors or Android release builds crash before JS loads.
+      "expo-build-properties",
+      {
+        android: {
+          extraProguardRules: [
+            "-keep class * extends androidx.room.RoomDatabase { <init>(); }",
+            "-keep class * extends androidx.work.InputMerger { <init>(); }",
+            "-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(); }",
+            "-keepclassmembers class * extends androidx.work.InputMerger { <init>(); }",
+            // Razorpay's checkout talks to its web view through these.
+            "-keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }",
+            "-keepattributes JavascriptInterface,*Annotation*",
+            "-dontwarn com.razorpay.**",
+            "-keep class com.razorpay.** { *; }",
+            "-keepclasseswithmembers class * { public void onPayment*(...); }",
+          ].join("\n"),
+        },
+      },
+    ],
+    [
       "expo-image-picker",
       {
+        // Library only — do not declare NSCameraUsageDescription (Guideline 5.1.1).
         photosPermission: "Glammzo needs photo access so you can add photos to your reviews.",
-        cameraPermission: "Glammzo needs the camera so you can take a photo for your review.",
+        cameraPermission: false,
         microphonePermission: false,
       },
     ],
@@ -141,7 +166,7 @@ const config = {
       termsUrl: `${siteUrl}/terms`,
       cancellationUrl: `${siteUrl}/cancellation-policy`,
       deleteAccountUrl: `${siteUrl}/delete-account`,
-      supportEmail: "hello@glammzo.com",
+      supportEmail: "support@glammzo.com",
     },
   },
 }

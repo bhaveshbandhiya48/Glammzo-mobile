@@ -12,5 +12,5 @@ export const LEGAL = {
   termsUrl: `${SITE_URL}/terms`,
   cancellationUrl: `${SITE_URL}/cancellation-policy`,
   deleteAccountUrl: `${SITE_URL}/delete-account`,
-  supportEmail: "hello@glammzo.com",
+  supportEmail: "support@glammzo.com",
 } as const

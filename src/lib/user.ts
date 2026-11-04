@@ -90,9 +90,21 @@ export function peekCachedGreeting(): string | null {
 export async function getDisplayName(): Promise<string> {
   const profile = await getConsumerProfile()
   if (profile.name.trim()) return profile.name.trim()
-  const name = await SecureStore.getItemAsync(DISPLAY_NAME_KEY)
-  const trimmed = name?.trim()
-  return trimmed && trimmed.length > 0 ? trimmed : "Guest"
+  try {
+    const name = await SecureStore.getItemAsync(DISPLAY_NAME_KEY)
+    const trimmed = name?.trim()
+    if (trimmed) return trimmed
+  } catch {
+    // SecureStore browser stub / unavailable
+  }
+  try {
+    const name = await AsyncStorage.getItem(DISPLAY_NAME_KEY)
+    const trimmed = name?.trim()
+    if (trimmed) return trimmed
+  } catch {
+    // ignore
+  }
+  return "Guest"
 }
 
 /** Home greeting: never show a cached name without a session token. */
@@ -119,16 +131,33 @@ export async function setDisplayName(name: string): Promise<void> {
   const trimmed = name.trim()
   if (!trimmed) {
     greetingCache = "Guest"
-    await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
+    try {
+      await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
+    } catch {
+      await AsyncStorage.removeItem(DISPLAY_NAME_KEY)
+    }
     return
   }
   greetingCache = trimmed
-  await SecureStore.setItemAsync(DISPLAY_NAME_KEY, trimmed)
+  try {
+    await SecureStore.setItemAsync(DISPLAY_NAME_KEY, trimmed)
+  } catch {
+    await AsyncStorage.setItem(DISPLAY_NAME_KEY, trimmed)
+  }
 }
 
 export async function clearDisplayName(): Promise<void> {
   greetingCache = "Guest"
-  await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
+  try {
+    await SecureStore.deleteItemAsync(DISPLAY_NAME_KEY)
+  } catch {
+    // ignore
+  }
+  try {
+    await AsyncStorage.removeItem(DISPLAY_NAME_KEY)
+  } catch {
+    // ignore
+  }
 }
 
 export async function getLocationLabel(

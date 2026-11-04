@@ -3,7 +3,6 @@ import { useLocalSearchParams, useNavigation, useRouter, type Href } from "expo-
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   StyleSheet,
   View,
@@ -17,6 +16,7 @@ import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
 import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
 import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import { BottomSheet } from "@/components/ui/BottomSheet"
+import { AdvancePaymentSheet } from "@/components/payments/AdvancePaymentSheet"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
@@ -128,6 +128,8 @@ export default function ArtistBookScreen() {
   const [phone, setPhone] = useState("")
   const [verifiedFor, setVerifiedFor] = useState<{ phone: string; token: string } | null>(null)
   const [busy, setBusy] = useState<"book" | "session" | null>(null)
+  const [paySheet, setPaySheet] = useState(false)
+  const paidBooking = useRef<Record<string, string> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [promoInput, setPromoInput] = useState(initialPromo)
@@ -496,6 +498,21 @@ export default function ArtistBookScreen() {
     setPromoError(null)
   }
 
+  function onAdvancePaid(paidRupees: number) {
+    const details = paidBooking.current
+    if (!details) return
+    router.replace({
+      pathname: "/book/confirmation",
+      params: { ...details, status: "confirmed", advancePaid: String(paidRupees) },
+    } as Href)
+  }
+
+  /** Tapped Pay, then left: not booked yet. Home shows the held slot with its countdown. */
+  function leaveUnpaid() {
+    setPaySheet(false)
+    router.replace("/(tabs)/explore" as Href)
+  }
+
   async function onBook() {
     if (!artist || selectedIds.length === 0 || !slot) return
     if (name.trim().length < 2) {
@@ -506,6 +523,18 @@ export default function ArtistBookScreen() {
       setError("Add your address and location for a home visit.")
       return
     }
+    setError(null)
+    // An advance is due: choose how to pay first. The slot is held on the Pay tap, not here.
+    if (advanceDue > 0) {
+      setPaySheet(true)
+      return
+    }
+    void createBooking()
+  }
+
+  /** Creates the booking. Returns its token while the advance is still due, otherwise null. */
+  async function createBooking(): Promise<string | null> {
+    if (!artist || !slot) return null
     setBusy("book")
     setError(null)
     try {
@@ -528,36 +557,40 @@ export default function ArtistBookScreen() {
       const dateKey = new Date(res.booking.startsAt).toLocaleDateString("en-CA", {
         timeZone: timezone,
       })
-      // The artist asks for an advance: pay it on Glammzo's secure web page (not in-app purchase).
-      if (res.awaitingPayment && res.payUrl) {
-        void Linking.openURL(res.payUrl)
+      const confirmation = {
+        kind: "artist",
+        salonId: artist.slug,
+        bookingId: `artist:${res.booking.token}`,
+        total: String(Math.round(res.payable ?? payableTotal)),
+        slot: formatSlot(res.booking.startsAt, timezone),
+        name: name.trim(),
+        date: dateKey,
+        services: selectedServices.map((s) => s.name).join(" · "),
+        visitType: locationType === "client_home" ? "Home visit" : "Studio visit",
+        area: [artist.area, artist.city].filter(Boolean).join(", "),
+        providerName: artist.displayName,
+        photoUrl: artist.profilePhotoUrl ?? "",
       }
+      // The artist asks for an advance: the open sheet takes it from here.
+      if (res.awaitingPayment) {
+        paidBooking.current = { ...confirmation, payToken: res.booking.token }
+        return res.booking.token
+      }
+      setPaySheet(false)
       router.replace({
         pathname: "/book/confirmation",
-        params: {
-          kind: "artist",
-          salonId: artist.slug,
-          bookingId: `artist:${res.booking.token}`,
-          total: String(Math.round(res.payable ?? payableTotal)),
-          slot: formatSlot(res.booking.startsAt, timezone),
-          name: name.trim(),
-          date: dateKey,
-          status: res.awaitingPayment ? "pending" : "confirmed",
-          ...(res.awaitingPayment && res.payUrl ? { payUrl: res.payUrl } : {}),
-          services: selectedServices.map((s) => s.name).join(" · "),
-          visitType: locationType === "client_home" ? "Home visit" : "Studio visit",
-          area: [artist.area, artist.city].filter(Boolean).join(", "),
-          providerName: artist.displayName,
-          photoUrl: artist.profilePhotoUrl ?? "",
-        },
+        params: { ...confirmation, status: "confirmed" },
       } as Href)
+      return null
     } catch (err) {
       const message =
         err instanceof ApiError || err instanceof Error
           ? err.message
           : "Couldn't book."
+      setPaySheet(false)
       setError(message)
       if (/no longer available/i.test(message)) setSlot(null)
+      return null
     } finally {
       setBusy(null)
     }
@@ -658,14 +691,17 @@ export default function ArtistBookScreen() {
     locationType === "client_home"
       ? "Artist comes to your home"
       : "At the artist's studio"
-  const homeServicePremium = selectedServices.reduce((sum, s) => {
-    const studio = artistServiceUnitPrice(s, "studio")
-    const home = artistServiceUnitPrice(s, "client_home")
-    return sum + Math.max(0, home - studio)
-  }, 0)
   const travelFee = quote?.travelFee ?? 0
-  const hasVisitExtras =
-    needsHome && (homeServicePremium > 0 || travelFee > 0)
+  // One price in the bottom bar; the full breakdown lives on the review step.
+  const barPrice =
+    quote != null
+      ? formatRupees(quote.total)
+      : `${needsHome ? "From " : ""}${formatRupees(servicesSubtotal)}`
+  const barNote = awaitingPin
+    ? "Add location for final price"
+    : quote && quote.advance > 0
+      ? `${formatRupees(quote.advance)} advance now`
+      : "Pay at your visit"
 
   return (
     <View style={styles.root}>
@@ -677,10 +713,10 @@ export default function ArtistBookScreen() {
         <Text variant="title">Reserve your visit</Text>
         <Text muted style={styles.gap}>
           {step === 0
-            ? "Review your services"
+            ? "Step 1 of 3 · Your services"
             : step === 1
-              ? "When and where"
-              : "Review and confirm"}
+              ? "Step 2 of 3 · When and where"
+              : "Step 3 of 3 · Review and confirm"}
         </Text>
 
         {step === 0 ? (
@@ -749,11 +785,6 @@ export default function ArtistBookScreen() {
                   />
                 ))}
               </View>
-              {selectedServices.length > 0 ? (
-                <Text variant="caption" muted>
-                  Services · {formatRupees(servicesSubtotal)}
-                </Text>
-              ) : null}
             </View>
           </>
         ) : null}
@@ -762,10 +793,6 @@ export default function ArtistBookScreen() {
           <>
             <View style={styles.section}>
               <Text variant="heading">Where is the visit?</Text>
-              <Text variant="caption" muted>
-                Choose studio or home. Home visit prices and travel fees update the
-                total below.
-              </Text>
               {showWhereChooser ? (
                 <View style={styles.whereChoices}>
                   <Pressable
@@ -862,6 +889,12 @@ export default function ArtistBookScreen() {
                   onChangeText={setLandmark}
                   placeholder="Near…"
                 />
+                {travelFee > 0 ? (
+                  <Text variant="caption" muted>
+                    Travel fee {formatRupees(travelFee)}
+                    {quote?.distanceKm != null ? ` · ${quote.distanceKm.toFixed(1)} km` : ""}
+                  </Text>
+                ) : null}
               </View>
             ) : null}
 
@@ -906,90 +939,6 @@ export default function ArtistBookScreen() {
               ) : null}
             </View>
 
-            <View style={styles.card}>
-              <Text variant="caption" muted>
-                Price breakdown
-              </Text>
-              <View style={styles.priceRow}>
-                <Text variant="body">
-                  Services
-                  {needsHome && quote ? " (home rates)" : ""}
-                </Text>
-                <Text variant="bodyStrong">
-                  {formatRupees(quote?.servicePrice ?? servicesSubtotal)}
-                </Text>
-              </View>
-              {travelFee > 0 ? (
-                <View style={styles.priceRow}>
-                  <Text variant="body">
-                    Travel fee
-                    {quote?.distanceKm != null
-                      ? ` · ${quote.distanceKm.toFixed(1)} km`
-                      : ""}
-                  </Text>
-                  <Text variant="bodyStrong">{formatRupees(travelFee)}</Text>
-                </View>
-              ) : needsHome &&
-                artist.travelFeeType !== "none" &&
-                artist.travelFeeAmount > 0 &&
-                awaitingPin ? (
-                <Text variant="caption" muted style={{ marginTop: spacing.xs }}>
-                  Travel fee will be added once your location pin is set.
-                </Text>
-              ) : null}
-              {hasVisitExtras && quote ? (
-                <Text variant="caption" muted style={{ marginTop: spacing.xs }}>
-                  Includes
-                  {homeServicePremium > 0 ? " home visit rates" : ""}
-                  {homeServicePremium > 0 && travelFee > 0 ? " and" : ""}
-                  {travelFee > 0 ? " travel" : ""}
-                  .
-                </Text>
-              ) : null}
-              <View style={[styles.priceRow, { marginTop: spacing.sm }]}>
-                <Text variant="heading">Total</Text>
-                <Text variant="heading">
-                  {quote
-                    ? formatRupees(quote.total)
-                    : needsHome && awaitingPin
-                      ? "—"
-                      : formatRupees(servicesSubtotal)}
-                </Text>
-              </View>
-              {needsHome && awaitingPin ? (
-                <Text
-                  variant="caption"
-                  color={colors.destructive}
-                  style={{ marginTop: 4 }}
-                >
-                  Add your location to see the final home-visit total.
-                </Text>
-              ) : null}
-              {quote && quote.advance > 0 ? (
-                <View style={{ marginTop: spacing.sm, gap: 4 }}>
-                  <View style={styles.priceRow}>
-                    <Text variant="label">Pay now to confirm (advance)</Text>
-                    <Text variant="label">{formatRupees(quote.advance)}</Text>
-                  </View>
-                  <View style={styles.priceRow}>
-                    <Text variant="caption" muted>Pay the artist at your visit</Text>
-                    <Text variant="caption" muted>{formatRupees(Math.max(0, quote.total - quote.advance))}</Text>
-                  </View>
-                  <Text variant="caption" muted>
-                    {artist.displayName} asks for an advance. After you book, you&apos;ll pay it securely on
-                    Glammzo (UPI, card or net banking). Your time is held for 15 minutes.
-                  </Text>
-                  {artist.cancellationPolicyLines?.length ? (
-                    <View style={{ gap: 2, marginTop: 4 }}>
-                      <Text variant="label">If you cancel</Text>
-                      {artist.cancellationPolicyLines.map((line) => (
-                        <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
           </>
         ) : null}
 
@@ -1253,8 +1202,7 @@ export default function ArtistBookScreen() {
                     <Text muted>{formatRupees(payableTotal - advanceDue)}</Text>
                   </View>
                   <Text variant="caption" muted>
-                    After you book, you&apos;ll pay the advance securely on Glammzo (UPI, card or net
-                    banking). Your time is held for 15 minutes.
+                    Your time is held for 15 minutes while you pay.
                   </Text>
                 </>
               ) : (
@@ -1290,8 +1238,30 @@ export default function ArtistBookScreen() {
         ) : null}
       </Screen>
 
-      <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <View
+        style={[
+          styles.ctaBar,
+          step < 2 && styles.ctaBarRow,
+          { paddingBottom: Math.max(insets.bottom, spacing.md) },
+        ]}
+      >
+        {step < 2 ? (
+          <View
+            style={styles.ctaPrice}
+            accessible
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={`Total ${barPrice}. ${barNote}.`}
+          >
+            <Text variant="heading" numberOfLines={1}>
+              {barPrice}
+            </Text>
+            <Text variant="caption" muted numberOfLines={1}>
+              {barNote}
+            </Text>
+          </View>
+        ) : null}
         <Button
+          style={step < 2 ? styles.ctaButton : undefined}
           label={
             busy === "book"
               ? "Booking…"
@@ -1300,7 +1270,7 @@ export default function ArtistBookScreen() {
                 : step === 1
                   ? "Continue"
                   : advanceDue > 0
-                    ? `Book and pay ${formatRupees(advanceDue)} now`
+                    ? `Continue to pay ${formatRupees(advanceDue)}`
                     : quote
                       ? `Confirm · ${formatRupees(payableTotal)}`
                       : "Confirm booking"
@@ -1326,6 +1296,19 @@ export default function ArtistBookScreen() {
           }}
         />
       </View>
+
+      <AdvancePaymentSheet
+        visible={paySheet}
+        token={null}
+        reserve={createBooking}
+        summary={{
+          amountRupees: advanceDue,
+          label: `${selectedServices.map((s) => s.name).join(", ")} with ${artist.displayName}`,
+        }}
+        onPaid={onAdvancePaid}
+        onClose={(held) => (held ? leaveUnpaid() : setPaySheet(false))}
+        confirmBeforeClose
+      />
 
       <BookingDateSheet
         visible={dateSheetOpen}
@@ -1443,13 +1426,6 @@ const styles = StyleSheet.create({
   },
   whereCardTitle: { textAlign: "center" },
   whereCardSub: { textAlign: "center" },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    marginTop: spacing.sm,
-  },
   row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
   policyCard: {
     backgroundColor: colors.muted,
@@ -1496,6 +1472,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
+  },
+  ctaBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.lg,
+  },
+  ctaPrice: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  ctaButton: {
+    flex: 1,
   },
   rewardsCard: {
     gap: spacing.md,

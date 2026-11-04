@@ -1,8 +1,7 @@
 import { Image } from "expo-image"
-import { Pressable, StyleSheet, View } from "react-native"
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native"
 
 import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
-import { ArtistVerifiedBadge } from "@/components/artists/ArtistVerifiedBadge"
 import { Text } from "@/components/ui/Text"
 import {
   artistLevelLabel,
@@ -34,10 +33,20 @@ type Props = {
   onPress: () => void
   /** Shorter photo for home / horizontal sliders. */
   compact?: boolean
+  /** Tighter layout for 2-up grids (artists list). */
+  grid?: boolean
+  style?: StyleProp<ViewStyle>
 }
 
 /** Photo-led artist card, matching the salon card: cover photo, avatar on it, quiet rating and price. */
-export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: Props) {
+export function ArtistCard({
+  artist,
+  categoryLabel,
+  onPress,
+  compact = false,
+  grid = false,
+  style,
+}: Props) {
   const distance =
     artist.distanceKm != null
       ? artist.distanceKm < 10
@@ -46,13 +55,17 @@ export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: 
       : null
   const placeLine = [artist.area?.trim() || null, distance].filter(Boolean).join(" · ")
   const cover = artist.portfolio.find(Boolean) ?? artist.profilePhotoUrl
-  const showAvatar = Boolean(artist.profilePhotoUrl) && cover !== artist.profilePhotoUrl
-  const showVerified = artist.isVerified !== false
+  // Every card with a portfolio cover gets the round avatar; initials stand in for a missing photo.
+  const showAvatar = Boolean(cover) && cover !== artist.profilePhotoUrl
   const level = parseArtistLevel(artist.level)
   const levelLabel = artistLevelLabel(level, artist.levelLabel)
+  const showLevel = showArtistLevelToCustomers(level)
   const hasRating = (artist.reviewCount ?? 0) > 0 && artist.averageRating != null
   const visit = visitLine(artist)
   const speciality = artist.primaryCategory ? categoryLabel(artist.primaryCategory) : null
+
+  const avatarSize = grid ? GRID_AVATAR : AVATAR
+  const levelSize = grid ? 14 : showAvatar ? 16 : 18
 
   return (
     <Pressable
@@ -60,8 +73,7 @@ export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: 
       accessibilityRole="button"
       accessibilityLabel={[
         artist.displayName,
-        showVerified ? "verified" : null,
-        showArtistLevelToCustomers(level) ? levelLabel : null,
+        showLevel ? levelLabel : null,
         speciality,
         placeLine || null,
         hasRating ? `${artist.averageRating!.toFixed(1)} stars, ${artist.reviewCount} reviews` : "new",
@@ -71,43 +83,104 @@ export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: 
       ]
         .filter(Boolean)
         .join(", ")}
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.card, grid && styles.cardGrid, style, pressed && styles.pressed]}
     >
-      <View style={[styles.photo, compact && styles.photoCompact]}>
+      <View
+        style={[
+          styles.photo,
+          compact && styles.photoCompact,
+          grid && styles.photoGrid,
+        ]}
+      >
         {cover ? (
           <Image source={{ uri: cover }} style={styles.photoImage} contentFit="cover" transition={150} />
         ) : (
           <View style={[styles.photoImage, styles.photoFallback]}>
-            <Text variant="title" color={colors.textMuted}>
+            <Text variant={grid ? "bodyStrong" : "title"} color={colors.textMuted}>
               {initials(artist.displayName)}
             </Text>
           </View>
         )}
         {artist.offerBadge ? (
-          <View style={styles.offer} pointerEvents="none">
-            <Text variant="caption" style={styles.offerText}>
+          <View style={[styles.offer, grid && styles.offerGrid]} pointerEvents="none">
+            <Text variant="caption" style={[styles.offerText, grid && styles.offerTextGrid]} numberOfLines={1}>
               {artist.offerBadge}
             </Text>
           </View>
         ) : null}
         {showAvatar ? (
-          <View style={styles.avatarRing}>
-            <Image source={{ uri: artist.profilePhotoUrl! }} style={styles.avatar} contentFit="cover" />
-            {showArtistLevelToCustomers(level) ? (
-              <View style={styles.level}>
-                <ArtistLevelBadge level={level} size={16} />
+          <View
+            style={[
+              styles.avatarRing,
+              grid && styles.avatarRingGrid,
+              {
+                width: avatarSize + 4,
+                height: avatarSize + 4,
+                borderRadius: (avatarSize + 4) / 2,
+                bottom: -avatarSize / 2,
+              },
+            ]}
+          >
+            {artist.profilePhotoUrl ? (
+              <Image
+                source={{ uri: artist.profilePhotoUrl }}
+                style={{
+                  width: avatarSize,
+                  height: avatarSize,
+                  borderRadius: avatarSize / 2,
+                  backgroundColor: colors.muted,
+                }}
+                contentFit="cover"
+              />
+            ) : (
+              <View
+                style={[
+                  styles.photoFallback,
+                  {
+                    width: avatarSize,
+                    height: avatarSize,
+                    borderRadius: avatarSize / 2,
+                    backgroundColor: colors.muted,
+                  },
+                ]}
+              >
+                <Text variant="caption" style={styles.offerText} color={colors.text}>
+                  {initials(artist.displayName)}
+                </Text>
+              </View>
+            )}
+            {showLevel ? (
+              <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
+                <ArtistLevelBadge level={level} size={levelSize} />
               </View>
             ) : null}
+          </View>
+        ) : showLevel ? (
+          <View
+            style={[styles.levelOnPhoto, grid && styles.levelOnPhotoGrid]}
+            accessibilityLabel={`${levelLabel} level`}
+            pointerEvents="none"
+          >
+            <ArtistLevelBadge level={level} size={levelSize} />
           </View>
         ) : null}
       </View>
 
-      <View style={styles.body}>
+      <View
+        style={[
+          styles.body,
+          grid && styles.bodyGrid,
+          showAvatar && (grid ? styles.bodyWithAvatarGrid : styles.bodyWithAvatar),
+        ]}
+      >
         <View style={styles.nameRow}>
-          <Text variant="bodyStrong" numberOfLines={1} style={styles.name}>
+          <Text
+            variant="bodyStrong"
+            numberOfLines={1}
+            style={[styles.name, grid && styles.nameGrid]}
+          >
             {artist.displayName}
           </Text>
-          {showVerified ? <ArtistVerifiedBadge size={15} /> : null}
         </View>
         {placeLine || speciality ? (
           <Text variant="caption" muted numberOfLines={1}>
@@ -116,14 +189,14 @@ export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: 
         ) : null}
         <Text variant="caption" numberOfLines={1} style={styles.meta}>
           {hasRating ? `★ ${artist.averageRating!.toFixed(1)}` : "New"}
-          {visit ? (
+          {!grid && visit ? (
             <Text variant="caption" muted>
               {`  ·  ${visit}`}
             </Text>
           ) : null}
         </Text>
         {artist.startingPrice != null ? (
-          <Text variant="bodyStrong" style={styles.price}>
+          <Text variant="bodyStrong" style={[styles.price, grid && styles.priceGrid]}>
             from {formatRupees(artist.startingPrice)}
           </Text>
         ) : null}
@@ -133,6 +206,7 @@ export function ArtistCard({ artist, categoryLabel, onPress, compact = false }: 
 }
 
 const AVATAR = 40
+const GRID_AVATAR = 32
 
 const styles = StyleSheet.create({
   card: {
@@ -143,6 +217,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.08)",
     ...shadows.card,
   },
+  cardGrid: {
+    flex: 1,
+  },
   pressed: {
     opacity: 0.94,
   },
@@ -152,6 +229,9 @@ const styles = StyleSheet.create({
   },
   photoCompact: {
     height: 150,
+  },
+  photoGrid: {
+    height: 128,
   },
   photoImage: {
     width: "100%",
@@ -169,30 +249,33 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    maxWidth: "85%",
+  },
+  offerGrid: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    left: spacing.sm,
+    top: spacing.sm,
   },
   offerText: {
     fontFamily: "Geist_600SemiBold",
     color: colors.text,
   },
+  offerTextGrid: {
+    fontSize: 11,
+  },
   avatarRing: {
     position: "absolute",
     left: spacing.md,
-    bottom: -AVATAR / 2,
-    width: AVATAR + 4,
-    height: AVATAR + 4,
-    borderRadius: (AVATAR + 4) / 2,
     backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 2,
   },
-  avatar: {
-    width: AVATAR,
-    height: AVATAR,
-    borderRadius: AVATAR / 2,
-    backgroundColor: colors.muted,
+  avatarRingGrid: {
+    left: spacing.sm,
   },
-  level: {
+  levelOnAvatar: {
     position: "absolute",
     right: -3,
     bottom: -3,
@@ -200,11 +283,34 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: 1,
   },
+  levelOnPhoto: {
+    position: "absolute",
+    left: spacing.md,
+    bottom: spacing.md,
+    borderRadius: 99,
+    backgroundColor: colors.surface,
+    padding: 2,
+  },
+  levelOnPhotoGrid: {
+    left: spacing.sm,
+    bottom: spacing.sm,
+  },
   body: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.md,
     gap: 2,
+  },
+  bodyGrid: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  bodyWithAvatar: {
+    paddingTop: spacing.xl,
+  },
+  bodyWithAvatarGrid: {
+    paddingTop: spacing.lg + 4,
   },
   nameRow: {
     flexDirection: "row",
@@ -215,10 +321,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flexShrink: 1,
   },
+  nameGrid: {
+    fontSize: 14,
+  },
   meta: {
     marginTop: 4,
   },
   price: {
     marginTop: 4,
+  },
+  priceGrid: {
+    fontSize: 13,
+    marginTop: 2,
   },
 })

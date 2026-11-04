@@ -17,6 +17,7 @@ import {
   parseServiceGenderAudience,
 } from "@/lib/gender-audience"
 import { parsePricingUnit } from "@/lib/pricing-unit"
+import { staffPhotoUrl } from "@/lib/staff-photo"
 
 const CACHE_TTL_MS = 60_000
 const CATALOG_STORAGE_KEY = "glammzo_salon_catalog_v1"
@@ -182,7 +183,6 @@ function mapPackage(raw: unknown, fallbackImage = ""): SalonPackage | null {
     items,
     badge: typeof p.badge === "string" ? p.badge : p.badge === null ? null : undefined,
     isFeatured: typeof p.isFeatured === "boolean" ? p.isFeatured : Boolean(p.is_featured),
-    prepaidEnabled: p.prepaidEnabled === true || p.prepaid_enabled === true,
     showComparePrice:
       typeof p.showComparePrice === "boolean"
         ? p.showComparePrice
@@ -306,7 +306,7 @@ function mapTeam(raw: unknown): Salon["team"] {
       const name = asString(m.name) || asString(m.full_name) || asString(m.fullName)
       if (!id || !name) return null
       const bio = asString(m.bio)
-      const imageUrl = asString(m.imageUrl) || asString(m.image_url)
+      const imageUrl = staffPhotoUrl(asString(m.imageUrl) || asString(m.image_url))
       return {
         id,
         name,

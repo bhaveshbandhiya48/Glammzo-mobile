@@ -31,7 +31,6 @@ type HubRow = {
     | "/profile/support"
     | "/profile/refer"
     | "/profile/gift-cards"
-    | "/profile/packages"
   url?: string
   action?: () => void
   hint?: string
@@ -51,7 +50,6 @@ const SECTIONS: { title: string; rows: HubRow[] }[] = [
       { label: "Wallet", href: "/profile/wallet", icon: "wallet-outline" },
       { label: "Wallet activity", href: "/profile/activity", icon: "receipt-outline" },
       { label: "Loyalty rewards", href: "/profile/loyalty", icon: "ribbon-outline" },
-      { label: "My packages", href: "/profile/packages", icon: "cube-outline" },
       { label: "Gift cards", href: "/profile/gift-cards", icon: "card-outline" },
       { label: "Refer a friend · get ₹199", href: "/profile/refer", icon: "gift-outline" },
     ],
@@ -78,12 +76,7 @@ const SECTIONS: { title: string; rows: HubRow[] }[] = [
   },
 ]
 
-const APP_VERSION = [
-  Constants.expoConfig?.version,
-  Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode,
-]
-  .filter(Boolean)
-  .join(" · build ")
+const APP_VERSION = Constants.expoConfig?.version?.trim() || ""
 
 export default function ProfileScreen() {
   const tabBarSpace = useFloatingTabBarSpace()
@@ -97,7 +90,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true
-      setReady(false)
+      // Keep the scrolled hub mounted on return — only refresh data in place.
       ;(async () => {
         const [value, displayName] = await Promise.all([
           getAccessToken(),
@@ -105,6 +98,7 @@ export default function ProfileScreen() {
         ])
         if (!active) return
         if (!value) {
+          setReady(false)
           router.replace({
             pathname: "/login",
             params: { next: "/(tabs)/profile" },
@@ -116,6 +110,7 @@ export default function ProfileScreen() {
         } catch (error) {
           if (!active) return
           if (error instanceof ApiError && error.status === 401) {
+            setReady(false)
             router.replace({
               pathname: "/login",
               params: { next: "/(tabs)/profile" },
@@ -159,7 +154,11 @@ export default function ProfileScreen() {
   }
 
   return (
-    <Screen scroll edges={["top", "left", "right"]} contentStyle={[styles.screen, { paddingBottom: tabBarSpace }]}>
+    <Screen
+      scroll
+      edges={["top", "left", "right"]}
+      contentStyle={[styles.screen, { paddingBottom: tabBarSpace }]}
+    >
       <View style={styles.headerCard}>
         <View style={styles.avatar}>
           <Text variant="heading" color={colors.primary}>

@@ -34,8 +34,6 @@ export type SalonPackage = {
   badge?: string | null
   isFeatured?: boolean
   showComparePrice?: boolean
-  /** Can be prepaid on Glammzo and used over 12 months. */
-  prepaidEnabled?: boolean
   /** Unisex salon catalogs: men, women, or unisex (both). Null/undefined = infer from included services. */
   genderAudience?: "men" | "women" | "unisex" | null
 }
@@ -131,6 +129,7 @@ export type BookingStatus =
   | "cancelled"
   | "declined"
   | "expired"
+  | "payment_failed"
 
 /** Customer's verified review for a completed visit (when already submitted). */
 export type BookingReview = {
@@ -156,6 +155,8 @@ export type Booking = {
   notes?: string
   status: BookingStatus
   createdAt: string
+  /** When it last changed: booked, updated or cancelled. */
+  updatedAt?: string
   /** Hours before start the customer must cancel; salon policy or platform default. */
   startsAt?: string
   cancelNoticeHours?: number
@@ -164,11 +165,17 @@ export type Booking = {
   /** Solo artist advance amount, and whether it has been paid. */
   advanceAmount?: number
   advancePaid?: boolean
+  /** Released because the advance wasn't paid in time (the server still says "cancelled"). */
+  paymentFailed?: boolean
   /** Cancelled solo artist booking with a paid advance: amount refunded (rupees) and Razorpay state. */
   refundAmount?: number
   refundStatus?: "none" | "pending" | "processed" | "failed"
   /** Set while a solo artist booking waits for its advance: when the held slot is released. */
   paymentDeadline?: string
+  /** Pro salon booking waiting for its advance: the signed token for the pay screen. */
+  advanceToken?: string
+  /** Solo artist moved this booking to a new time: when they last did. */
+  rescheduledAt?: string
   /** Paid advance on an active artist booking: refund if cancelled now, and when it next drops. */
   cancelRefund?: {
     advance: number

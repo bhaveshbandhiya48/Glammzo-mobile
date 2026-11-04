@@ -1,11 +1,12 @@
-import { useFocusEffect, useRouter } from "expo-router"
+import { useFocusEffect, useRouter, type Href } from "expo-router"
 import { useCallback, useState } from "react"
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native"
 
+import { formatHoldLeft, useHoldCountdown } from "@/components/payments/useHoldCountdown"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Booking } from "@/data/types"
-import { fetchBookings } from "@/lib/bookings-api"
+import { fetchBookings, withPaymentStatus } from "@/lib/bookings-api"
 import { formatBookingWhen, getBookingStatusLabel, serviceSummary } from "@/lib/booking-display"
 import { getAccessToken } from "@/lib/session"
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -26,9 +27,23 @@ function pickNext(bookings: Booking[], now = Date.now()): Booking | null {
  * The one dark "what's next" card on Home (Partner app pattern). Renders
  * nothing when signed out or when there is no upcoming visit.
  */
-export function NextBookingCard({ style }: { style?: StyleProp<ViewStyle> }) {
+export function NextBookingCard({
+  style,
+  refreshKey = 0,
+}: {
+  style?: StyleProp<ViewStyle>
+  /** Bump to force a refresh (e.g. Home pull-to-refresh). */
+  refreshKey?: number
+}) {
   const router = useRouter()
   const [next, setNext] = useState<Booking | null>(null)
+  const [bookings, setBookings] = useState<Booking[]>([])
+  // Hold just ran out: drop this booking and show whatever visit comes next.
+  const left = useHoldCountdown(next?.paymentDeadline, () => {
+    const updated = bookings.map((b) => withPaymentStatus(b))
+    setBookings(updated)
+    setNext(pickNext(updated))
+  })
 
   useFocusEffect(
     useCallback(() => {
@@ -39,8 +54,11 @@ export function NextBookingCard({ style }: { style?: StyleProp<ViewStyle> }) {
           return
         }
         try {
-          const bookings = await fetchBookings()
-          if (!cancelled) setNext(pickNext(bookings))
+          const loaded = await fetchBookings()
+          if (!cancelled) {
+            setBookings(loaded)
+            setNext(pickNext(loaded))
+          }
         } catch {
           // Home must never fail because of this card.
         }
@@ -48,28 +66,36 @@ export function NextBookingCard({ style }: { style?: StyleProp<ViewStyle> }) {
       return () => {
         cancelled = true
       }
-    }, []),
+    }, [refreshKey]),
   )
 
   if (!next) return null
 
-  const awaitingPayment = Boolean(next.paymentDeadline)
-  const label = awaitingPayment ? "Pay the advance to confirm" : getBookingStatusLabel(next.status)
+  const payToken = next.paymentDeadline ? next.artistPublicToken ?? next.advanceToken : undefined
+  const label = payToken ? "Payment pending" : getBookingStatusLabel(next.status)
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Your next visit: ${next.salonName}, ${formatBookingWhen(next)}. ${label}. Open bookings.`}
+      accessibilityLabel={
+        payToken && left != null
+          ? `Complete your payment for ${next.salonName}, ${formatBookingWhen(next)}. Slot held for ${formatHoldLeft(left)}.`
+          : `Your next visit: ${next.salonName}, ${formatBookingWhen(next)}. ${label}. Open bookings.`
+      }
       style={({ pressed }) => [styles.card, style, pressed && styles.pressed]}
-      onPress={() => router.push("/(tabs)/bookings")}
+      onPress={() =>
+        payToken
+          ? router.push({ pathname: "/pay/advance/[token]", params: { token: payToken } } as Href)
+          : router.push("/(tabs)/bookings")
+      }
     >
       <View style={styles.top}>
         <Text variant="label" color={colors.accent}>
-          Your next visit
+          {payToken ? "Complete your payment" : "Your next visit"}
         </Text>
         <View style={styles.pill}>
           <Text variant="caption" color={colors.primaryFg}>
-            {label}
+            {payToken && left != null ? `Held for ${formatHoldLeft(left)}` : label}
           </Text>
         </View>
       </View>

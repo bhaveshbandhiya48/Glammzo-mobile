@@ -24,6 +24,8 @@ export function getBookingStatusLabel(status: BookingStatus): string {
       return "Expired"
     case "cancelled":
       return "Cancelled"
+    case "payment_failed":
+      return "Payment failed"
     case "completed":
       return "Completed"
     case "upcoming":
@@ -51,6 +53,7 @@ export function statusBadgeColors(status: BookingStatus): {
       return tint(statusTint.successFg, statusTint.successBg)
     case "cancelled":
     case "declined":
+    case "payment_failed":
       return tint(statusTint.dangerFg, statusTint.dangerBg)
     default:
       return tint(colors.textMuted, colors.muted)

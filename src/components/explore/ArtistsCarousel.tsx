@@ -1,5 +1,5 @@
 import { useRouter, type Href } from "expo-router"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Pressable,
   ScrollView,
@@ -26,9 +26,11 @@ type Props = {
   longitude?: number | null
   /** Search text from Home: show artists offering that service instead of the nearby list. */
   query?: string
+  /** Bump to force a network refresh (e.g. Home pull-to-refresh). */
+  refreshKey?: number
 }
 
-export function ArtistsCarousel({ latitude, longitude, query }: Props) {
+export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0 }: Props) {
   const router = useRouter()
   const { width: windowWidth } = useWindowDimensions()
   const lat = latitude ?? undefined
@@ -40,12 +42,13 @@ export function ArtistsCarousel({ latitude, longitude, query }: Props) {
   const [labels, setLabels] = useState<Record<string, string>>(cached?.labels ?? {})
 
   const q = query?.trim() ?? ""
+  const force = refreshKey > 0
 
   useEffect(() => {
     if (!q) return
     let cancelled = false
     const controller = new AbortController()
-    setArtists(null)
+    if (force) setArtists(null)
     void fetchArtists({ q, latitude: lat, longitude: lng, sort: "nearest", limit: 10 }, controller.signal)
       .then((data) => {
         if (!cancelled) setArtists(data.artists ?? [])
@@ -57,18 +60,25 @@ export function ArtistsCarousel({ latitude, longitude, query }: Props) {
       cancelled = true
       controller.abort()
     }
-  }, [q, lat, lng])
+  }, [q, lat, lng, refreshKey, force])
+
+  const lastCoords = useRef(`${lat},${lng}`)
 
   useEffect(() => {
     if (q) return
     let cancelled = false
     const snap = getHomeArtistsSnapshot(lat, lng)
-    if (snap) {
+    const moved = lastCoords.current !== `${lat},${lng}`
+    lastCoords.current = `${lat},${lng}`
+    if (snap && !force) {
       setArtists(snap.artists)
       setLabels(snap.labels)
+    } else if (moved) {
+      // Don't keep showing the old place's artists while the new ones load.
+      setArtists(null)
     }
 
-    void fetchHomeArtists({ latitude: lat, longitude: lng }).then((entry) => {
+    void fetchHomeArtists({ latitude: lat, longitude: lng, force }).then((entry) => {
       if (cancelled) return
       setArtists(entry.artists)
       setLabels(entry.labels)
@@ -77,7 +87,7 @@ export function ArtistsCarousel({ latitude, longitude, query }: Props) {
     return () => {
       cancelled = true
     }
-  }, [lat, lng, q])
+  }, [lat, lng, q, refreshKey, force])
 
   if (!artists || artists.length === 0) return null
 

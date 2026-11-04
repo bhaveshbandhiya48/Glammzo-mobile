@@ -88,7 +88,8 @@ export default function ReferScreen() {
       <Screen scroll>
         <Text variant="heading">Refer a friend</Text>
         <Text muted style={{ marginTop: spacing.sm }}>
-          {error ?? "Referrals are coming soon. Check back in a little while."}
+          {error ??
+            "Couldn't load your referral code right now. Please try again in a moment."}
         </Text>
       </Screen>
     )

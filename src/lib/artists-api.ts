@@ -79,6 +79,8 @@ export type ArtistQuery = {
   q?: string
   latitude?: number
   longitude?: number
+  /** Only artists within this distance of the location. */
+  radiusKm?: number
   sort?: ArtistSort
   offset?: number
   limit?: number
@@ -252,6 +254,7 @@ export async function fetchArtists(query: ArtistQuery, signal?: AbortSignal) {
   if (query.latitude !== undefined && query.longitude !== undefined) {
     params.set("lat", String(query.latitude))
     params.set("lng", String(query.longitude))
+    if (query.radiusKm !== undefined) params.set("radiusKm", String(query.radiusKm))
   }
   if (query.sort) params.set("sort", query.sort)
   if (query.offset) params.set("offset", String(query.offset))

@@ -1,4 +1,5 @@
 import Constants from "expo-constants"
+import { Platform } from "react-native"
 
 import { assertStagingApiUrl } from "@/lib/env"
 
@@ -55,9 +56,32 @@ function isPrivateLanHost(hostname: string): boolean {
   )
 }
 
+/** True when Metro is bound to the machine loopback (iOS Simulator / local web). */
+function metroIsLoopback(): boolean {
+  const candidates = [
+    Constants.expoConfig?.hostUri,
+    (Constants as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig
+      ?.debuggerHost,
+    (
+      Constants as {
+        manifest2?: { extra?: { expoClient?: { hostUri?: string } } }
+      }
+    ).manifest2?.extra?.expoClient?.hostUri,
+  ]
+  for (const raw of candidates) {
+    if (!raw || typeof raw !== "string") continue
+    const host = raw.split(":")[0]?.trim().toLowerCase()
+    if (host === "localhost" || host === "127.0.0.1") return true
+  }
+  return false
+}
+
 /**
- * Prefer Expo’s live LAN host when .env points at a (possibly stale) private IP.
- * Leave localhost / 10.0.2.2 / public hosts unchanged.
+ * Prefer Expo’s live host when .env points at a (possibly stale) private IP.
+ * - Physical device: rewrite to Metro’s LAN IP
+ * - iOS Simulator: always localhost (LAN IP is flaky from the sim)
+ * - Android emulator: always 10.0.2.2 (special host-loopback alias)
+ * Leave explicit 10.0.2.2 / public hosts unchanged.
  */
 function alignDevLanUrl(url: string): string {
   if (typeof __DEV__ === "undefined" || !__DEV__) return url
@@ -69,16 +93,37 @@ function alignDevLanUrl(url: string): string {
     return url
   }
 
+  const previous = url
+  const isEmulatorOrSim = Constants.isDevice === false
+
+  // Simulators/emulators must not use the Mac's LAN IP.
+  if (isEmulatorOrSim && isPrivateLanHost(parsed.hostname)) {
+    parsed.hostname = Platform.OS === "android" ? "10.0.2.2" : "localhost"
+    const next = parsed.toString().replace(/\/$/, "")
+    console.info(
+      `[Glammzo] Aligned API for ${Platform.OS} simulator/emulator: ${next} (was ${previous})`,
+    )
+    return next
+  }
+
   if (!isPrivateLanHost(parsed.hostname)) return url
 
   const live = expoDevHost()
-  if (!live || live === parsed.hostname) return url
+  if (live && live !== parsed.hostname) {
+    parsed.hostname = live
+    const next = parsed.toString().replace(/\/$/, "")
+    console.info(`[Glammzo] Aligned local URL to Metro host: ${next} (was ${previous})`)
+    return next
+  }
 
-  const previous = url
-  parsed.hostname = live
-  const next = parsed.toString().replace(/\/$/, "")
-  console.info(`[Glammzo] Aligned local URL to Metro host: ${next} (was ${previous})`)
-  return next
+  if (metroIsLoopback() && parsed.hostname !== "localhost") {
+    parsed.hostname = "localhost"
+    const next = parsed.toString().replace(/\/$/, "")
+    console.info(`[Glammzo] Aligned local URL to localhost for simulator: ${next} (was ${previous})`)
+    return next
+  }
+
+  return url
 }
 
 const rawApiUrl =

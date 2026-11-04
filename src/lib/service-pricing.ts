@@ -19,6 +19,22 @@ export function defaultPriceOptionId(
   return service!.priceOptions![0]!.id
 }
 
+/** Fill missing multi-option picks (used for package-included services at checkout). */
+export function withDefaultPriceOptionIds(
+  services: SalonService[],
+  serviceIds: string[],
+  existing?: Record<string, string> | null,
+) {
+  const next: Record<string, string> = { ...(existing ?? {}) }
+  const byId = new Map(services.map((service) => [service.id, service]))
+  for (const serviceId of serviceIds) {
+    if (next[serviceId]) continue
+    const fallback = defaultPriceOptionId(byId.get(serviceId))
+    if (fallback) next[serviceId] = fallback
+  }
+  return next
+}
+
 export function resolveServiceOptionPrice(
   service: Pick<SalonService, "price" | "priceOptions">,
   optionId?: string | null,

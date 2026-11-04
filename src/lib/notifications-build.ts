@@ -7,6 +7,7 @@ export type AppNotificationType =
   | "booking_confirmed"
   | "booking_pending"
   | "booking_reminder"
+  | "booking_rescheduled"
   | "booking_completed"
   | "booking_cancelled"
   | "booking_declined"
@@ -90,7 +91,7 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
     switch (booking.status) {
       case "pending": {
         // An artist booking is only pending while its advance is unpaid; nobody else needs to confirm it.
-        const payToken = booking.paymentDeadline ? booking.artistPublicToken : undefined
+        const payToken = booking.paymentDeadline ? booking.artistPublicToken ?? booking.advanceToken : undefined
         items.push(
           payToken
             ? {
@@ -124,6 +125,19 @@ function fromBookings(bookings: Booking[], now = Date.now()): AppNotification[] 
             booking.createdAt,
           ),
         )
+        if (booking.rescheduledAt) {
+          items.push({
+            ...bookingNotification(
+              booking,
+              "booking_rescheduled",
+              "Your booking time changed",
+              `${booking.salonName} moved ${services} to ${when} at ${booking.time}.`,
+              booking.rescheduledAt,
+            ),
+            // Each move shows as new, even if an earlier one was read.
+            id: `booking:${booking.id}:booking_rescheduled:${booking.rescheduledAt}`,
+          })
+        }
         if (start) {
           const msUntil = start.getTime() - now
           // Reminder window: upcoming within 24h, still in the future

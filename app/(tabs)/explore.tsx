@@ -3,6 +3,7 @@ import {
   Keyboard,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -160,7 +161,10 @@ export default function ExploreScreen() {
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [launchSettled, setLaunchSettled] = useState(false)
   const [offerBanners, setOfferBanners] = useState<PromoBannerItem[]>([])
+  const [refreshing, setRefreshing] = useState(false)
+  const [homeRefreshKey, setHomeRefreshKey] = useState(0)
   const catalogRequest = useRef(0)
+  const refreshLock = useRef(false)
   const wasOffline = useRef(false)
 
   const locationReady = savedLocation != null && launchSettled
@@ -308,31 +312,54 @@ export default function ExploreScreen() {
     wasOffline.current = isOffline
   }, [isOffline, loadCatalog])
 
-  useEffect(() => {
-    let active = true
-    void fetchGlammzoOfferBanners({
+  const loadOfferBanners = useCallback(async () => {
+    const offers = await fetchGlammzoOfferBanners({
       city: savedLocation?.city,
       area: savedLocation?.area,
-    }).then((offers) => {
-      if (!active) return
-      const next: PromoBannerItem[] = offers.map((offer) => ({
-        id: offer.id,
-        eyebrow: offer.eyebrow || "Glammzo offer",
-        title: offer.title,
-        subtitle:
-          offer.subtitle ||
-          (offer.promoCode ? `Use code ${offer.promoCode}` : offer.description),
-        tone: "coral",
-        imageUrl: offer.mobileBannerUrl,
-        promoCode: offer.promoCode,
-        ctaLabel: offer.ctaLabel || "Book now",
-      }))
-      setOfferBanners(next)
+    })
+    const next: PromoBannerItem[] = offers.map((offer) => ({
+      id: offer.id,
+      eyebrow: offer.eyebrow || "Glammzo offer",
+      title: offer.title,
+      subtitle:
+        offer.subtitle ||
+        (offer.promoCode ? `Use code ${offer.promoCode}` : offer.description),
+      tone: "coral",
+      imageUrl: offer.mobileBannerUrl,
+      promoCode: offer.promoCode,
+      ctaLabel: offer.ctaLabel || "Book now",
+    }))
+    setOfferBanners(next)
+  }, [savedLocation?.city, savedLocation?.area])
+
+  useEffect(() => {
+    let active = true
+    void loadOfferBanners().catch(() => {
+      if (active) setOfferBanners([])
     })
     return () => {
       active = false
     }
-  }, [savedLocation?.city, savedLocation?.area])
+  }, [loadOfferBanners])
+
+  const onHomeRefresh = useCallback(async () => {
+    if (refreshLock.current) return
+    refreshLock.current = true
+    setRefreshing(true)
+    // Bump first so artists + next booking refetch in parallel with the catalog.
+    setHomeRefreshKey((key) => key + 1)
+    try {
+      const [, , name] = await Promise.all([
+        loadCatalog(true),
+        loadOfferBanners().catch(() => {}),
+        getSignedInDisplayName().catch(() => null),
+      ])
+      if (name) setUsername(name)
+    } finally {
+      setRefreshing(false)
+      refreshLock.current = false
+    }
+  }, [loadCatalog, loadOfferBanners])
 
   const locationResult = useMemo(
     () => {
@@ -691,6 +718,10 @@ export default function ExploreScreen() {
     setPlacesError(null)
     setLocationOpen(false)
     placesSession.current = createPlacesSessionToken()
+    // New place: reload now rather than on the next visit to this screen.
+    setMapArtistsRaw([])
+    setHomeRefreshKey((key) => key + 1)
+    void loadCatalog(true)
   }
 
   async function browseCity() {
@@ -747,6 +778,25 @@ export default function ExploreScreen() {
       )
     } finally {
       setPlacesLoading(false)
+    }
+  }
+
+  /** Map's locate button: the map has already moved, so a failed place lookup just keeps the old label. */
+  async function applyDeviceCoords(coords: { latitude: number; longitude: number }) {
+    try {
+      const place = await resolvePlaceFromCoordinates(coords)
+      await commitLocation({
+        label: place.label,
+        placeId: place.placeId || undefined,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        city: place.city,
+        area: place.area,
+        state: place.state,
+        formattedAddress: place.formattedAddress,
+      })
+    } catch {
+      // Keep the current label; the map is already showing the phone's position.
     }
   }
 
@@ -817,9 +867,24 @@ export default function ExploreScreen() {
       <View style={styles.content}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          bounces
+          alwaysBounceVertical
+          overScrollMode="always"
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[styles.scroll, { paddingBottom: tabBarSpace + (showCart ? 88 : spacing.lg) }]}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onHomeRefresh()}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+              progressBackgroundColor={colors.surface}
+            />
+          }
         >
-          {homeReady && !searchQuery.trim() ? <NextBookingCard style={styles.nextVisit} /> : null}
+          {homeReady && !searchQuery.trim() ? (
+            <NextBookingCard style={styles.nextVisit} refreshKey={homeRefreshKey} />
+          ) : null}
 
           {homeReady && !searchQuery.trim() ? (
             <PromoBannerCarousel
@@ -853,6 +918,7 @@ export default function ExploreScreen() {
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              directionalLockEnabled
               contentContainerStyle={styles.chipRow}
             >
               {filters.category !== "all" ? (
@@ -1078,6 +1144,7 @@ export default function ExploreScreen() {
                 <ArtistsCarousel
                   latitude={savedLocation?.latitude}
                   longitude={savedLocation?.longitude}
+                  refreshKey={homeRefreshKey}
                 />
               ) : null}
             </>
@@ -1088,6 +1155,7 @@ export default function ExploreScreen() {
               query={searchQuery}
               latitude={savedLocation?.latitude}
               longitude={savedLocation?.longitude}
+              refreshKey={homeRefreshKey}
             />
           ) : null}
         </ScrollView>
@@ -1127,6 +1195,7 @@ export default function ExploreScreen() {
         userLongitude={savedLocation?.longitude}
         onClose={() => setMapOpen(false)}
         onChangeLocation={openLocationSheet}
+        onUseCoords={(coords) => void applyDeviceCoords(coords)}
         onSelectSalon={(id) => {
           router.push({ pathname: "/salon/[id]", params: { id } })
         }}

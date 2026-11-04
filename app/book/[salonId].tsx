@@ -1,5 +1,5 @@
 import { Image } from "expo-image"
-import { useLocalSearchParams, useRouter } from "expo-router"
+import { useLocalSearchParams, useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
 import {
   Keyboard,
@@ -31,7 +31,10 @@ import type { Salon } from "@/data/types"
 import { ApiError } from "@/lib/api"
 import { fetchMe } from "@/lib/auth-api"
 import {
+  computeSalonAdvance,
   fetchAvailability,
+  salonAdvancePolicyLines,
+  type SalonAdvanceConfig,
   type AvailabilityDay,
   type AvailabilitySlot,
   type AvailabilityStaff,
@@ -56,6 +59,7 @@ import {
   formatRupees,
   serviceCartCaption,
   serviceLineAmount,
+  withDefaultPriceOptionIds,
 } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
 import {
@@ -64,7 +68,6 @@ import {
   patchConsumerProfileCache,
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
-import { fetchMyPackages, sessionsLeftAt, type MyPackage } from "@/lib/packages-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 function formatDayChip(dateKey: string) {
@@ -103,6 +106,7 @@ export default function BookingScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [dateOverride, setDateOverride] = useState<string | null>(null)
   const [availabilityDays, setAvailabilityDays] = useState<AvailabilityDay[]>([])
+  const [advanceConfig, setAdvanceConfig] = useState<SalonAdvanceConfig | null>(null)
   const [slots, setSlots] = useState<AvailabilitySlot[]>([])
   const [bookableStaff, setBookableStaff] = useState<AvailabilityStaff[]>([])
   const [slotValue, setSlotValue] = useState<string | null>(null)
@@ -114,8 +118,6 @@ export default function BookingScreen() {
   const [staffId, setStaffId] = useState<string | null>(staffParam || null)
   const [useWallet, setUseWallet] = useState(false)
   const [useLoyalty, setUseLoyalty] = useState(false)
-  const [myPackages, setMyPackages] = useState<MyPackage[]>([])
-  const [usePackage, setUsePackage] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
@@ -158,9 +160,6 @@ export default function BookingScreen() {
         loadProfilePreferApi(),
       ])
       if (!active) return
-      void fetchMyPackages()
-        .then((next) => active && setMyPackages(next))
-        .catch(() => {})
 
       if (loyaltyResult.status === "fulfilled") {
         setLoyalty(loyaltyResult.value)
@@ -286,6 +285,7 @@ export default function BookingScreen() {
       .then((result) => {
         if (!active) return
         setAvailabilityDays(result.days)
+        setAdvanceConfig(result.advance)
         setSelectedDate(result.date)
         setSlots(result.slots)
 
@@ -358,29 +358,10 @@ export default function BookingScreen() {
       )
     : 0
 
-  // Prepaid package sessions cover whole service lines (the server checks again when booking).
-  const packageLeft = salon ? sessionsLeftAt(myPackages, salon.id) : new Map<string, number>()
-  const packageCovered = selectedPackage
-    ? []
-    : selectedServices.filter(
-        (service) => (packageLeft.get(service.id) ?? 0) >= Math.max(1, salonCart?.quantities[service.id] ?? 1),
-      )
-  const packageActive = usePackage && packageCovered.length > 0
-  const packageDiscount = packageActive
-    ? packageCovered.reduce(
-        (sum, service) =>
-          sum + serviceLineAmount(service, salonCart?.quantities, salonCart?.priceOptionIds[service.id] ?? null),
-        0,
-      )
-    : 0
-
   const loyaltyAvailable = canApplyLoyalty(loyalty)
-  // Promo codes don't stack with package sessions.
-  const afterPromo = packageActive
-    ? Math.max(0, subtotal - packageDiscount)
-    : appliedDiscount?.finalTotal ?? subtotal
-  const promoDiscount = packageActive ? 0 : appliedDiscount?.discountAmount ?? 0
-  const appliedPromoCode = packageActive ? null : appliedDiscount?.code ?? cashbackClaim?.code ?? null
+  const afterPromo = appliedDiscount?.finalTotal ?? subtotal
+  const promoDiscount = appliedDiscount?.discountAmount ?? 0
+  const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
   const loyaltyCredit =
     useLoyalty && loyaltyAvailable && !selectedPackage
       ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(afterPromo, 0))
@@ -401,6 +382,8 @@ export default function BookingScreen() {
     ? Math.min(Math.max(0, Math.round(walletBalance)), amountBeforeWallet)
     : 0
   const total = Math.max(amountBeforeWallet - walletCredit, 0)
+  // Pro salons asking for an advance: part of the bill is paid in the app to confirm.
+  const advanceDue = computeSalonAdvance(advanceConfig, total)
 
   async function applyPromo() {
     const code = promoInput.trim().toUpperCase()
@@ -416,13 +399,20 @@ export default function BookingScreen() {
     setPromoApplying(true)
     setPromoError(null)
     try {
+      const servicePriceOptionIds = selectedPackage
+        ? withDefaultPriceOptionIds(
+            salon.services,
+            serviceIdsForAvailability,
+            salonCart?.priceOptionIds,
+          )
+        : salonCart?.priceOptionIds
       const result = await validatePromoCode({
         salonId: salon.id,
         code,
         serviceIds: serviceIdsForAvailability,
         packageId: selectedPackage?.id,
         serviceQuantities: salonCart?.quantities,
-        servicePriceOptionIds: salonCart?.priceOptionIds,
+        servicePriceOptionIds,
       })
 
       if (result.kind === "discount") {
@@ -463,13 +453,20 @@ export default function BookingScreen() {
     }
 
     let active = true
+    const servicePriceOptionIds = selectedPackage
+      ? withDefaultPriceOptionIds(
+          salon.services,
+          serviceIdsForAvailability,
+          salonCart?.priceOptionIds,
+        )
+      : salonCart?.priceOptionIds
     void validatePromoCode({
       salonId: salon.id,
       code,
       serviceIds: serviceIdsForAvailability,
       packageId: selectedPackage?.id,
       serviceQuantities: salonCart?.quantities,
-      servicePriceOptionIds: salonCart?.priceOptionIds,
+      servicePriceOptionIds,
     })
       .then((result) => {
         if (!active) return
@@ -559,9 +556,6 @@ export default function BookingScreen() {
 
   const confirmPriceLines = [
     { label: "Subtotal", value: `${formatRupees(subtotal)}` },
-    ...(packageActive
-      ? [{ label: "Prepaid package", value: `−${formatRupees(packageDiscount)}`, success: true }]
-      : []),
     ...(promoDiscount > 0 && appliedDiscount
       ? [
           {
@@ -614,11 +608,21 @@ export default function BookingScreen() {
     setSubmitting(true)
     setSubmitError(null)
     try {
+      const bookingServiceIds = selectedPackage
+        ? selectedPackage.items.map((item) => item.serviceId)
+        : selectedServices.map((service) => service.id)
+      // Package cart never collects per-item option chips; send catalogue defaults so
+      // the API does not reject with "choose a price option" (e.g. hair type).
+      const servicePriceOptionIds = selectedPackage
+        ? withDefaultPriceOptionIds(
+            salon.services,
+            bookingServiceIds,
+            salonCart?.priceOptionIds,
+          )
+        : salonCart?.priceOptionIds
       const result = await createBooking({
         salonId: salon.id,
-        serviceIds: selectedPackage
-          ? selectedPackage.items.map((item) => item.serviceId)
-          : selectedServices.map((service) => service.id),
+        serviceIds: bookingServiceIds,
         date: selectedDate,
         time: slotValue,
         notes: notes.trim() || undefined,
@@ -630,15 +634,33 @@ export default function BookingScreen() {
         promoCode: appliedPromoCode || undefined,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
-        usePackageSessions: packageActive,
         marketingOptIn,
         serviceQuantities: salonCart?.quantities,
-        servicePriceOptionIds: salonCart?.priceOptionIds,
+        servicePriceOptionIds,
       })
       // Keep profile in sync when the guest adds/updates email at checkout.
       void syncProfileEmailFromBooking(email)
       cart.clearSalon(salon.id)
       setConfirmSheetOpen(false)
+      const confirmation = {
+        salonId: salon.id,
+        bookingId: result.booking.id,
+        total: String(result.booking.price ?? total),
+        slot: result.booking.time || selectedSlotLabel,
+        name: name.trim(),
+        date: result.booking.date || selectedDate,
+      }
+      // The salon asks for an advance: pay it in the app, then land on the confirmation.
+      if (result.booking.advanceToken) {
+        router.replace({
+          pathname: "/pay/advance/[token]",
+          params: {
+            token: result.booking.advanceToken,
+            next: JSON.stringify({ ...confirmation, payToken: result.booking.advanceToken }),
+          },
+        } as Href)
+        return
+      }
       router.replace({
         pathname: "/book/confirmation",
         params: {
@@ -936,8 +958,7 @@ export default function BookingScreen() {
                     </Pressable>
                   ) : null}
                   {bookableStaff.map((member) => {
-                    const photo =
-                      member.imageUrl || salon.gallery[0] || salon.imageUrl
+                    const photo = member.imageUrl
                     return (
                       <Pressable
                         accessibilityRole="button"
@@ -949,12 +970,22 @@ export default function BookingScreen() {
                         onPress={() => setStaffId(member.id)}
                       >
                         <View style={styles.staffChip}>
-                          <Image
-                            source={{ uri: photo }}
-                            style={styles.staffPhoto}
-                            contentFit="cover"
-                            transition={200}
-                          />
+                          {photo ? (
+                            <Image
+                              source={{ uri: photo }}
+                              style={styles.staffPhoto}
+                              contentFit="cover"
+                              transition={200}
+                            />
+                          ) : (
+                            <View style={styles.staffAnyAvatar}>
+                              <Icon
+                                name="person-outline"
+                                size={16}
+                                color={staffId === member.id ? colors.primary : colors.textMuted}
+                              />
+                            </View>
+                          )}
                           <View style={{ minWidth: 0, maxWidth: 120 }}>
                             <Text variant="caption" numberOfLines={1}>
                               {member.name}
@@ -1150,30 +1181,6 @@ export default function BookingScreen() {
             </View>
           </Pressable>
 
-          {packageCovered.length > 0 ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ checked: packageActive }}
-              style={[styles.rewardRow, packageActive && styles.rewardRowActive]}
-              onPress={() => setUsePackage((value) => !value)}
-            >
-              <View style={styles.rewardIcon}>
-                <Icon name="cube-outline" size={20} color={colors.primary} />
-              </View>
-              <View style={styles.rewardCopy}>
-                <Text variant="bodyStrong">Prepaid package</Text>
-                <Text variant="caption" muted>
-                  {`Covers ${packageCovered.map((service) => service.name).join(", ")} · tap to ${packageActive ? "pay instead" : "use"}`}
-                </Text>
-              </View>
-              <View style={[styles.applyChip, packageActive && styles.applyChipOn]}>
-                <Text variant="caption" color={packageActive ? colors.primaryFg : colors.primary}>
-                  {packageActive ? "Applied" : "Use"}
-                </Text>
-              </View>
-            </Pressable>
-          ) : null}
-
           <Pressable
             accessibilityRole="button"
             style={[
@@ -1235,12 +1242,6 @@ export default function BookingScreen() {
             <Text muted>Subtotal</Text>
             <Text>{formatRupees(subtotal)}</Text>
           </View>
-          {packageActive ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Prepaid package</Text>
-              <Text color={colors.success}>−{formatRupees(packageDiscount)}</Text>
-            </View>
-          ) : null}
           {promoDiscount > 0 && appliedDiscount ? (
             <View style={styles.summaryRow}>
               <Text muted>Promo ({appliedDiscount.code})</Text>
@@ -1277,10 +1278,32 @@ export default function BookingScreen() {
               <Text color={colors.success}>−₹{walletCredit}</Text>
             </View>
           ) : null}
-          <View style={[styles.summaryRow, styles.summaryTotal]}>
-            <Text variant="bodyStrong">Pay at salon</Text>
-            <Text variant="heading">{formatRupees(total)}</Text>
-          </View>
+          {advanceDue > 0 && advanceConfig ? (
+            <>
+              <View style={[styles.summaryRow, styles.summaryTotal]}>
+                <Text variant="bodyStrong">Pay now to confirm</Text>
+                <Text variant="heading">{formatRupees(advanceDue)}</Text>
+              </View>
+              <View style={styles.summaryRow}>
+                <Text muted>Pay at salon</Text>
+                <Text>{formatRupees(Math.max(0, total - advanceDue))}</Text>
+              </View>
+              <View style={{ gap: 2, marginTop: 4 }}>
+                <Text variant="caption" muted>
+                  You&apos;ll pay the advance right after booking. Your time is held for 15 minutes.
+                </Text>
+                <Text variant="label">If you cancel</Text>
+                {salonAdvancePolicyLines(advanceConfig.policy).map((line) => (
+                  <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
+                ))}
+              </View>
+            </>
+          ) : (
+            <View style={[styles.summaryRow, styles.summaryTotal]}>
+              <Text variant="bodyStrong">Pay at salon</Text>
+              <Text variant="heading">{formatRupees(total)}</Text>
+            </View>
+          )}
         </View>
         </>
         ) : null}
@@ -1374,7 +1397,7 @@ export default function BookingScreen() {
                   : "Review details below"
         }
         error={step === 2 && !confirmSheetOpen ? submitError : null}
-        label={step < 2 ? "Continue" : "Book"}
+        label={step < 2 ? "Continue" : advanceDue > 0 ? `Book and pay ${formatRupees(advanceDue)}` : "Book"}
         bottomOffset={keyboardHeight}
         disabled={
           submitting ||

@@ -27,7 +27,7 @@ import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
 import type { ArtistCardData } from "@/lib/artists-api"
-import { getDeviceCoordinates } from "@/lib/device-location"
+import { getDeviceCoordinatesDetailed } from "@/lib/device-location"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { GLAMMZO_MAP_STYLE } from "@/lib/map-styles"
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -58,6 +58,8 @@ type Props = {
   onClose: () => void
   /** Opens the location search. */
   onChangeLocation: () => void
+  /** The phone's position was found: make it the browse location. */
+  onUseCoords: (coords: { latitude: number; longitude: number }) => void
   onSelectSalon: (salonId: string) => void
   onSelectArtist?: (slug: string) => void
 }
@@ -411,6 +413,7 @@ export function MapOverlay({
   userLongitude,
   onClose,
   onChangeLocation,
+  onUseCoords,
   onSelectSalon,
   onSelectArtist,
 }: Props) {
@@ -429,6 +432,9 @@ export function MapOverlay({
     longitude: number
   } | null>(null)
   const [locating, setLocating] = useState(false)
+  const [locateMessage, setLocateMessage] = useState<string | null>(null)
+  // Only a swipe should move the map to a card; programmatic scrolls also end with momentum.
+  const carouselDragged = useRef(false)
   const [mapReady, setMapReady] = useState(false)
   const provider = useGoogleMapsProvider()
   const useCustomStyle = provider === PROVIDER_GOOGLE
@@ -529,6 +535,7 @@ export function MapOverlay({
       setKindFilter("all")
       setViewRegion(null)
       setLiveUserCoords(null)
+      setLocateMessage(null)
       setMapReady(false)
       return
     }
@@ -669,23 +676,32 @@ export function MapOverlay({
     )
   }
 
+  /** Back to where the phone is: the map moves first, then Home's location follows. */
   async function goToMyLocation() {
     if (locating) return
     setLocating(true)
+    setLocateMessage(null)
     try {
-      const coords = await getDeviceCoordinates({ promptIfNeeded: true })
-      if (coords) {
-        setLiveUserCoords(coords)
-        animateToCoords(coords.latitude, coords.longitude)
+      const result = await getDeviceCoordinatesDetailed({ promptIfNeeded: true })
+      if (!result.ok) {
+        setLocateMessage(
+          result.reason === "permission_denied"
+            ? "Allow location access in your phone settings to use this."
+            : result.reason === "services_off"
+              ? "Turn on location in your phone settings to use this."
+              : "Couldn't find your location. Try again in a moment.",
+        )
         return
       }
-      if (hasSavedUserCoords) {
-        animateToCoords(userLatitude!, userLongitude!)
-      }
+      const { latitude, longitude } = result.coords
+      const target = regionAroundPoint(latitude, longitude, NEARBY_RADIUS_KM * 0.45)
+      setLiveUserCoords(result.coords)
+      setViewRegion(target)
+      programmaticCameraUntilRef.current = Date.now() + 900
+      mapRef.current?.animateToRegion(target, 350)
+      onUseCoords(result.coords)
     } catch {
-      if (hasSavedUserCoords) {
-        animateToCoords(userLatitude!, userLongitude!)
-      }
+      setLocateMessage("Couldn't find your location. Try again in a moment.")
     } finally {
       setLocating(false)
     }
@@ -738,6 +754,8 @@ export function MapOverlay({
   }
 
   function onCarouselScrollEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!carouselDragged.current) return
+    carouselDragged.current = false
     if (Date.now() < ignoreScrollUntilRef.current) return
     const x = event.nativeEvent.contentOffset.x
     const index = Math.round(x / SNAP_INTERVAL)
@@ -883,6 +901,19 @@ export function MapOverlay({
           )}
         </Pressable>
 
+        {locateMessage ? (
+          <Pressable
+            onPress={() => setLocateMessage(null)}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+            style={[styles.locateMessage, { top: insets.top + 112 }]}
+          >
+            <Text variant="caption" color={colors.primaryFg}>
+              {locateMessage}
+            </Text>
+          </Pressable>
+        ) : null}
+
         {showCarousel ? (
           <View
             style={[
@@ -900,6 +931,9 @@ export function MapOverlay({
               snapToAlignment="start"
               disableIntervalMomentum
               directionalLockEnabled
+              onScrollBeginDrag={() => {
+                carouselDragged.current = true
+              }}
               onMomentumScrollEnd={onCarouselScrollEnd}
               contentContainerStyle={styles.carousel}
             >
@@ -1029,6 +1063,15 @@ const styles = StyleSheet.create({
   },
   filterText: {
     fontFamily: "Geist_600SemiBold",
+  },
+  locateMessage: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    zIndex: 5,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: colors.primary,
   },
   locateBtn: {
     position: "absolute",

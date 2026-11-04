@@ -17,24 +17,36 @@ export type CreateBookingInput = {
   promoCode?: string
   useWallet?: boolean
   useFreeService?: boolean
-  usePackageSessions?: boolean
   marketingOptIn?: boolean
   serviceQuantities?: Record<string, number>
   servicePriceOptionIds?: Record<string, string>
+}
+
+/** The advance wasn't paid in time: flagged by the server, or the hold just ran out on this phone. */
+export function withPaymentStatus(booking: Booking, now = Date.now()): Booking {
+  const holdEnded =
+    booking.status === "pending" && booking.paymentDeadline != null && Date.parse(booking.paymentDeadline) <= now
+  return booking.paymentFailed || holdEnded
+    ? { ...booking, status: "payment_failed", paymentDeadline: undefined }
+    : booking
 }
 
 export async function fetchBookings(): Promise<Booking[]> {
   const data = await apiFetch<{ ok: boolean; bookings: Booking[] }>(
     "/api/mobile/bookings",
   )
-  return data.bookings ?? []
+  // Latest activity first: whatever was just booked, changed or cancelled is on top.
+  const changedAt = (booking: Booking) => Date.parse(booking.updatedAt ?? booking.createdAt) || 0
+  return (data.bookings ?? [])
+    .map((booking) => withPaymentStatus(booking))
+    .sort((a, b) => changedAt(b) - changedAt(a))
 }
 
 export async function fetchBookingById(id: string): Promise<Booking | undefined> {
   const data = await apiFetch<{ ok: boolean; booking: Booking }>(
     `/api/mobile/bookings/${encodeURIComponent(id)}`,
   )
-  return data.booking
+  return data.booking ? withPaymentStatus(data.booking) : undefined
 }
 
 export async function createBooking(input: CreateBookingInput) {

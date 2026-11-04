@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
-import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native"
-import { useFocusEffect, useRouter } from "expo-router"
+import { Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { useFocusEffect, useRouter, type Href } from "expo-router"
 import { formatRupees } from "@/lib/service-pricing"
 
 import { BookingTimeline } from "@/components/bookings/BookingTimeline"
@@ -9,8 +9,8 @@ import { WaitlistStrip } from "@/components/bookings/WaitlistStrip"
 import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
-import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
 import { BottomSheet } from "@/components/ui/BottomSheet"
+import { formatHoldLeft, useHoldCountdown } from "@/components/payments/useHoldCountdown"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
@@ -35,11 +35,10 @@ import {
   visitTypeLabel,
 } from "@/lib/booking-display"
 import { cancelArtistPublicBooking } from "@/lib/artists-api"
-import { cancelBooking, fetchBookings } from "@/lib/bookings-api"
-import { CRM_URL } from "@/lib/config"
+import { cancelBooking, fetchBookings, withPaymentStatus } from "@/lib/bookings-api"
 import { useCart } from "@/context/CartContext"
 import {
-  canCancelWithNotice,
+  canCustomerCancelBooking,
   CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
   getCancelBlockedReason,
 } from "@/lib/cancel-policy"
@@ -53,7 +52,7 @@ import { colors, radii, spacing } from "@/theme/tokens"
 type Filter = keyof typeof FILTER_LABELS
 
 const upcomingStatuses: BookingStatus[] = ["pending", "confirmed", "upcoming"]
-const cancelledStatuses: BookingStatus[] = ["cancelled", "declined", "expired"]
+const cancelledStatuses: BookingStatus[] = ["cancelled", "declined", "expired", "payment_failed"]
 
 const CANCEL_REASON_IDS = [
   "change_of_plans",
@@ -144,9 +143,11 @@ function DetailRow({
 function BookingCard({
   booking,
   onPress,
+  onPaymentExpired,
 }: {
   booking: Booking
   onPress: () => void
+  onPaymentExpired: () => void
 }) {
   const artist = isArtistBooking(booking)
   const duration = bookingDurationMin(booking)
@@ -218,7 +219,7 @@ function BookingCard({
         </View>
       </View>
 
-      <PayAdvanceStrip booking={booking} />
+      <PayAdvanceStrip booking={booking} onExpired={onPaymentExpired} />
 
       {booking.hasVerifiedReview && booking.review ? (
         <View style={styles.cardReview}>
@@ -237,11 +238,13 @@ function BookingCard({
   )
 }
 
-/** Glammzo payment page for an artist advance that is still due and whose slot is still held. */
-function advancePayUrl(booking: Booking): string | null {
-  if (booking.kind !== "artist" || !booking.artistPublicToken || !booking.paymentDeadline) return null
+/** Booking token when an artist's advance is still due and the slot is still held. */
+function advanceDueToken(booking: Booking): string | null {
+  // Artists: the booking's public token. Pro salons: a signed advance token.
+  const token = booking.kind === "artist" ? booking.artistPublicToken : booking.advanceToken
+  if (!token || !booking.paymentDeadline) return null
   if (new Date(booking.paymentDeadline).getTime() <= Date.now()) return null
-  return `${CRM_URL}/pay/booking/${encodeURIComponent(booking.artistPublicToken)}`
+  return token
 }
 
 /** Tax or charges the salon billed on top of the listed services. */
@@ -251,20 +254,17 @@ function salonExtras(booking: Booking): string {
   return services > 0 && extra > 0 ? ` · includes ${formatRupees(extra)} tax and charges` : ""
 }
 
-function formatDeadline(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
-}
-
-function PayAdvanceStrip({ booking }: { booking: Booking }) {
-  const url = advancePayUrl(booking)
-  if (!url || !booking.paymentDeadline) return null
+function PayAdvanceStrip({ booking, onExpired }: { booking: Booking; onExpired?: () => void }) {
+  const router = useRouter()
+  const token = advanceDueToken(booking)
+  const left = useHoldCountdown(booking.paymentDeadline, onExpired)
+  if (!token || left == null || left <= 0) return null
   return (
-    <View style={styles.payStrip}>
+    <View style={styles.payStrip} accessibilityLabel={`Payment pending. Slot held for ${formatHoldLeft(left)}`}>
       <Text variant="caption" style={{ flex: 1 }}>
-        Pay the {formatRupees(booking.advanceAmount ?? 0)} advance by {formatDeadline(booking.paymentDeadline)} to
-        confirm. After that the time is released.
+        Slot held for {formatHoldLeft(left)}. Pay {formatRupees(booking.advanceAmount ?? 0)} to confirm.
       </Text>
-      <Button label={`Pay ${formatRupees(booking.advanceAmount ?? 0)}`} onPress={() => void Linking.openURL(url)} />
+      <Button label={`Pay ${formatRupees(booking.advanceAmount ?? 0)}`} onPress={() => router.push({ pathname: "/pay/advance/[token]", params: { token } } as Href)} />
     </View>
   )
 }
@@ -280,6 +280,12 @@ export default function BookingsScreen() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [filter, setFilter] = useState<Filter>("all")
   const [selected, setSelected] = useState<Booking | null>(null)
+
+  /** A held slot just ran out on screen: it shows as Payment failed without a reload. */
+  const applyPaymentTimeouts = useCallback(() => {
+    setBookings((current) => current.map((booking) => withPaymentStatus(booking)))
+    setSelected((current) => (current ? withPaymentStatus(current) : current))
+  }, [])
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState<CancelReasonId>("change_of_plans")
   const [cancelNote, setCancelNote] = useState("")
@@ -547,17 +553,115 @@ export default function BookingsScreen() {
               key={booking.id}
               booking={booking}
               onPress={() => setSelected(booking)}
+              onPaymentExpired={applyPaymentTimeouts}
             />
           ))}
         </ScrollView>
       )}
 
       <BottomSheet
-        visible={Boolean(selected) && !cancelOpen}
-        title="Appointment details"
-        onClose={() => setSelected(null)}
+        visible={Boolean(selected)}
+        title={cancelOpen ? "Cancel booking" : "Appointment details"}
+        contentKey={cancelOpen ? "cancel" : "details"}
+        onClose={() => {
+          // One sheet, two modes — avoid nested Modals (cancel never opened on device).
+          if (cancelOpen) {
+            setCancelOpen(false)
+            return
+          }
+          setSelected(null)
+        }}
       >
-        {selected ? (
+        {selected && cancelOpen ? (
+          <View style={styles.sheetBody}>
+            <Text muted>
+              {selected.status === "pending"
+                ? "This booking is still waiting for confirmation. You can cancel the request anytime."
+                : (selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS) <= 0
+                  ? "You can cancel until the appointment starts. Tell us why you are cancelling."
+                  : `Free cancellation until ${selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS} hours before your appointment. Tell us why you are cancelling.`}
+            </Text>
+            {selected.cancelRefund ? (
+              <RefundPreview booking={selected} />
+            ) : selected.cancelRefundNote ? (
+              <Text style={styles.refundNote}>{selected.cancelRefundNote}</Text>
+            ) : null}
+            <Text variant="caption" muted>
+              {formatBookingWhen(selected)} · {selected.salonName}
+            </Text>
+            {cancelReasonsFor(isArtistBooking(selected) ? "artist" : "salon").map((reason) => (
+              <Pressable
+                accessibilityRole="button"
+                key={reason.id}
+                style={[styles.reasonRow, cancelReason === reason.id && styles.chipActive]}
+                onPress={() => setCancelReason(reason.id)}
+              >
+                <Text color={cancelReason === reason.id ? colors.primary : colors.text}>
+                  {reason.label}
+                </Text>
+              </Pressable>
+            ))}
+            <Input
+              label="Extra note"
+              value={cancelNote}
+              onChangeText={setCancelNote}
+              placeholder={cancelReason === "other" ? "Required for Other" : "Optional"}
+            />
+            <Button
+              label="Confirm cancel"
+              loading={cancelling}
+              onPress={() => {
+                void (async () => {
+                  if (cancelReason === "other" && !cancelNote.trim()) {
+                    showToast("Please add a note for Other")
+                    return
+                  }
+                  setCancelling(true)
+                  try {
+                    if (isArtistBooking(selected)) {
+                      const token =
+                        selected.artistPublicToken?.trim() ||
+                        selected.id.replace(/^artist:/, "").trim()
+                      if (!token) throw new Error("Cancel unavailable for this booking.")
+                      const reasons = cancelReasonsFor("artist")
+                      const reasonLabel =
+                        reasons.find((item) => item.id === cancelReason)?.label ?? cancelReason
+                      const details = cancelNote.trim()
+                      await cancelArtistPublicBooking({
+                        publicToken: token,
+                        reason: details ? `${reasonLabel}: ${details}` : reasonLabel,
+                      })
+                    } else {
+                      await cancelBooking(selected.id, {
+                        reasonId: cancelReason,
+                        details: cancelNote.trim() || undefined,
+                      })
+                    }
+                    setCancelOpen(false)
+                    setSelected(null)
+                    setCancelNote("")
+                    showToast("Booking cancelled")
+                    await reloadBookings()
+                  } catch (err) {
+                    showToast(
+                      err instanceof ApiError || err instanceof Error
+                        ? err.message
+                        : "Cancel failed",
+                    )
+                  } finally {
+                    setCancelling(false)
+                  }
+                })()
+              }}
+            />
+            <Button
+              label="Keep booking"
+              variant="secondary"
+              disabled={cancelling}
+              onPress={() => setCancelOpen(false)}
+            />
+          </View>
+        ) : selected ? (
           <View style={styles.sheetBody}>
             <View style={styles.sheetHero}>
               <View style={styles.sheetHeroTop}>
@@ -720,10 +824,14 @@ export default function BookingsScreen() {
                   {selectedArtist
                     ? selected.advanceAmount && selected.advancePaid
                       ? `${formatRupees(selected.advanceAmount)} advance paid · ${formatRupees(Math.max(0, selected.price - selected.advanceAmount))} at the visit`
-                      : selected.advanceAmount && advancePayUrl(selected)
+                      : selected.advanceAmount && advanceDueToken(selected)
                         ? `${formatRupees(selected.advanceAmount)} advance due now · rest at the visit`
                         : "Pay artist directly"
-                    : `${selected.status === "completed" ? "Paid at salon" : "Pay at salon"}${salonExtras(selected)}`}
+                    : selected.advanceAmount && selected.advancePaid
+                      ? `${formatRupees(selected.advanceAmount)} advance paid · rest at the salon`
+                      : selected.advanceAmount && advanceDueToken(selected)
+                        ? `${formatRupees(selected.advanceAmount)} advance due now · rest at the salon`
+                        : `${selected.status === "completed" ? "Paid at salon" : "Pay at salon"}${salonExtras(selected)}`}
                 </Text>
               </View>
               <Text variant="title" style={styles.payAmount}>
@@ -731,11 +839,9 @@ export default function BookingsScreen() {
               </Text>
             </View>
 
-            <PayAdvanceStrip booking={selected} />
+            <PayAdvanceStrip booking={selected} onExpired={applyPaymentTimeouts} />
 
-            {selectedArtist ? (
-              <ShareArtistInvoiceButton booking={selected} />
-            ) : canDownloadBookingInvoice(selected) ? (
+            {!selectedArtist && canDownloadBookingInvoice(selected) ? (
               <DownloadInvoiceButton
                 bookingId={selected.crmAppointmentId ?? selected.id}
               />
@@ -778,14 +884,15 @@ export default function BookingsScreen() {
                     />
                   ) : null}
                   {upcomingStatuses.includes(selected.status) ? (
-                    canCancelWithNotice(
-                      selected.startsAt,
-                      selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
-                    ).allowed ? (
+                    canCustomerCancelBooking(selected).allowed ? (
                       <Button
                         label="Cancel booking"
                         variant="ghost"
-                        onPress={() => setCancelOpen(true)}
+                        onPress={() => {
+                          setCancelReason("change_of_plans")
+                          setCancelNote("")
+                          setCancelOpen(true)
+                        }}
                       />
                     ) : (
                       <Text variant="caption" muted style={styles.policyHint}>
@@ -822,14 +929,15 @@ export default function BookingsScreen() {
                           {getRescheduleBlockedReason(selected.startsAt)}
                         </Text>
                       )}
-                      {canCancelWithNotice(
-                        selected.startsAt,
-                        selected.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
-                      ).allowed ? (
+                      {canCustomerCancelBooking(selected).allowed ? (
                         <Button
                           label="Cancel booking"
                           variant="ghost"
-                          onPress={() => setCancelOpen(true)}
+                          onPress={() => {
+                            setCancelReason("change_of_plans")
+                            setCancelNote("")
+                            setCancelOpen(true)
+                          }}
                         />
                       ) : (
                         <Text variant="caption" muted style={styles.policyHint}>
@@ -871,96 +979,6 @@ export default function BookingsScreen() {
             </View>
           </View>
         ) : null}
-      </BottomSheet>
-
-      <BottomSheet
-        visible={cancelOpen}
-        title="Cancel booking"
-        onClose={() => setCancelOpen(false)}
-      >
-        <View style={styles.sheetBody}>
-          <Text muted>
-            {(selected?.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS) <= 0
-              ? "You can cancel until the appointment starts. Tell us why you are cancelling."
-              : `Free cancellation until ${selected?.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS} hours before your appointment. Tell us why you are cancelling.`}
-          </Text>
-          {selected?.cancelRefund ? (
-            <RefundPreview booking={selected} />
-          ) : selected?.cancelRefundNote ? (
-            <Text style={styles.refundNote}>{selected.cancelRefundNote}</Text>
-          ) : null}
-          {selected ? (
-            <Text variant="caption" muted>
-              {formatBookingWhen(selected)} · {selected.salonName}
-            </Text>
-          ) : null}
-          {cancelReasonsFor(selected && isArtistBooking(selected) ? "artist" : "salon").map(
-            (reason) => (
-              <Pressable
-                accessibilityRole="button"
-                key={reason.id}
-                style={[styles.reasonRow, cancelReason === reason.id && styles.chipActive]}
-                onPress={() => setCancelReason(reason.id)}
-              >
-                <Text color={cancelReason === reason.id ? colors.primary : colors.text}>
-                  {reason.label}
-                </Text>
-              </Pressable>
-            ),
-          )}
-          <Input
-            label="Extra note"
-            value={cancelNote}
-            onChangeText={setCancelNote}
-            placeholder={cancelReason === "other" ? "Required for Other" : "Optional"}
-          />
-          <Button
-            label="Confirm cancel"
-            loading={cancelling}
-            onPress={async () => {
-              if (!selected) return
-              if (cancelReason === "other" && !cancelNote.trim()) {
-                showToast("Please add a note for Other")
-                return
-              }
-              setCancelling(true)
-              try {
-                if (isArtistBooking(selected)) {
-                  const token =
-                    selected.artistPublicToken?.trim() ||
-                    selected.id.replace(/^artist:/, "").trim()
-                  if (!token) throw new Error("Cancel unavailable for this booking.")
-                  const reasons = cancelReasonsFor("artist")
-                  const reasonLabel =
-                    reasons.find((item) => item.id === cancelReason)?.label ?? cancelReason
-                  const details = cancelNote.trim()
-                  await cancelArtistPublicBooking({
-                    publicToken: token,
-                    reason: details ? `${reasonLabel}: ${details}` : reasonLabel,
-                  })
-                } else {
-                  await cancelBooking(selected.id, {
-                    reasonId: cancelReason,
-                    details: cancelNote.trim() || undefined,
-                  })
-                }
-                setCancelOpen(false)
-                setSelected(null)
-                setCancelNote("")
-                showToast("Booking cancelled")
-                await reloadBookings()
-              } catch (err) {
-                showToast(
-                  err instanceof ApiError || err instanceof Error
-                    ? err.message
-                    : "Cancel failed",
-                )
-              } finally {
-                setCancelling(false)
-              }
-            }}
-          />
-        </View>
       </BottomSheet>
     </Screen>
   )

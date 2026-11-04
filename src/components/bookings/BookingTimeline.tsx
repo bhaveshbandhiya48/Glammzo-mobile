@@ -39,6 +39,16 @@ export function bookingSteps(booking: Booking): Step[] {
   const artist = isArtistBooking(booking)
   const steps: Step[] = [{ key: "booked", title: "Booked", detail: formatCreated(booking.createdAt), state: "done" }]
 
+  if (booking.status === "payment_failed") {
+    steps.push({
+      key: "stopped",
+      title: "Payment failed",
+      detail: "The advance wasn't paid in time, so this slot was released.",
+      state: "stopped",
+    })
+    return steps
+  }
+
   if (booking.status === "cancelled" || booking.status === "declined" || booking.status === "expired") {
     steps.push({
       key: "stopped",

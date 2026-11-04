@@ -75,7 +75,11 @@ function RootNavigator() {
         <Stack.Screen name="book/[salonId]" options={{ title: "Booking" }} />
         <Stack.Screen
           name="book/confirmation"
-          options={{ title: "Confirmed", headerBackVisible: false }}
+          options={{
+            title: "Booking confirmed",
+            headerBackVisible: false,
+            // Screen sets Flipkart-style back/close → Home (not checkout).
+          }}
         />
         <Stack.Screen
           name="login"
@@ -90,6 +94,10 @@ function RootNavigator() {
         <Stack.Screen name="salons/index" options={{ title: "Salons" }} />
         <Stack.Screen name="artist/[slug]" options={{ headerShown: false }} />
         <Stack.Screen name="artist/book/[slug]" options={{ title: "Booking" }} />
+        <Stack.Screen
+          name="pay/advance/[token]"
+          options={{ headerShown: false, presentation: "transparentModal", animation: "none" }}
+        />
         <Stack.Screen name="review" options={{ title: "Leave a review", presentation: "modal" }} />
         <Stack.Screen
           name="bookings/[id]/reschedule"
@@ -111,10 +119,6 @@ function RootNavigator() {
         <Stack.Screen
           name="profile/gift-cards"
           options={profileStackOptions("Gift cards")}
-        />
-        <Stack.Screen
-          name="profile/packages"
-          options={profileStackOptions("My packages")}
         />
         <Stack.Screen
           name="profile/activity"
@@ -143,9 +147,13 @@ export default function RootLayout() {
   const onSplashFinish = useCallback(() => setSplashDone(true), [])
 
   useEffect(() => {
-    // Native splash is blank cream — hide only if we locked it, then show splash.mp4.
+    // Native splash is blank cream — hide only if we locked it, then show brand splash.
     void hideNativeSplash()
-    void hydrateGreetingCache()
+    // Defer session/storage work so a SecureStore failure cannot kill cold start.
+    const t = setTimeout(() => {
+      void hydrateGreetingCache().catch(() => undefined)
+    }, 0)
+    return () => clearTimeout(t)
   }, [])
 
   const showApp = fontsLoaded && splashDone

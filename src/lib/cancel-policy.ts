@@ -29,6 +29,24 @@ export function canCancelWithNotice(
   return { allowed: true }
 }
 
+/**
+ * Pending = salon/artist has not accepted yet. Customer can always withdraw
+ * the request (notice window only applies after confirmation).
+ */
+export function canCustomerCancelBooking(input: {
+  status: string
+  startsAt?: string | null
+  cancelNoticeHours?: number | null
+}): { allowed: true } | { allowed: false; reason: "missing_start" | "too_soon" } {
+  if (input.status === "pending") {
+    return { allowed: true }
+  }
+  return canCancelWithNotice(
+    input.startsAt,
+    input.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
+  )
+}
+
 export function getCancelBlockedReason(
   startsAtIso?: string | null,
   noticeHours: number = CUSTOMER_CANCEL_MIN_NOTICE_HOURS,

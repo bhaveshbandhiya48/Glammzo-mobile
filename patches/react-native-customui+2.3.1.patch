@@ -1,0 +1,102 @@
+diff --git a/node_modules/react-native-customui/Razorpay.js b/node_modules/react-native-customui/Razorpay.js
+index ca7781e..3ce034e 100644
+--- a/node_modules/react-native-customui/Razorpay.js
++++ b/node_modules/react-native-customui/Razorpay.js
+@@ -57,8 +57,6 @@ class Razorpay {
+       });
+       const payload = options;
+       payload['FRAMEWORK'] = "react_native"
+-      console.log("data");
+-      console.log(payload);
+       NativeModules.RazorpayCustomui.open(payload);
+     });
+   }
+diff --git a/node_modules/react-native-customui/android/build.gradle b/node_modules/react-native-customui/android/build.gradle
+index 2e711ef..c82a5f0 100644
+--- a/node_modules/react-native-customui/android/build.gradle
++++ b/node_modules/react-native-customui/android/build.gradle
+@@ -1,26 +1,15 @@
+ apply plugin: 'com.android.library'
+-buildscript {
+-    repositories {
+-        mavenLocal()
+-        mavenCentral()
+-        google()
+-    }
+-    dependencies {
+-        classpath 'com.android.tools.build:gradle:7.4.2'
+-    }
+-}
+ 
+-repositories {
+-    mavenLocal()
+-    mavenCentral()
+-    google()
++def safeExtGet(prop, fallback) {
++    rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
+ }
++
+ android {
+-    compileSdkVersion 31
++    compileSdkVersion safeExtGet("compileSdkVersion", 35)
+     namespace 'com.razorpay.rn.custom'
+     defaultConfig {
+-        minSdkVersion 21
+-        targetSdkVersion 31
++        minSdkVersion safeExtGet("minSdkVersion", 24)
++        targetSdkVersion safeExtGet("targetSdkVersion", 35)
+         versionCode 1
+         versionName "1.0"
+     }
+diff --git a/node_modules/react-native-customui/ios/RazorpayCustomui.h b/node_modules/react-native-customui/ios/RazorpayCustomui.h
+index 577cac2..aa427a4 100644
+--- a/node_modules/react-native-customui/ios/RazorpayCustomui.h
++++ b/node_modules/react-native-customui/ios/RazorpayCustomui.h
+@@ -6,7 +6,7 @@
+ //  Copyright © 2016 Razorpay. All rights reserved.
+ //
+ 
+-#import "RCTBridgeModule.h"
++#import <React/RCTBridgeModule.h>
+ 
+ @interface RazorpayCustomui : NSObject <RCTBridgeModule>
+ 
+diff --git a/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.h b/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.h
+index a20c17f..c7ec213 100644
+--- a/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.h
++++ b/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.h
+@@ -6,7 +6,7 @@
+ //  Copyright © 2016 Facebook. All rights reserved.
+ //
+ 
+-#import "RCTEventEmitter.h"
++#import <React/RCTEventEmitter.h>
+ 
+ @interface RazorpayEventEmitterCustom : RCTEventEmitter
+ 
+diff --git a/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.m b/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.m
+index 0d14f13..2edad77 100644
+--- a/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.m
++++ b/node_modules/react-native-customui/ios/RazorpayEventEmitterCustom.m
+@@ -8,8 +8,6 @@
+ 
+ #import "RazorpayEventEmitterCustom.h"
+ 
+-#import "RCTBridge.h"
+-#import "RCTEventDispatcher.h"
+ 
+ 
+ NSString *const kPaymentErrorCustom = @"PAYMENT_ERROR";
+diff --git a/node_modules/react-native-customui/react-native-customui.podspec b/node_modules/react-native-customui/react-native-customui.podspec
+index bd3aa75..a1518e4 100644
+--- a/node_modules/react-native-customui/react-native-customui.podspec
++++ b/node_modules/react-native-customui/react-native-customui.podspec
+@@ -16,7 +16,7 @@ Pod::Spec.new do |s|
+   s.source       = { :git => "https://github.com/razorpay/react-native-customui.git", :tag => "v#{s.version}" }
+   s.source_files  = "ios/**/*.{h,m}"
+ 
+-  s.dependency 'React'
++  s.dependency 'React-Core'
+   s.dependency 'razorpay-customui-pod', '~> 2.2.3'
+ #   s.vendored_frameworks = [
+ #   'pod/Razorpay.xcframework',

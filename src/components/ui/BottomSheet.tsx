@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Animated,
   Dimensions,
+  Easing,
   Keyboard,
   Modal,
   PanResponder,
@@ -37,11 +38,17 @@ type Props = {
   scroll?: boolean
   /** Size to content instead of stretching toward full screen height. */
   compact?: boolean
+  /** Remount scroll body when this changes (e.g. details → cancel form). */
+  contentKey?: string | number
+  /** False while the sheet must stay open (e.g. a payment is starting): no close button, swipe or backdrop. */
+  dismissible?: boolean
+  /** Ask first: closing gestures call this and the sheet stays open until the parent closes it. */
+  confirmClose?: () => void
 }
 
 const WINDOW_HEIGHT = Dimensions.get("window").height
-const DISMISS_DISTANCE = 80
-const DISMISS_VELOCITY = 0.9
+const DISMISS_DISTANCE = 72
+const DISMISS_VELOCITY = 0.55
 
 function CloseButton({ onPress }: { onPress: () => void }) {
   return (
@@ -65,16 +72,33 @@ export function BottomSheet({
   stickyHeader,
   footer,
   expanded = false,
+  dismissible = true,
+  confirmClose,
   searchMode = false,
   scroll = true,
   compact = false,
+  contentKey,
 }: Props) {
   const insets = useSafeAreaInsets()
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const dragY = useRef(new Animated.Value(0)).current
   const scrollOffsetRef = useRef(0)
   const closingRef = useRef(false)
-  const { mounted, backdropOpacity, sheetY } = useSheetAnimation(visible)
+  const { mounted, backdropOpacity, sheetY, markDragDismissed } = useSheetAnimation(visible)
+
+  const dragFade = useMemo(
+    () =>
+      dragY.interpolate({
+        inputRange: [0, WINDOW_HEIGHT * 0.4],
+        outputRange: [1, 0],
+        extrapolate: "clamp",
+      }),
+    [dragY],
+  )
+  const combinedBackdropOpacity = useMemo(
+    () => Animated.multiply(backdropOpacity, dragFade),
+    [backdropOpacity, dragFade],
+  )
 
   useEffect(() => {
     if (!visible) {
@@ -112,56 +136,112 @@ export function BottomSheet({
     !compact &&
     (expanded || searchMode || keyboardOpen || Boolean(footer) || !scroll)
 
+  // Reset drag only when opening or after the modal unmounts — never mid-dismiss.
   useEffect(() => {
-    if (!visible) {
+    if (visible) {
       closingRef.current = false
       scrollOffsetRef.current = 0
       dragY.setValue(0)
     }
   }, [dragY, visible])
 
+  useEffect(() => {
+    scrollOffsetRef.current = 0
+  }, [contentKey])
+
+  useEffect(() => {
+    if (!mounted) {
+      closingRef.current = false
+      scrollOffsetRef.current = 0
+      dragY.setValue(0)
+    }
+  }, [dragY, mounted])
+
+  const dismissibleRef = useRef(dismissible)
+  dismissibleRef.current = dismissible
+  const confirmCloseRef = useRef(confirmClose)
+  confirmCloseRef.current = confirmClose
+
   function finishClose() {
-    if (closingRef.current) return
+    if (!dismissibleRef.current || closingRef.current) return
+    if (confirmCloseRef.current) {
+      confirmCloseRef.current()
+      return
+    }
     closingRef.current = true
     onClose()
   }
 
   function snapBack() {
+    if (closingRef.current) return
     Animated.spring(dragY, {
       toValue: 0,
-      bounciness: 0,
+      damping: 28,
+      stiffness: 320,
+      mass: 0.85,
       useNativeDriver: true,
     }).start()
   }
 
   function dismissWithDrag(currentY: number) {
-    Animated.timing(dragY, {
-      toValue: Math.max(currentY, WINDOW_HEIGHT * 0.35),
-      duration: 160,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        dragY.setValue(0)
-        finishClose()
+    if (closingRef.current) return
+    closingRef.current = true
+
+    Animated.parallel([
+      Animated.timing(dragY, {
+        toValue: Math.max(currentY, WINDOW_HEIGHT),
+        duration: 240,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(backdropOpacity, {
+        toValue: 0,
+        duration: 200,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (!finished) {
+        closingRef.current = false
+        return
       }
+      // Sheet is already off-screen — skip the exit slide so it doesn't snap back up.
+      markDragDismissed()
+      onClose()
     })
+  }
+
+  function shouldDismiss(gesture: { dy: number; vy: number }) {
+    const wantsClose = dismissibleRef.current && (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY)
+    if (wantsClose && confirmCloseRef.current) {
+      confirmCloseRef.current()
+      return false
+    }
+    return wantsClose
+  }
+
+  function isPullDown(gesture: { dy: number; dx: number }) {
+    return gesture.dy > 0 && Math.abs(gesture.dy) > Math.abs(gesture.dx) * 1.15
   }
 
   // Drag from the handle — capture immediately so the sheet feels swipeable.
   const handlePanResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !keyboardOpen,
+        onStartShouldSetPanResponder: () => !keyboardOpen && !closingRef.current,
         onMoveShouldSetPanResponder: (_event, gesture) =>
           !keyboardOpen &&
-          gesture.dy > 4 &&
-          Math.abs(gesture.dy) > Math.abs(gesture.dx),
+          !closingRef.current &&
+          gesture.dy > 3 &&
+          isPullDown(gesture),
         onPanResponderTerminationRequest: () => false,
         onPanResponderMove: (_event, gesture) => {
+          if (closingRef.current) return
           dragY.setValue(Math.max(0, gesture.dy))
         },
         onPanResponderRelease: (_event, gesture) => {
-          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+          if (closingRef.current) return
+          if (shouldDismiss(gesture)) {
             dismissWithDrag(gesture.dy)
             return
           }
@@ -170,33 +250,25 @@ export function BottomSheet({
         onPanResponderTerminate: snapBack,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dragY, keyboardOpen, onClose],
+    [dragY, keyboardOpen, backdropOpacity, markDragDismissed, onClose],
   )
 
-  // Drag from the title row (not the close button) or body when scrolled to top.
+  // Chrome-only drag (handle/title). Body stays free for buttons and scroll.
   const sheetPanResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_event, gesture) => {
           if (keyboardOpen || closingRef.current) return false
-          const pullingDown =
-            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
-          if (!pullingDown) return false
-          return !scroll || scrollOffsetRef.current <= 0
+          return isPullDown(gesture) && gesture.dy > 6
         },
-        onMoveShouldSetPanResponderCapture: (_event, gesture) => {
-          if (keyboardOpen || closingRef.current) return false
-          const pullingDown =
-            gesture.dy > 8 && Math.abs(gesture.dy) > Math.abs(gesture.dx)
-          if (!pullingDown) return false
-          return !scroll || scrollOffsetRef.current <= 0
-        },
-        onPanResponderTerminationRequest: () => false,
+        onPanResponderTerminationRequest: () => true,
         onPanResponderMove: (_event, gesture) => {
+          if (closingRef.current) return
           dragY.setValue(Math.max(0, gesture.dy))
         },
         onPanResponderRelease: (_event, gesture) => {
-          if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
+          if (closingRef.current) return
+          if (shouldDismiss(gesture)) {
             dismissWithDrag(gesture.dy)
             return
           }
@@ -205,7 +277,7 @@ export function BottomSheet({
         onPanResponderTerminate: snapBack,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dragY, keyboardOpen, onClose, scroll],
+    [dragY, keyboardOpen, backdropOpacity, markDragDismissed, onClose, scroll],
   )
 
   function onBodyScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -213,14 +285,20 @@ export function BottomSheet({
   }
 
   return (
-    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+    <Modal
+      visible={mounted}
+      transparent
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={finishClose}
+    >
       <View style={styles.root}>
-        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
+        <Animated.View style={[styles.backdrop, { opacity: combinedBackdropOpacity }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close"
             style={StyleSheet.absoluteFill}
-            onPress={onClose}
+            onPress={finishClose}
           />
         </Animated.View>
         <Animated.View
@@ -233,9 +311,9 @@ export function BottomSheet({
               transform: [{ translateY: Animated.add(sheetY, dragY) }],
             },
           ]}
-          {...sheetPanResponder.panHandlers}
         >
-          <View style={styles.chrome}>
+          {/* Drag only on chrome — keep body taps (Cancel, etc.) free of pan capture. */}
+          <View style={styles.chrome} {...sheetPanResponder.panHandlers}>
             <View style={styles.handleHit} {...handlePanResponder.panHandlers}>
               <View style={styles.handle} />
             </View>
@@ -245,7 +323,7 @@ export function BottomSheet({
                 <Text variant="heading" style={styles.title}>
                   {title}
                 </Text>
-                <CloseButton onPress={onClose} />
+                {dismissible ? <CloseButton onPress={finishClose} /> : null}
               </View>
             ) : null}
 
@@ -255,13 +333,14 @@ export function BottomSheet({
                 <View style={searchMode ? styles.searchTopBarField : undefined}>
                   {stickyHeader}
                 </View>
-                {searchMode ? <CloseButton onPress={onClose} /> : null}
+                {searchMode ? <CloseButton onPress={finishClose} /> : null}
               </View>
             ) : null}
           </View>
 
           {scroll ? (
             <ScrollView
+              key={contentKey ?? "sheet-body"}
               style={styles.body}
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"
@@ -271,11 +350,17 @@ export function BottomSheet({
               nestedScrollEnabled
               scrollEventThrottle={16}
               onScroll={onBodyScroll}
+              onScrollBeginDrag={onBodyScroll}
+              onScrollEndDrag={onBodyScroll}
+              onMomentumScrollEnd={onBodyScroll}
             >
               {children}
             </ScrollView>
           ) : (
-            <View style={compact ? styles.compactBody : styles.fillBody}>
+            <View
+              key={contentKey ?? "sheet-body"}
+              style={compact ? styles.compactBody : styles.fillBody}
+            >
               {children}
             </View>
           )}

@@ -21,10 +21,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Button } from "@/components/ui/Button"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
-import { Icon } from "@/components/ui/Icon"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
+import { DetailIntro } from "@/components/detail/DetailIntro"
+import { SectionHeader } from "@/components/detail/SectionHeader"
 import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
-import { BuyAheadButton } from "@/components/salon/BuyAheadButton"
 import { Text } from "@/components/ui/Text"
 import { CatalogServiceRow } from "@/components/salon/CatalogServiceRow"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
@@ -43,6 +44,7 @@ import {
 } from "@/data/mocks/salons"
 import type { Salon, SalonPackage, SalonReview, SalonService } from "@/data/types"
 import { getSalonByIdLive } from "@/lib/salons-api"
+import { openDirections } from "@/lib/visit-links"
 import {
   fetchGlammzoOffersForSalon,
   type GlammzoOfferCard,
@@ -101,6 +103,52 @@ function StarRow({ rating }: { rating: number }) {
   )
 }
 
+/** Address / hours / phone row; tappable when it has an action. */
+function InfoRow({
+  icon,
+  title,
+  actionLabel,
+  onPress,
+  last = false,
+}: {
+  icon: IconName
+  title: string
+  actionLabel?: string
+  onPress?: () => void
+  last?: boolean
+}) {
+  const body = (
+    <>
+      <View style={styles.infoIcon}>
+        <Icon name={icon} size={18} color={colors.text} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text numberOfLines={2}>{title}</Text>
+        {actionLabel ? (
+          <Text variant="caption" style={styles.infoAction}>
+            {actionLabel}
+          </Text>
+        ) : null}
+      </View>
+      {onPress ? <Icon name="chevron-forward" size={16} color={colors.textSubtle} /> : null}
+    </>
+  )
+  return onPress ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${actionLabel ?? ""}: ${title}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.infoRow, !last && styles.infoRowDivider, pressed && styles.infoPressed]}
+    >
+      {body}
+    </Pressable>
+  ) : (
+    <View style={[styles.infoRow, !last && styles.infoRowDivider]} accessible accessibilityLabel={title}>
+      {body}
+    </View>
+  )
+}
+
 function ReviewCard({ review }: { review: SalonReview }) {
   const initials = review.authorName
     .split(" ")
@@ -127,7 +175,9 @@ function ReviewCard({ review }: { review: SalonReview }) {
         </View>
         <StarRow rating={review.rating} />
       </View>
-      <Text style={styles.reviewComment}>{review.comment}</Text>
+      <Text style={styles.reviewComment} numberOfLines={4}>
+        {review.comment}
+      </Text>
       <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
       <Text variant="caption" muted>
         {review.serviceName}
@@ -169,6 +219,7 @@ export default function SalonDetailScreen() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuExpandedCategory, setMenuExpandedCategory] = useState<string>("")
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [amenitiesOpen, setAmenitiesOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
   const [glammzoOffers, setGlammzoOffers] = useState<GlammzoOfferCard[]>([])
   const [genderAudience, setGenderAudience] = useState<ServiceGenderAudience>("men")
@@ -375,7 +426,6 @@ export default function SalonDetailScreen() {
   const offer = salon.offers.find((item) => item.isActive)
   const favorited = isFavorite(salon.id)
   const galleryPreview = slides
-  const galleryTile = (windowWidth - spacing.xl * 2 - spacing.sm * 2) / 3
   const hasCart = cart.itemCountFor(salon.id) > 0
   const packagesExpanded = expandedServiceCategories.includes(PACKAGES_CATEGORY)
   const showMenuFab = catalogPackages.length > 0 || serviceGroups.length > 1
@@ -509,62 +559,45 @@ export default function SalonDetailScreen() {
           </View>
         </View>
 
-        <View style={styles.body}>
-          <View style={styles.badges}>
-            <Text variant="caption" color={salon.isOpenNow ? colors.success : colors.textSubtle}>
-              {salon.isOpenNow ? "Open now" : "Closed"}
-            </Text>
-            {offer ? (
-              <Text variant="caption" color={colors.primary}>
-                {offer.title}
-              </Text>
-            ) : null}
-          </View>
-          <Text variant="title">{salon.name}</Text>
-          <Text muted>
-            {salon.area}, {salon.city}
-          </Text>
-          <Text variant="caption" style={styles.meta}>
-            {salon.reviews > 0 ? `★ ${salon.rating.toFixed(1)} · ${salon.reviews} review${salon.reviews === 1 ? "" : "s"}` : "New on Glammzo"}
-            {salon.distanceKm > 0 ? ` · ${salon.distanceKm.toFixed(1)} km` : ""}
-          </Text>
-
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Call"
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
-              onPress={() => Linking.openURL(`tel:${salon.phone.replace(/\s/g, "")}`)}
-            >
-              <Icon name="call-outline" size={20} color={colors.text} />
-            </Pressable>
-            {whatsappUrl ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="WhatsApp"
-                style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
-                onPress={() => void Linking.openURL(whatsappUrl)}
-              >
-                <Icon name="logo-whatsapp" size={22} color="#25D366" />
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Directions"
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
-              onPress={() =>
-                Linking.openURL(
-                  `https://maps.google.com/?q=${encodeURIComponent(salon.address)}`,
-                )
-              }
-            >
-              <Icon name="navigate-outline" size={20} color={colors.text} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Share"
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.actionPressed]}
-              onPress={() => {
+        <DetailIntro
+          status={
+            salon.isOpenNow
+              ? { label: "Open now", tone: "success" }
+              : { label: "Closed now", tone: "danger" }
+          }
+          offerLabel={offer?.title ?? null}
+          title={salon.name}
+          subtitle={[salon.area, salon.city].filter(Boolean).join(", ")}
+          stats={[
+            salon.reviews > 0
+              ? { value: `★ ${salon.rating.toFixed(1)}`, label: `${salon.reviews} review${salon.reviews === 1 ? "" : "s"}` }
+              : { value: "New", label: "on Glammzo" },
+            ...(salon.distanceKm > 0 ? [{ value: `${salon.distanceKm.toFixed(1)} km`, label: "away" }] : []),
+            ...(salon.priceFrom > 0 ? [{ value: formatRupees(salon.priceFrom), label: "starting price" }] : []),
+          ]}
+          actions={[
+            {
+              icon: "call-outline",
+              label: "Call",
+              onPress: () => void Linking.openURL(`tel:${salon.phone.replace(/\s/g, "")}`),
+            },
+            ...(whatsappUrl
+              ? [{ icon: "logo-whatsapp" as const, label: "WhatsApp", iconColor: "#25D366", onPress: () => void Linking.openURL(whatsappUrl) }]
+              : []),
+            {
+              icon: "navigate-outline",
+              label: "Directions",
+              onPress: () =>
+                openDirections({
+                  latitude: salon.latitude,
+                  longitude: salon.longitude,
+                  query: salon.address || [salon.name, salon.area, salon.city].filter(Boolean).join(", "),
+                }),
+            },
+            {
+              icon: "share-outline",
+              label: "Share",
+              onPress: () => {
                 const url = `${LEGAL.siteUrl}/salons/${encodeURIComponent(salon.id)}`
                 const message = [
                   `Check out ${salon.name} on Glammzo`,
@@ -573,27 +606,22 @@ export default function SalonDetailScreen() {
                 ]
                   .filter(Boolean)
                   .join("\n")
-
                 void Share.share(
-                  Platform.OS === "ios"
-                    ? { message, url }
-                    : { message, title: salon.name },
+                  Platform.OS === "ios" ? { message, url } : { message, title: salon.name },
                 ).catch(() => {
                   // User dismissed sheet or share unavailable — ignore.
                 })
-              }}
-            >
-              <Icon name="share-outline" size={20} color={colors.text} />
-            </Pressable>
-          </View>
+              },
+            },
+          ]}
+          about={salon.description}
+        />
 
-          <Text style={styles.copy}>{salon.description}</Text>
+        <View style={styles.body}>
 
           {glammzoOffers.length > 0 || salon.offers.length > 0 ? (
             <>
-              <Text variant="label" muted style={styles.section}>
-                Offers for you
-              </Text>
+              <SectionHeader title="Offers for you" first />
               <SalonOffersCarousel
                 glammzoOffers={glammzoOffers}
                 salonOffers={salon.offers}
@@ -608,9 +636,10 @@ export default function SalonDetailScreen() {
             </>
           ) : null}
 
-          <Text variant="label" muted style={styles.section}>
-            Services
-          </Text>
+          <SectionHeader
+            title="Services"
+            first={glammzoOffers.length === 0 && salon.offers.length === 0}
+          />
           {isUnisex ? (
             <UnisexAudiencePicker
               value={genderAudience}
@@ -886,116 +915,150 @@ export default function SalonDetailScreen() {
 
           {galleryPreview.length > 0 ? (
             <>
-              <Text variant="label" muted style={styles.section}>
-                Gallery
-              </Text>
-              <Text variant="heading" style={styles.sectionTitle}>
-                Inside the salon
-              </Text>
-              <View style={styles.galleryGrid}>
+              <SectionHeader
+                title="Photos"
+                actionLabel={`See all ${galleryPreview.length}`}
+                onAction={() => {
+                  setGalleryIndex(0)
+                  setGalleryOpen(true)
+                }}
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.bleed}
+                contentContainerStyle={styles.photoStrip}
+              >
                 {galleryPreview.map((uri, index) => (
                   <Pressable
                     key={`${uri}-g-${index}`}
-                    accessibilityRole="button"
-                    accessibilityLabel={`View ${salon.name} gallery photo ${index + 1}`}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`Photo ${index + 1} of ${galleryPreview.length}. Open full screen`}
                     onPress={() => {
                       setGalleryIndex(index)
                       setGalleryOpen(true)
                     }}
                   >
-                    <Image
-                      source={{ uri }}
-                      style={{ width: galleryTile, height: galleryTile, borderRadius: radii.md }}
-                      contentFit="cover"
-                    />
+                    <Image source={{ uri }} style={styles.photoTile} contentFit="cover" />
                   </Pressable>
                 ))}
-              </View>
+              </ScrollView>
             </>
           ) : null}
 
-          <Text variant="label" muted style={styles.section}>
-            Business details
-          </Text>
-          <View style={styles.panel}>
-            <Text variant="bodyStrong">{salon.address}</Text>
-            <Text muted>{salon.hours}</Text>
-            <Text muted>{salon.phone}</Text>
+          <SectionHeader title="Location and hours" />
+          <View style={styles.infoCard}>
+            <InfoRow
+              icon="location-outline"
+              title={salon.address}
+              actionLabel="Get directions"
+              onPress={() =>
+                openDirections({
+                  latitude: salon.latitude,
+                  longitude: salon.longitude,
+                  query: salon.address || [salon.name, salon.area, salon.city].filter(Boolean).join(", "),
+                })
+              }
+            />
+            {salon.hours ? <InfoRow icon="time-outline" title={salon.hours} /> : null}
+            {salon.phone ? (
+              <InfoRow
+                icon="call-outline"
+                title={salon.phone}
+                actionLabel="Call"
+                onPress={() => void Linking.openURL(`tel:${salon.phone.replace(/\s/g, "")}`)}
+                last
+              />
+            ) : null}
           </View>
 
           {amenityRows.length > 0 ? (
             <>
-              <Text variant="label" muted style={styles.section}>
-                Amenities
-              </Text>
-              <Text variant="heading" style={styles.sectionTitle}>
-                What this place offers
-              </Text>
-              <View style={styles.amenityList}>
-                {amenityRows.map((row) => (
-                  <View key={row.id} style={styles.amenityRow}>
-                    <Icon name={row.icon} size={22} color={colors.text} />
-                    <Text style={{ flex: 1 }}>{row.label}</Text>
+              <SectionHeader title="Amenities" />
+              <View style={styles.amenityChips}>
+                {(amenitiesOpen ? amenityRows : amenityRows.slice(0, 6)).map((row) => (
+                  <View key={row.id} style={styles.amenityChip}>
+                    <Icon name={row.icon} size={16} color={colors.text} />
+                    <Text variant="caption" style={styles.amenityText}>
+                      {row.label}
+                    </Text>
                   </View>
                 ))}
+                {amenityRows.length > 6 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setAmenitiesOpen((open) => !open)}
+                    style={[styles.amenityChip, styles.amenityMore]}
+                  >
+                    <Text variant="caption" style={styles.amenityText}>
+                      {amenitiesOpen ? "Show less" : `+${amenityRows.length - 6} more`}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </>
           ) : null}
 
           {salon.team.length > 0 ? (
             <>
-              <Text variant="label" muted style={styles.section}>
-                Team
-              </Text>
-              <Text variant="heading" style={styles.sectionTitle}>
-                Meet the specialists
-              </Text>
-              {salon.team.map((member) => (
-                <View key={member.id} style={styles.teamCard}>
-                  {member.imageUrl ? (
-                    <Image
-                      source={{ uri: member.imageUrl }}
-                      style={styles.teamPhoto}
-                      contentFit="cover"
-                      transition={200}
-                    />
-                  ) : (
-                    <View style={styles.teamAvatar}>
-                      <Text variant="bodyStrong" color={colors.primaryFg}>
-                        {member.name.slice(0, 1)}
-                      </Text>
-                    </View>
-                  )}
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="bodyStrong">{member.name}</Text>
-                    <Text variant="caption" muted>
+              <SectionHeader title="Team" />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.bleed}
+                contentContainerStyle={styles.teamRow}
+              >
+                {salon.team.map((member) => (
+                  <View
+                    key={member.id}
+                    style={styles.teamTile}
+                    accessible
+                    accessibilityLabel={`${member.name}, ${member.role}`}
+                  >
+                    {member.imageUrl ? (
+                      <Image source={{ uri: member.imageUrl }} style={styles.teamPhoto} contentFit="cover" transition={200} />
+                    ) : (
+                      <View style={[styles.teamPhoto, styles.teamAvatar]}>
+                        <Icon name="person-outline" size={32} color={colors.textMuted} />
+                      </View>
+                    )}
+                    <Text variant="bodyStrong" numberOfLines={1} style={styles.teamName}>
+                      {member.name}
+                    </Text>
+                    <Text variant="caption" muted numberOfLines={1} style={styles.teamName}>
                       {member.role}
                     </Text>
-                    {member.bio ? (
-                      <Text muted style={styles.teamBio}>
-                        {member.bio}
-                      </Text>
-                    ) : null}
                   </View>
-                </View>
-              ))}
+                ))}
+              </ScrollView>
             </>
           ) : null}
 
-          <Text variant="label" muted style={styles.section}>
-            Reviews
-          </Text>
-          <View style={styles.reviewSummary}>
-            <Text variant="title">{salon.rating.toFixed(1)}</Text>
-            <View>
-              <StarRow rating={salon.rating} />
-              <Text variant="caption" muted style={{ marginTop: 4 }}>
-                {salon.reviews} reviews
-              </Text>
+          <SectionHeader title="Reviews" />
+          {salon.reviews > 0 ? (
+            <View style={styles.reviewSummary} accessible accessibilityLabel={`${salon.rating.toFixed(1)} out of 5 from ${salon.reviews} reviews`}>
+              <Text variant="title">{salon.rating.toFixed(1)}</Text>
+              <View>
+                <StarRow rating={salon.rating} />
+                <Text variant="caption" muted style={{ marginTop: 4 }}>
+                  {salon.reviews} review{salon.reviews === 1 ? "" : "s"}
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : null}
           {customerReviews.length > 0 ? (
-            customerReviews.map((review) => <ReviewCard key={review.id} review={review} />)
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.bleed}
+              contentContainerStyle={styles.reviewRow}
+            >
+              {customerReviews.map((review) => (
+                <View key={review.id} style={{ width: Math.min(300, windowWidth * 0.8) }}>
+                  <ReviewCard review={review} />
+                </View>
+              ))}
+            </ScrollView>
           ) : (
             <View style={styles.emptyReviews}>
               <Text muted>No reviews yet. Be the first after your visit.</Text>
@@ -1218,9 +1281,6 @@ export default function SalonDetailScreen() {
                 setDetailPackage(null)
               }}
             />
-            {detailPackage.prepaidEnabled ? (
-              <BuyAheadButton salonId={salon.id} packageId={detailPackage.id} price={detailPackage.packagePrice} />
-            ) : null}
           </View>
         ) : null}
       </BottomSheet>
@@ -1502,7 +1562,8 @@ const styles = StyleSheet.create({
   },
   dots: {
     position: "absolute",
-    bottom: spacing.lg,
+    // Clear of the info card that overlaps the photo by 28.
+    bottom: spacing.lg + 28,
     alignSelf: "center",
     left: 0,
     right: 0,
@@ -1523,7 +1584,7 @@ const styles = StyleSheet.create({
   photoCount: {
     position: "absolute",
     right: spacing.lg,
-    bottom: spacing.lg,
+    bottom: spacing.lg + 28,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radii.sm,
@@ -1531,43 +1592,6 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  badges: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  meta: {
-    marginTop: spacing.sm,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xl,
-  },
-  actionBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionPressed: {
-    opacity: 0.85,
-  },
-  copy: {
-    marginTop: spacing.xl,
-  },
-  section: {
-    marginTop: spacing.xxxl,
-    marginBottom: spacing.sm,
-  },
-  sectionTitle: {
-    marginBottom: spacing.lg,
   },
   rowCard: {
     flexDirection: "row",
@@ -1790,55 +1814,16 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: "#F1F1F1",
   },
-  panel: {
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  galleryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  amenityList: {
-    gap: spacing.lg,
-  },
-  amenityRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  teamCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
   teamAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
   },
   teamPhoto: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: colors.muted,
-  },
-  teamBio: {
-    marginTop: spacing.sm,
-    lineHeight: 20,
+    marginBottom: spacing.sm,
   },
   reviewSummary: {
     flexDirection: "row",
@@ -1852,9 +1837,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   reviewCard: {
+    flex: 1,
     gap: spacing.sm,
     padding: spacing.lg,
-    marginBottom: spacing.md,
     borderRadius: radii.lg,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
@@ -1892,6 +1877,91 @@ const styles = StyleSheet.create({
   starRow: {
     flexDirection: "row",
     gap: 2,
+  },
+  bleed: {
+    marginHorizontal: -spacing.xl,
+  },
+  photoStrip: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+  },
+  photoTile: {
+    width: 132,
+    height: 132,
+    borderRadius: radii.md,
+    backgroundColor: colors.muted,
+  },
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    minHeight: 56,
+    paddingVertical: spacing.md,
+  },
+  infoRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  infoPressed: {
+    opacity: 0.7,
+  },
+  infoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.muted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoAction: {
+    fontFamily: "Geist_600SemiBold",
+    textDecorationLine: "underline",
+  },
+  amenityChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  amenityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  amenityMore: {
+    backgroundColor: colors.muted,
+    borderColor: colors.muted,
+  },
+  amenityText: {
+    fontSize: 13,
+  },
+  teamRow: {
+    gap: spacing.lg,
+    paddingHorizontal: spacing.xl,
+  },
+  teamTile: {
+    width: 84,
+    alignItems: "center",
+  },
+  teamName: {
+    textAlign: "center",
+    maxWidth: 84,
+  },
+  reviewRow: {
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
   },
   emptyReviews: {
     padding: spacing.xl,

@@ -21,7 +21,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
 import { ArtistOffersStrip } from "@/components/artists/ArtistOffersStrip"
-import { ArtistVerifiedBadge } from "@/components/artists/ArtistVerifiedBadge"
 import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
@@ -37,7 +36,6 @@ import { artistCartId } from "@/lib/artist-cart"
 import {
   artistLevelLabel,
   parseArtistLevel,
-  showArtistLevelToCustomers,
 } from "@/lib/artist-level"
 import {
   fetchPublicArtist,
@@ -270,15 +268,37 @@ export default function ArtistDetailScreen() {
   const reviewCount = artist.reviewCount ?? reviews.length
   const averageRating = artist.averageRating ?? 0
   const level = parseArtistLevel(artist.level)
-  const levelLabel = artistLevelLabel(level, artist.levelLabel)
-  const showVerified = artist.isVerified !== false
+  // "Getting started" is the Partner app's wording; customers read it as a new artist.
+  const levelName = level === "new" ? "New artist" : artistLevelLabel(level, artist.levelLabel)
   const coverUrl = portfolio[0]?.imageUrl || artist.profilePhotoUrl
   const prices = artist.services.map((service) => service.price).filter((price) => price > 0)
   const startingPrice = prices.length > 0 ? Math.min(...prices) : null
 
+  function shareArtist() {
+    if (!artist) return
+    const url = `${LEGAL.siteUrl}/a/${encodeURIComponent(artist.slug)}`
+    void Share.share(
+      Platform.OS === "ios"
+        ? { message: `Book ${artist.displayName} on Glammzo`, url }
+        : { message: `Book ${artist.displayName} on Glammzo\n${url}`, title: artist.displayName },
+    ).catch(() => {})
+  }
+
+  function toggleFavorite() {
+    if (!artist) return
+    void (async () => {
+      const result = await toggle(artist.slug)
+      if (result === "auth") {
+        router.push({
+          pathname: "/login",
+          params: { next: `/artist/${artist.slug}` },
+        } as Href)
+      }
+    })()
+  }
+
   return (
     <View style={styles.root}>
-      {header}
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={[
@@ -287,7 +307,7 @@ export default function ArtistDetailScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.cover, { height: Math.round(width * 0.72) }]}>
+        <View style={[styles.cover, { height: Math.round(width * 0.72) + insets.top }]}>
           {coverUrl ? (
             <Image source={{ uri: coverUrl }} style={styles.coverImage} contentFit="cover" transition={150} />
           ) : null}
@@ -305,21 +325,20 @@ export default function ArtistDetailScreen() {
                   </Text>
                 </View>
               )}
-              {showArtistLevelToCustomers(level) ? (
-                <View style={styles.levelOnAvatar} accessibilityLabel={`${levelLabel} level`}>
-                  <ArtistLevelBadge level={level} size={24} />
-                </View>
-              ) : null}
             </View>
           }
           status={{
-            label: artist.offersHomeVisits ? "Home visits & studio" : "Studio visits",
+            label: artist.offersHomeVisits ? "Home & studio" : "Studio",
             tone: "neutral",
           }}
           offerLabel={artist.offers?.[0]?.title ?? null}
           title={artist.displayName}
-          titleAccessory={showVerified ? <ArtistVerifiedBadge size={20} /> : null}
-          subtitle={[showArtistLevelToCustomers(level) ? levelLabel : null, where].filter(Boolean).join(" · ")}
+          titleAccessory={
+            <View accessible accessibilityLabel={`${levelName} level`}>
+              <ArtistLevelBadge level={level} size={26} />
+            </View>
+          }
+          subtitle={[levelName, where].filter(Boolean).join(" · ")}
           stats={[
             reviewCount > 0
               ? {
@@ -333,22 +352,6 @@ export default function ArtistDetailScreen() {
             ...(startingPrice != null ? [{ value: formatRupees(startingPrice), label: "starting price" }] : []),
           ]}
           actions={[
-            ...(portfolio.length > 0
-              ? [{
-                  icon: "images-outline" as const,
-                  label: "Portfolio",
-                  onPress: () =>
-                    scrollRef.current?.scrollTo({ y: Math.max(0, portfolioY.current - spacing.md), animated: true }),
-                }]
-              : []),
-            ...(reviewCount > 0
-              ? [{
-                  icon: "chatbubble-ellipses-outline" as const,
-                  label: "Reviews",
-                  onPress: () =>
-                    scrollRef.current?.scrollTo({ y: Math.max(0, reviewsY.current - spacing.md), animated: true }),
-                }]
-              : []),
             ...(artist.instagramHandle
               ? [{
                   icon: "logo-instagram" as const,
@@ -357,18 +360,6 @@ export default function ArtistDetailScreen() {
                     void Linking.openURL(`https://instagram.com/${artist.instagramHandle!.replace(/^@/, "")}`),
                 }]
               : []),
-            {
-              icon: "share-outline" as const,
-              label: "Share",
-              onPress: () => {
-                const url = `${LEGAL.siteUrl}/a/${encodeURIComponent(artist.slug)}`
-                void Share.share(
-                  Platform.OS === "ios"
-                    ? { message: `Book ${artist.displayName} on Glammzo`, url }
-                    : { message: `Book ${artist.displayName} on Glammzo\n${url}`, title: artist.displayName },
-                ).catch(() => {})
-              },
-            },
           ]}
           about={artist.bio}
         />
@@ -456,7 +447,7 @@ export default function ArtistDetailScreen() {
               No services are open for online booking yet.
             </Text>
           ) : (
-            <View style={styles.serviceList}>
+            <View style={styles.serviceBand}>
               {artist.services.map((service, index) => (
                 <ArtistServiceRow
                   key={service.id}
@@ -479,9 +470,19 @@ export default function ArtistDetailScreen() {
             }}
           >
             <SectionHeader title="Reviews" style={sectionHeaderInline} />
-            <Text variant="caption" muted>
-              ★ {averageRating.toFixed(1)} · {reviewCount} review{reviewCount === 1 ? "" : "s"}
-            </Text>
+            <View
+              style={styles.reviewSummary}
+              accessible
+              accessibilityLabel={`Rated ${averageRating.toFixed(1)} out of 5 from ${reviewCount} review${reviewCount === 1 ? "" : "s"}`}
+            >
+              <Text style={styles.reviewScore}>{averageRating.toFixed(1)}</Text>
+              <View>
+                <Text variant="bodyStrong">{"★".repeat(Math.round(averageRating))}</Text>
+                <Text variant="caption" muted>
+                  {reviewCount} review{reviewCount === 1 ? "" : "s"}
+                </Text>
+              </View>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -490,9 +491,21 @@ export default function ArtistDetailScreen() {
             >
             {(reviews.length > 0 ? reviews : []).slice(0, 8).map((review) => (
               <View key={review.id} style={[styles.reviewCard, { width: Math.min(300, width * 0.8) }]}>
+                {review.comment ? (
+                  <Text variant="body" numberOfLines={4}>
+                    {`“${review.comment}”`}
+                  </Text>
+                ) : null}
                 <View style={styles.reviewHead}>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyStrong">{review.authorName}</Text>
+                  <View style={styles.reviewInitial}>
+                    <Text variant="caption" style={styles.reviewInitialText}>
+                      {review.authorName.slice(0, 1).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="caption" style={styles.reviewAuthor} numberOfLines={1}>
+                      {review.authorName}
+                    </Text>
                     <Text variant="caption" muted numberOfLines={1}>
                       {new Date(review.createdAt).toLocaleDateString("en-IN", {
                         day: "numeric",
@@ -502,15 +515,10 @@ export default function ArtistDetailScreen() {
                       {review.serviceName ? ` · ${review.serviceName}` : ""}
                     </Text>
                   </View>
-                  <Text variant="bodyStrong" accessibilityLabel={`${Number(review.rating).toFixed(1)} stars`}>
+                  <Text variant="caption" style={styles.reviewAuthor} accessibilityLabel={`${Number(review.rating).toFixed(1)} stars`}>
                     ★ {Number(review.rating).toFixed(1)}
                   </Text>
                 </View>
-                {review.comment ? (
-                  <Text variant="body" muted numberOfLines={4} style={{ marginTop: spacing.sm }}>
-                    {review.comment}
-                  </Text>
-                ) : null}
                 <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
               </View>
             ))}
@@ -519,14 +527,43 @@ export default function ArtistDetailScreen() {
         ) : null}
 
         {artist.cancellationPolicyText ? (
-          <View style={styles.section}>
-            <SectionHeader title="Cancellation policy" style={sectionHeaderInline} />
-            <Text variant="body" muted numberOfLines={4}>
-              {artist.cancellationPolicyText}
-            </Text>
+          <View style={styles.policy}>
+            <Icon name="shield-checkmark-outline" size={20} color={colors.textMuted} />
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text variant="caption" style={styles.reviewAuthor}>
+                Cancellation policy
+              </Text>
+              <Text variant="caption" muted numberOfLines={4}>
+                {artist.cancellationPolicyText}
+              </Text>
+            </View>
           </View>
         ) : null}
       </ScrollView>
+
+      <View style={[styles.photoActions, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/artists" as Href))}
+          style={styles.roundBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Icon name="chevron-back" size={22} color={colors.text} />
+        </Pressable>
+        <View style={styles.photoActionsRight} pointerEvents="box-none">
+          <Pressable onPress={shareArtist} style={styles.roundBtn} accessibilityRole="button" accessibilityLabel="Share">
+            <Icon name="share-outline" size={20} color={colors.text} />
+          </Pressable>
+          <Pressable
+            onPress={toggleFavorite}
+            style={styles.roundBtn}
+            accessibilityRole="button"
+            accessibilityLabel={favorited ? "Remove favorite" : "Save artist"}
+          >
+            <Icon name={favorited ? "heart" : "heart-outline"} size={20} color={favorited ? colors.primary : colors.text} />
+          </Pressable>
+        </View>
+      </View>
 
       <BottomSheet
         visible={detailService != null}
@@ -721,8 +758,7 @@ const styles = StyleSheet.create({
   avatarWrap: {
     position: "relative",
     alignSelf: "flex-start",
-    marginTop: -64,
-    marginBottom: spacing.md,
+    marginTop: -52,
   },
   avatar: {
     width: 84,
@@ -733,14 +769,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.muted,
   },
   avatarFallback: { alignItems: "center", justifyContent: "center" },
-  levelOnAvatar: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    borderRadius: 99,
-    backgroundColor: colors.card,
-    padding: 2,
-  },
   ratingPill: {
     backgroundColor: colors.primary,
     borderRadius: radii.sm,
@@ -765,11 +793,67 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 4,
   },
-  serviceList: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    overflow: "hidden",
+  // Full width on white, so the list reads differently from the cards around it.
+  serviceBand: {
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.xs,
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  photoActions: {
+    position: "absolute",
+    left: spacing.lg,
+    right: spacing.lg,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  photoActionsRight: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  roundBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
     ...shadows.card,
+  },
+  reviewSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  reviewScore: {
+    fontSize: 40,
+    lineHeight: 46,
+    fontFamily: "Geist_700Bold",
+    color: colors.text,
+  },
+  reviewInitial: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  reviewInitialText: {
+    fontFamily: "Geist_600SemiBold",
+  },
+  reviewAuthor: {
+    fontFamily: "Geist_600SemiBold",
+  },
+  policy: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
   sheetBody: {
     gap: spacing.xs,
@@ -781,13 +865,15 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     backgroundColor: colors.muted,
   },
+  // Quiet quotes on grey: no shadow, the words come first.
   reviewCard: {
-    backgroundColor: colors.card,
+    backgroundColor: colors.muted,
     borderRadius: radii.lg,
     padding: spacing.lg,
-    ...shadows.card,
+    gap: spacing.md,
+    justifyContent: "space-between",
   },
-  reviewHead: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
+  reviewHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   lightbox: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.94)",

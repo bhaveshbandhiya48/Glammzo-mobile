@@ -1,9 +1,8 @@
 import { Image } from "expo-image"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { Animated, Easing, Linking, StyleSheet, View } from "react-native"
+import { Stack, useLocalSearchParams, usePreventRemove, useRouter, type Href } from "expo-router"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Animated, Easing, Linking, Pressable, StyleSheet, View } from "react-native"
 
-import { ShareArtistInvoiceButton } from "@/components/bookings/ShareArtistInvoiceButton"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Screen } from "@/components/ui/Screen"
@@ -18,7 +17,8 @@ import {
 } from "@/lib/booking-display"
 import { fetchBookingById } from "@/lib/bookings-api"
 import { getSalonByIdLive } from "@/lib/salons-api"
-import { directionsUrl, googleCalendarUrl, visitStart } from "@/lib/visit-links"
+import { googleCalendarUrl, openDirections, visitStart } from "@/lib/visit-links"
+import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 const PENDING_STEPS_SALON = [
@@ -56,7 +56,8 @@ function parseStatus(value: string | null | undefined): BookingStatus {
     value === "completed" ||
     value === "cancelled" ||
     value === "declined" ||
-    value === "expired"
+    value === "expired" ||
+    value === "payment_failed"
   ) {
     return value
   }
@@ -76,6 +77,13 @@ function confirmationCopy(status: BookingStatus, artist: boolean) {
         footerHint: artist
           ? "Need to change plans? Cancel from My bookings at least 2 hours before."
           : "Need to change your appointment? You can cancel or reschedule once the salon confirms.",
+      }
+    case "payment_failed":
+      return {
+        title: "Payment failed",
+        description: "The advance wasn't paid in time, so this slot was released.",
+        panelTitle: "Next steps",
+        footerHint: `Still want this visit? Book again from the ${provider} page.`,
       }
     case "declined":
     case "expired":
@@ -191,6 +199,15 @@ function PassRow({
 
 export default function BookingConfirmationScreen() {
   const router = useRouter()
+  const allowLeaveRef = useRef(false)
+  const [guardBack, setGuardBack] = useState(true)
+  const disablePreventionRef = useRef<() => void>(() => {})
+  /** Lets the next navigation leave this screen (the back guard below stays out of the way). */
+  const allowLeave = useCallback(() => {
+    allowLeaveRef.current = true
+    setGuardBack(false)
+    disablePreventionRef.current()
+  }, [])
   const params = useLocalSearchParams<{
     salonId?: string | string[]
     total?: string | string[]
@@ -205,8 +222,10 @@ export default function BookingConfirmationScreen() {
     area?: string | string[]
     providerName?: string | string[]
     photoUrl?: string | string[]
-    /** Artist advance still to pay (Glammzo web payment page). */
-    payUrl?: string | string[]
+    /** Advance the client just paid in the app (rupees). */
+    advancePaid?: string | string[]
+    /** Artist advance still to pay: the booking token for the in-app payment screen. */
+    payToken?: string | string[]
   }>()
 
   const salonId = firstParam(params.salonId)
@@ -235,6 +254,25 @@ export default function BookingConfirmationScreen() {
 
   const iconScale = useRef(new Animated.Value(0.82)).current
   const iconOpacity = useRef(new Animated.Value(0)).current
+
+  /** Flipkart-style: leave confirmation to Home / Bookings — never back into checkout. */
+  const leaveTo = useCallback(
+    (href: "/(tabs)/explore" | "/(tabs)/bookings") => {
+      allowLeave()
+      router.replace(href)
+    },
+    [allowLeave, router],
+  )
+
+  // Back (gesture or button) never returns into checkout: it goes to Explore instead.
+  disablePreventionRef.current = usePreventRemove(guardBack, ({ repeat }) => {
+    if (allowLeaveRef.current) {
+      disablePreventionRef.current()
+      repeat()
+      return
+    }
+    leaveTo("/(tabs)/explore")
+  })
 
   useEffect(() => {
     Animated.parallel([
@@ -304,8 +342,13 @@ export default function BookingConfirmationScreen() {
   const badge = statusBadgeColors(status)
   const isPending = status === "pending"
   const isNegative =
-    status === "declined" || status === "expired" || status === "cancelled"
+    status === "declined" || status === "expired" || status === "cancelled" || status === "payment_failed"
   const isSuccess = !isPending && !isNegative
+  const headerTitle = isNegative
+    ? "Booking update"
+    : isPending
+      ? "Request sent"
+      : "Booking confirmed"
   const bookingReference =
     bookingId && !bookingId.startsWith("artist:")
       ? bookingId.slice(0, 8).toUpperCase()
@@ -318,46 +361,47 @@ export default function BookingConfirmationScreen() {
     ? providerName || "Solo artist"
     : booking?.staffName?.trim() || "Any available"
   const titleName = providerName || salon?.name || (isArtist ? "Solo artist" : "Salon")
-  const coverUri = salon?.coverImageUrl || salon?.imageUrl || photoUrl || null
   const thumbUri = photoUrl || salon?.imageUrl || salon?.coverImageUrl || null
   const pendingSteps = isArtist ? PENDING_STEPS_ARTIST : PENDING_STEPS_SALON
-  const payLabel = isArtist ? "Pay artist directly" : "Pay at salon"
-  const artistInvoiceBooking: Booking | null = isArtist
-    ? {
-        id: bookingId || `artist:${salonId || "booking"}`,
-        salonId: salonId || "",
-        salonName: titleName,
-        salonArea: areaLine || visitType || "Visit",
-        services: servicesLine
-          ? servicesLine.split(" · ").map((name, index) => ({
-              id: `svc-${index}`,
-              name: name.trim() || "Service",
-              price: Number(displayTotal) || 0,
-              durationMin: 0,
-            }))
-          : [
-              {
-                id: "svc-0",
-                name: "Service",
-                price: Number(displayTotal) || 0,
-                durationMin: 0,
-              },
-            ],
-        date: bookingDate,
-        time: bookingTime,
-        price: Number(displayTotal) || 0,
-        durationMin: 0,
-        notes: visitType || areaLine || "Visit",
-        status,
-        createdAt: new Date().toISOString(),
-        kind: "artist",
-        artistSlug: salonId || undefined,
-        artistPublicToken: bookingId?.replace(/^artist:/, "") || undefined,
-      }
-    : null
+  const advancePaid = Number(firstParam(params.advancePaid) ?? 0)
+  const payLabel =
+    advancePaid > 0
+      ? `${formatRupees(advancePaid)} advance paid · ${formatRupees(Math.max(0, Number(displayTotal) - advancePaid))} at the ${isArtist ? "visit" : "salon"}`
+      : isArtist
+        ? "Pay artist directly"
+        : "Pay at salon"
 
   return (
     <Screen scroll contentStyle={styles.screen}>
+      <Stack.Screen
+        options={{
+          title: headerTitle,
+          headerBackVisible: false,
+          gestureEnabled: true,
+          headerLeft: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Go to home"
+              hitSlop={10}
+              onPress={() => leaveTo("/(tabs)/explore")}
+              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+            >
+              <Icon name="chevron-back" size={24} color={colors.text} />
+            </Pressable>
+          ),
+          headerRight: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              hitSlop={10}
+              onPress={() => leaveTo("/(tabs)/explore")}
+              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+            >
+              <Icon name="close" size={22} color={colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
       {(isSuccess || isPending) && <SuccessConfetti />}
 
       <View style={styles.hero}>
@@ -400,15 +444,6 @@ export default function BookingConfirmationScreen() {
       </View>
 
       <View style={styles.pass}>
-        {coverUri && !isArtist ? (
-          <Image
-            source={{ uri: coverUri }}
-            style={styles.passCover}
-            contentFit="cover"
-            transition={200}
-          />
-        ) : null}
-
         <View style={styles.passBody}>
           <View style={styles.providerRow}>
             {thumbUri ? (
@@ -486,12 +521,21 @@ export default function BookingConfirmationScreen() {
           <Text variant="label" muted style={styles.nextTitle}>
             {copy.panelTitle}
           </Text>
-          {isPending && firstParam(params.payUrl) ? (
+          {isPending && firstParam(params.payToken) ? (
             <View style={{ gap: 6, marginBottom: 12 }}>
               <Text variant="caption" muted>
                 Your booking is confirmed once the advance is paid. The time is held for 15 minutes.
               </Text>
-              <Button label="Pay advance" onPress={() => void Linking.openURL(firstParam(params.payUrl)!)} />
+              <Button
+                label="Pay advance"
+                onPress={() => {
+                  allowLeave()
+                  router.replace({
+                    pathname: "/pay/advance/[token]",
+                    params: { token: firstParam(params.payToken)!, next: JSON.stringify(params) },
+                  } as Href)
+                }}
+              />
             </View>
           ) : null}
           {isPending ? (
@@ -564,35 +608,43 @@ export default function BookingConfirmationScreen() {
       ) : null}
 
       <View style={styles.actions}>
-        {artistInvoiceBooking && !isNegative ? (
-          <ShareArtistInvoiceButton booking={artistInvoiceBooking} />
-        ) : null}
-        <Button
-          label="View my bookings"
-          onPress={() => router.replace("/(tabs)/bookings")}
-        />
-        <Button
-          label={isNegative ? "Book again" : "Done"}
-          variant="secondary"
-          onPress={() => {
-            if (isNegative && salonId) {
-              router.replace(
-                isArtist
-                  ? { pathname: "/artist/[slug]", params: { slug: salonId } }
-                  : { pathname: "/salon/[id]", params: { id: salonId } },
-              )
-              return
-            }
-            if (isArtist && salonId) {
-              router.replace({
-                pathname: "/artist/[slug]",
-                params: { slug: salonId },
-              })
-              return
-            }
-            router.replace("/(tabs)/explore")
-          }}
-        />
+        {isNegative ? (
+          <>
+            <Button
+              label="Book again"
+              onPress={() => {
+                allowLeave()
+                if (salonId) {
+                  router.replace(
+                    isArtist
+                      ? { pathname: "/artist/[slug]", params: { slug: salonId } }
+                      : { pathname: "/salon/[id]", params: { id: salonId } },
+                  )
+                  return
+                }
+                leaveTo("/(tabs)/explore")
+              }}
+            />
+            <Button
+              label="Go to home"
+              variant="secondary"
+              onPress={() => leaveTo("/(tabs)/explore")}
+            />
+          </>
+        ) : (
+          <>
+            {/* Flipkart-style: View order first, then continue shopping. */}
+            <Button
+              label="View my bookings"
+              onPress={() => leaveTo("/(tabs)/bookings")}
+            />
+            <Button
+              label="Continue browsing"
+              variant="secondary"
+              onPress={() => leaveTo("/(tabs)/explore")}
+            />
+          </>
+        )}
         <Text variant="caption" muted style={styles.footerHint}>
           {copy.footerHint}
         </Text>
@@ -639,9 +691,11 @@ function VisitLinks(props: {
           variant="secondary"
           style={styles.linkBtn}
           onPress={() =>
-            void Linking.openURL(
-              directionsUrl({ latitude: props.latitude, longitude: props.longitude, query: location }),
-            )
+            openDirections({
+              latitude: props.latitude,
+              longitude: props.longitude,
+              query: location,
+            })
           }
         />
       ) : null}
@@ -650,6 +704,15 @@ function VisitLinks(props: {
 }
 
 const styles = StyleSheet.create({
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerBtnPressed: {
+    opacity: 0.5,
+  },
   linkRow: {
     flexDirection: "row",
     gap: spacing.sm,
@@ -728,11 +791,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.card,
     overflow: "hidden",
-  },
-  passCover: {
-    width: "100%",
-    height: 120,
-    backgroundColor: colors.muted,
   },
   passBody: {
     padding: spacing.xl,

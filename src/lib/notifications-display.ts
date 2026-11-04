@@ -10,6 +10,8 @@ export function notificationIcon(type: AppNotificationType): IconName {
       return "hourglass-outline"
     case "booking_reminder":
       return "alarm-outline"
+    case "booking_rescheduled":
+      return "swap-horizontal-outline"
     case "booking_completed":
       return "ribbon-outline"
     case "booking_cancelled":
@@ -33,6 +35,7 @@ export function notificationTone(type: AppNotificationType): { fg: string; bg: s
       return { fg: status.successFg, bg: status.successBg }
     case "booking_reminder":
     case "booking_pending":
+    case "booking_rescheduled":
       return { fg: status.warnFg, bg: status.warnBg }
     case "booking_cancelled":
     case "booking_declined":

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Animated, Dimensions, Easing } from "react-native"
 
 const OFFSCREEN = Dimensions.get("window").height
@@ -11,9 +11,16 @@ export function useSheetAnimation(visible: boolean) {
   const [mounted, setMounted] = useState(visible)
   const backdropOpacity = useRef(new Animated.Value(0)).current
   const sheetY = useRef(new Animated.Value(OFFSCREEN)).current
+  /** Set when swipe already took the sheet off-screen — skip the exit slide. */
+  const skipExitAnimRef = useRef(false)
+
+  const markDragDismissed = useCallback(() => {
+    skipExitAnimRef.current = true
+  }, [])
 
   useEffect(() => {
     if (visible) {
+      skipExitAnimRef.current = false
       setMounted(true)
       backdropOpacity.setValue(0)
       sheetY.setValue(OFFSCREEN)
@@ -35,6 +42,15 @@ export function useSheetAnimation(visible: boolean) {
       return
     }
     if (!mounted) return
+
+    if (skipExitAnimRef.current) {
+      skipExitAnimRef.current = false
+      backdropOpacity.setValue(0)
+      sheetY.setValue(OFFSCREEN)
+      setMounted(false)
+      return
+    }
+
     Animated.parallel([
       Animated.timing(backdropOpacity, { toValue: 0, duration: 180, useNativeDriver: true }),
       Animated.timing(sheetY, {
@@ -49,5 +65,5 @@ export function useSheetAnimation(visible: boolean) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run on visibility changes only
   }, [visible])
 
-  return { mounted, backdropOpacity, sheetY }
+  return { mounted, backdropOpacity, sheetY, markDragDismissed }
 }

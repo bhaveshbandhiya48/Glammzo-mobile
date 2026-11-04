@@ -2,6 +2,7 @@ import { useRouter, type Href } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Pressable,
   ScrollView,
@@ -27,8 +28,11 @@ import {
   type ArtistSort,
   type ArtistWhere,
 } from "@/lib/artists-api"
+import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
 import { colors, radii, spacing } from "@/theme/tokens"
+
+const GRID_ITEM_WIDTH = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2
 
 const WHERE_OPTIONS: Array<{ id: ArtistWhere; label: string }> = [
   { id: "any", label: "Anywhere" },
@@ -147,6 +151,7 @@ export default function ArtistsScreen() {
       sort: effectiveSort,
       latitude: hasPin ? location!.latitude : undefined,
       longitude: hasPin ? location!.longitude : undefined,
+      radiusKm: hasPin ? NEARBY_RADIUS_KM : undefined,
     }),
     [filters, debounced, effectiveSort, hasPin, location],
   )
@@ -226,12 +231,9 @@ export default function ArtistsScreen() {
 
   const header = (
     <View style={styles.header}>
-      <View>
-        <Text variant="title">Artists</Text>
-        <Text variant="body" muted style={{ marginTop: 2 }}>
-          Makeup, hair, mehendi and more. At your place or theirs.
-        </Text>
-      </View>
+      <Text variant="body" muted>
+        {location?.label ? `Near ${location.label}` : "Makeup, hair, mehendi and more. At your place or theirs."}
+      </Text>
 
       <View style={styles.search}>
         <Icon name="search-outline" size={18} color={colors.textSubtle} />
@@ -338,9 +340,12 @@ export default function ArtistsScreen() {
 
   if (catalog === undefined) {
     return (
-      <View style={[styles.root, { padding: spacing.lg, gap: spacing.md }]}>
+      <View style={[styles.root, styles.skeletonRoot]}>
         {[0, 1, 2].map((i) => (
-          <SkeletonBone key={i} height={150} radius={radii.lg} />
+          <View key={i} style={styles.gridRow}>
+            <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
+            <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
+          </View>
         ))}
       </View>
     )
@@ -351,7 +356,7 @@ export default function ArtistsScreen() {
       <View style={[styles.root, styles.empty]}>
         <Icon name="sparkles-outline" size={40} color={colors.primary} />
         <Text variant="heading" style={{ textAlign: "center" }}>
-          Artists are coming soon
+          No artists near you
         </Text>
         <Text variant="body" muted style={{ textAlign: "center" }}>
           Solo makeup, hair and mehendi artists will appear here. Check back shortly.
@@ -367,36 +372,49 @@ export default function ArtistsScreen() {
         contentContainerStyle={styles.list}
         data={artists ?? []}
         keyExtractor={(item) => item.slug}
+        numColumns={2}
+        columnWrapperStyle={styles.gridRow}
         ListHeaderComponent={header}
-        ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         renderItem={({ item }) => (
-          <ArtistCard
-            artist={item}
-            categoryLabel={labelOf}
-            onPress={() =>
-              router.push({
-                pathname: "/artist/[slug]",
-                params: { slug: item.slug, name: item.displayName },
-              } as Href)
-            }
-          />
+          <View style={styles.gridItem}>
+            <ArtistCard
+              artist={item}
+              categoryLabel={labelOf}
+              grid
+              onPress={() =>
+                router.push({
+                  pathname: "/artist/[slug]",
+                  params: { slug: item.slug, name: item.displayName },
+                } as Href)
+              }
+            />
+          </View>
         )}
         ListEmptyComponent={
           artists === null ? (
             <View style={{ gap: spacing.md }}>
               {[0, 1, 2].map((i) => (
-                <SkeletonBone key={i} height={150} radius={radii.lg} />
+                <View key={i} style={styles.gridRow}>
+                  <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
+                  <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
+                </View>
               ))}
             </View>
           ) : (
             <View style={styles.emptyList}>
               <Text variant="heading" style={{ textAlign: "center" }}>
-                {error ? "Couldn't load artists" : "No artists match"}
+                {error
+                  ? "Couldn't load artists"
+                  : activeFilterCount > 0 || debounced.trim()
+                    ? "No artists match"
+                    : `No artists near ${location?.label ?? "you"}`}
               </Text>
               <Text variant="body" muted style={{ textAlign: "center" }}>
                 {error
                   ? "Check your connection and try again."
-                  : "Try clearing filters or searching something else."}
+                  : activeFilterCount > 0 || debounced.trim()
+                    ? "Try clearing filters or searching something else."
+                    : `We show artists within ${NEARBY_RADIUS_KM} km. Try another location from Home.`}
               </Text>
               {activeFilterCount > 0 && !error ? (
                 <Pressable accessibilityRole="button" onPress={clearFilters} style={styles.clearLink}>
@@ -438,7 +456,23 @@ export default function ArtistsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
+  skeletonRoot: {
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
   list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+  gridRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  gridCell: {
+    flex: 1,
+  },
+  // Fixed width, so a lone card in the last row stays half width.
+  gridItem: {
+    width: GRID_ITEM_WIDTH,
+  },
   header: { gap: spacing.md, marginBottom: spacing.lg },
   search: {
     flexDirection: "row",

@@ -91,15 +91,29 @@ function reviewsFor(
   ]
 }
 
-/** Hero / gallery slides: unique cover + gallery, capped at 5. */
+/**
+ * Detail hero slider: explore/list photo first, then gallery.
+ * Cover is never included (matches web — cover was removed from salon layout).
+ */
 export function getSalonHeroSlides(salon: Salon, max = 5): string[] {
-  const urls = [salon.coverImageUrl, salon.imageUrl, ...salon.gallery]
+  const exploreUrl = salon.imageUrl?.trim() || ""
+  const coverUrl = salon.coverImageUrl?.trim() || ""
   const unique: string[] = []
-  for (const url of urls) {
-    if (url && !unique.includes(url)) unique.push(url)
+
+  if (exploreUrl) unique.push(exploreUrl)
+
+  for (const url of salon.gallery ?? []) {
     if (unique.length >= max) break
+    const trimmed = url?.trim()
+    if (!trimmed) continue
+    if (coverUrl && trimmed === coverUrl) continue
+    if (unique.includes(trimmed)) continue
+    unique.push(trimmed)
   }
-  return unique
+
+  if (unique.length > 0) return unique
+  // Last resort if a salon has neither list nor gallery photos yet.
+  return coverUrl ? [coverUrl] : []
 }
 
 const CARD_GALLERY_LIMIT = 3

@@ -23,6 +23,7 @@ import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
 import { ApiError } from "@/lib/api"
 import { requestOtp, verifyOtp } from "@/lib/auth-api"
+import { API_URL } from "@/lib/config"
 import { LEGAL } from "@/lib/legal"
 import { registerPushTokenWithServer } from "@/lib/push"
 import { patchConsumerProfileCache, setDisplayName } from "@/lib/user"
@@ -188,7 +189,13 @@ export default function LoginScreen() {
         await sendOtpCode()
         setStep("otp")
       } catch (err) {
-        setError(err instanceof ApiError ? err.message : "Could not send code.")
+        setError(
+          err instanceof ApiError
+            ? err.message
+            : `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
+                err instanceof Error ? err.message : ""
+              }`.trim(),
+        )
       } finally {
         setLoading(false)
       }
@@ -227,7 +234,12 @@ export default function LoginScreen() {
             setOtp(echoed)
           }
         } else {
-          setError("Could not verify code.")
+          // Usually unreachable API (stale LAN IP / simulator host) — not a wrong OTP.
+          setError(
+            `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
+              err instanceof Error ? err.message : ""
+            }`.trim(),
+          )
         }
       } finally {
         setLoading(false)
@@ -313,6 +325,11 @@ export default function LoginScreen() {
             )}
           </View>
 
+          {__DEV__ ? (
+            <Text variant="caption" muted style={styles.gap}>
+              API: {API_URL}
+            </Text>
+          ) : null}
           {__DEV__ && debugOtp && step === "otp" ? (
             <Text variant="caption" color={colors.primary} style={styles.gap}>
               Dev OTP: {debugOtp}

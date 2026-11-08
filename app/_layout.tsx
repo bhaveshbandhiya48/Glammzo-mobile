@@ -7,6 +7,7 @@ import { View } from "react-native"
 
 import { AnimatedSplash } from "@/components/brand/AnimatedSplash"
 import { OfflineBanner } from "@/components/layout/OfflineBanner"
+import { PendingPaymentWatcher } from "@/components/payments/PendingPaymentWatcher"
 import { ProfileStackHeader } from "@/components/layout/ProfileStackHeader"
 import { CartProvider } from "@/context/CartContext"
 import { ArtistFavoritesProvider } from "@/context/ArtistFavoritesContext"
@@ -15,6 +16,7 @@ import { NetworkProvider } from "@/context/NetworkContext"
 import { NotificationsProvider } from "@/context/NotificationsContext"
 import { useLaunchPermissions } from "@/hooks/useLaunchPermissions"
 import { usePushRegistration } from "@/hooks/usePushRegistration"
+import { prefetchPaymentOptions } from "@/lib/advance-payment"
 import "@/lib/config"
 import { hydrateGreetingCache } from "@/lib/user"
 import { appFonts } from "@/theme/fonts"
@@ -53,9 +55,16 @@ function RootNavigator() {
   useLaunchPermissions()
   usePushRegistration()
 
+  useEffect(() => {
+    // After start-up settles, so the payment sheet opens with the UPI apps already listed.
+    const t = setTimeout(() => void prefetchPaymentOptions(), 4000)
+    return () => clearTimeout(t)
+  }, [])
+
   return (
     <>
       <StatusBar style="dark" />
+      <PendingPaymentWatcher />
       <Stack
         screenOptions={{
           headerShown: true,

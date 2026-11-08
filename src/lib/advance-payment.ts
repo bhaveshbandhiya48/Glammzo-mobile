@@ -1,6 +1,7 @@
-import { Linking, NativeModules, Platform } from "react-native"
+import { AppState, Linking, NativeModules, Platform } from "react-native"
 
 import { CRM_URL } from "@/lib/config"
+import { clearPendingPayment, savePendingPayment } from "@/lib/pending-payment"
 
 /** One Razorpay order for a held booking; retries on the pay screen reuse it. */
 export type AdvanceOrder = {
@@ -171,19 +172,32 @@ export function toBanks(raw: unknown): Bank[] {
     })
 }
 
-/**
- * The SDK's helper clears every listener when any call answers, so these two run one after the other.
- */
 /** Kept for the session so a second payment opens with its options already there. */
 let cachedOptions: { keyId: string; upiApps: UpiApp[]; banks: Bank[] } | null = null
+let loadingOptions: { keyId: string; promise: Promise<{ upiApps: UpiApp[]; banks: Bank[] }> } | null = null
+/** True while Razorpay's payment screen is open. Re-initialising the SDK then breaks the payment on iOS. */
+let paymentInFlight = false
 
-export async function loadPaymentOptions(keyId: string): Promise<{ upiApps: UpiApp[]; banks: Bank[] }> {
+/**
+ * The SDK's helper clears every listener when any call answers, so the two lookups run one after
+ * the other, and two loads never run at once.
+ */
+export function loadPaymentOptions(keyId: string): Promise<{ upiApps: UpiApp[]; banks: Bank[] }> {
+  if (cachedOptions?.keyId === keyId) return Promise.resolve(cachedOptions)
+  if (loadingOptions?.keyId === keyId) return loadingOptions.promise
+  const promise = fetchPaymentOptions(keyId).finally(() => {
+    if (loadingOptions?.promise === promise) loadingOptions = null
+  })
+  loadingOptions = { keyId, promise }
+  return promise
+}
+
+async function fetchPaymentOptions(keyId: string): Promise<{ upiApps: UpiApp[]; banks: Bank[] }> {
   const sdk = razorpay()
-  if (!sdk) return { upiApps: [], banks: [] }
+  if (!sdk || paymentInFlight) return { upiApps: [], banks: [] }
   sdk.initRazorpay(keyId)
   // Android finishes setting up on its UI thread, and asking for payment methods before that crashes.
   await new Promise((resolve) => setTimeout(resolve, 300))
-  if (cachedOptions?.keyId === keyId) return cachedOptions
   const apps = await withTimeout(sdk.getAppsWhichSupportUPI(), { data: [] })
   const list = Array.isArray(apps?.data) ? apps.data : Array.isArray(apps) ? (apps as unknown[]) : []
   const methods = await withTimeout(sdk.getPaymentMethods(), { netbanking: {} })
@@ -202,6 +216,19 @@ export async function loadPaymentOptions(keyId: string): Promise<{ upiApps: UpiA
   const banks = toBanks(methods?.netbanking)
   if (upiApps.length > 0 || banks.length > 0) cachedOptions = { keyId, upiApps, banks }
   return { upiApps, banks }
+}
+
+/**
+ * Looks up the UPI apps and banks once the app has started, so the payment sheet opens with them
+ * already listed instead of waiting on Razorpay.
+ */
+export async function prefetchPaymentOptions() {
+  if (!razorpay() || paymentInFlight) return
+  try {
+    await loadPaymentOptions(await fetchPaymentKeyId())
+  } catch {
+    // The sheet loads them itself.
+  }
 }
 
 async function advancePaid(token: string): Promise<boolean> {
@@ -231,19 +258,99 @@ export async function isAdvanceConfirmed(token: string, attempts = 1) {
   return false
 }
 
+export type AdvanceStatus = "paid" | "refunding" | "failed" | "pending"
+
+/**
+ * Asks the server where the payment stands. The server checks with Razorpay itself, so this works
+ * even when the app never heard back from the payment screen. Servers without the status endpoint
+ * yet answer from the booking alone.
+ */
+export async function checkAdvanceStatus(token: string): Promise<AdvanceStatus> {
+  try {
+    const response = await fetch(`${advanceEndpoint(token)}/status`, { headers: { Accept: "application/json" } })
+    if (response.ok) {
+      const data = (await response.json()) as { status?: string }
+      if (data.status === "paid" || data.status === "refunding" || data.status === "failed" || data.status === "pending") {
+        return data.status
+      }
+    }
+  } catch {
+    // Fall back to the booking below.
+  }
+  return (await advancePaid(token)) ? "paid" : "pending"
+}
+
+/** Checks every 2 seconds until the payment settles or the attempts run out. */
+export async function waitForAdvanceStatus(token: string, attempts: number): Promise<AdvanceStatus> {
+  let status: AdvanceStatus = "pending"
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, 2000))
+    status = await checkAdvanceStatus(token)
+    if (status !== "pending") break
+  }
+  return status
+}
+
+type OpenResult = Awaited<ReturnType<NativeRazorpay["open"]>>
+type Opened = { kind: "result"; result: OpenResult } | { kind: "error"; error: unknown } | { kind: "vanished" }
+
+/** How long the payment screen gets to report back once our screen is in front again. */
+const VANISH_GRACE_MS = 4000
+
+/**
+ * Opens Razorpay's payment screen and waits for its answer. On Android our screen only comes back
+ * to the front once that screen has closed, and it normally reports first. If it closed without
+ * reporting (the client came back through the app icon or Recents, or Android restarted it), we
+ * stop waiting instead of leaving the client stuck.
+ */
+function openPaymentScreen(sdk: NativeRazorpay, options: Record<string, unknown>): Promise<Opened> {
+  return new Promise((resolve) => {
+    let settled = false
+    let graceTimer: ReturnType<typeof setTimeout> | null = null
+    let sawBackground = false
+    const finish = (value: Opened) => {
+      if (settled) return
+      settled = true
+      if (graceTimer) clearTimeout(graceTimer)
+      subscription?.remove()
+      resolve(value)
+    }
+    const subscription =
+      Platform.OS === "android"
+        ? AppState.addEventListener("change", (state) => {
+            if (state !== "active") {
+              sawBackground = true
+              if (graceTimer) clearTimeout(graceTimer)
+              graceTimer = null
+              return
+            }
+            if (!sawBackground || graceTimer) return
+            graceTimer = setTimeout(() => finish({ kind: "vanished" }), VANISH_GRACE_MS)
+          })
+        : null
+    sdk.open(options).then(
+      (result) => finish({ kind: "result", result }),
+      (error: unknown) => finish({ kind: "error", error }),
+    )
+  })
+}
+
 export async function payAdvance(input: {
   token: string
   order: AdvanceOrder
   method: PayMethod
   email: string
+  /** Called once the payment screen has closed and we are confirming with the server. */
+  onConfirming?: () => void
 }): Promise<PayOutcome> {
   const sdk = razorpay()
   if (!sdk) return { kind: "not_paid", message: null }
   const { order, method } = input
 
-  let result: Awaited<ReturnType<NativeRazorpay["open"]>>
+  await savePendingPayment({ token: input.token, orderId: order.orderId, amountPaise: order.amountPaise })
+  paymentInFlight = true
   try {
-    result = await sdk.open({
+    const opened = await openPaymentScreen(sdk, {
       key_id: order.keyId,
       order_id: order.orderId,
       amount: order.amountPaise,
@@ -255,22 +362,54 @@ export async function payAdvance(input: {
         ? { method: "upi", upi_app_package_name: method.packageName, "_[flow]": "intent" }
         : { method: "netbanking", bank: method.bank }),
     })
-  } catch (error) {
+    input.onConfirming?.()
+
+    const outcome = await settle(input.token, order, opened)
+    // Keep the record while we still don't know, so the next app start checks it again.
+    if (outcome.kind === "paid" || outcome.kind === "refunding") await clearPendingPayment(input.token)
+    return outcome
+  } finally {
+    paymentInFlight = false
+  }
+}
+
+/** True from opening the payment screen until its result is settled. */
+export function isPaymentInFlight() {
+  return paymentInFlight
+}
+
+function fromStatus(status: AdvanceStatus): PayOutcome | null {
+  if (status === "paid") return { kind: "paid" }
+  if (status === "refunding") return { kind: "refunding" }
+  return null
+}
+
+/** Our Android patch's code for "the payment screen lost its payment", not a real failure. */
+const SCREEN_LOST_CODE = 1001
+
+async function settle(token: string, order: AdvanceOrder, opened: Opened): Promise<PayOutcome> {
+  if (opened.kind === "vanished" || (opened.kind === "error" && RECORD(opened.error).code === SCREEN_LOST_CODE)) {
+    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
+  }
+
+  if (opened.kind === "error") {
     // A UPI app can report a failure after the money has moved, so check before saying so.
-    if (await isAdvanceConfirmed(input.token)) return { kind: "paid" }
-    const description = RECORD(error).description
+    const status = await waitForAdvanceStatus(token, 2)
+    const known = fromStatus(status)
+    if (known) return known
+    const description = RECORD(opened.error).description
     return { kind: "not_paid", message: typeof description === "string" ? description : null }
   }
 
-  const { razorpay_payment_id: paymentId, razorpay_signature: signature } = result
+  const { razorpay_payment_id: paymentId, razorpay_signature: signature } = opened.result
   if (!paymentId || !signature) {
-    return (await isAdvanceConfirmed(input.token, 5)) ? { kind: "paid" } : { kind: "checking" }
+    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
   }
   try {
-    const done = await post<{ needsRefund?: boolean }>(input.token, { orderId: order.orderId, paymentId, signature })
+    const done = await post<{ needsRefund?: boolean }>(token, { orderId: order.orderId, paymentId, signature })
     return done.needsRefund ? { kind: "refunding" } : { kind: "paid" }
   } catch {
-    // The money is in; the webhook confirms the booking if this call failed.
-    return (await isAdvanceConfirmed(input.token, 5)) ? { kind: "paid" } : { kind: "checking" }
+    // The money is in; the server confirms the booking if this call failed.
+    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
   }
 }

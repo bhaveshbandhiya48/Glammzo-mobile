@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AppState, Image, Linking, Pressable, StyleSheet, View } from "react-native"
 
+import { showAdvancePaidAlert, showAdvanceRefundAlert } from "@/components/payments/PendingPaymentWatcher"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
@@ -146,6 +147,10 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
   const [banks, setBanks] = useState<Bank[]>([])
   const [selection, setSelection] = useState<Selection>(null)
   const [paying, setPaying] = useState(false)
+  /** The payment screen has closed and we're asking the server; the client may close the sheet now. */
+  const [confirming, setConfirming] = useState(false)
+  /** Closed while confirming: the result is left to the check that runs when the app comes back. */
+  const closedRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [choosingBank, setChoosingBank] = useState(false)
@@ -276,13 +281,26 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
       }
     }
     const profile = await getConsumerProfile().catch(() => null)
+    closedRef.current = false
     const outcome = await payAdvance({
       token: held,
       order: current,
       method,
       email: profile?.email?.trim() || FALLBACK_EMAIL,
+      onConfirming: () => {
+        setConfirming(true)
+        setNotice("Confirming your payment…")
+      },
     })
     setPaying(false)
+    setConfirming(false)
+    setNotice(null)
+    if (closedRef.current) {
+      // The sheet is gone, so say it here; a payment still unknown is checked when the app comes back.
+      if (outcome.kind === "paid") showAdvancePaidAlert()
+      else if (outcome.kind === "refunding") showAdvanceRefundAlert()
+      return
+    }
     if (outcome.kind === "paid") onPaid(current.amountPaise / 100)
     else if (outcome.kind === "refunding") {
       setNotice("Your payment came in after the time was released. We'll refund it in full.")
@@ -384,9 +402,14 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
       visible={visible}
       title="Pay advance"
       contentKey="methods"
-      dismissible={!paying}
-      onClose={() => onClose(token != null)}
-      confirmClose={confirmBeforeClose && token != null && !expired && !loadError ? () => setConfirmingLeave(true) : undefined}
+      dismissible={!paying || confirming}
+      onClose={() => {
+        if (confirming) closedRef.current = true
+        onClose(token != null)
+      }}
+      confirmClose={
+        confirmBeforeClose && token != null && !expired && !loadError && !confirming ? () => setConfirmingLeave(true) : undefined
+      }
       footer={
         showFooter ? (
           <View style={styles.footer}>

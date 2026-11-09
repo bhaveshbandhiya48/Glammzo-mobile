@@ -4,6 +4,10 @@ import { Linking, Platform } from "react-native"
 import { reverseGeocode, type ResolvedPlace } from "@/lib/location-api"
 
 const GPS_TIMEOUT_MS = 8_000
+/** Right after location is switched on there's no cached fix, so the first one can take longer. */
+const FRESH_GPS_TIMEOUT_MS = 15_000
+/** Some Android phones report location as off for a moment after it's switched on. */
+const SERVICES_SETTLE_MS = 3_000
 const REVERSE_TIMEOUT_MS = 10_000
 const NATIVE_REVERSE_TIMEOUT_MS = 5_000
 const LAST_KNOWN_MAX_AGE_MS = 5 * 60_000
@@ -53,25 +57,49 @@ export async function ensureForegroundLocationPermission(
  * On Android, show the system dialog to turn location / high-accuracy on.
  * No-op when services are already enabled. Returns whether services are on.
  */
+async function servicesEnabled(): Promise<boolean> {
+  return Location.hasServicesEnabledAsync().catch(() => true)
+}
+
+/** Polls until the phone reports location as on, for up to `ms`. */
+async function waitForServices(ms: number): Promise<boolean> {
+  const until = Date.now() + ms
+  while (Date.now() < until) {
+    if (await servicesEnabled()) return true
+    await new Promise((resolve) => setTimeout(resolve, 300))
+  }
+  return servicesEnabled()
+}
+
 export async function ensureLocationServicesEnabled(
   promptIfNeeded: boolean,
 ): Promise<boolean> {
-  const enabled = await Location.hasServicesEnabledAsync().catch(() => true)
-  if (enabled) return true
-  if (!promptIfNeeded) return false
+  return (await ensureLocationServicesDetailed(promptIfNeeded)).on
+}
+
+/** `justEnabled`: location was off and the user turned it on from the system dialog just now. */
+async function ensureLocationServicesDetailed(
+  promptIfNeeded: boolean,
+): Promise<{ on: boolean; justEnabled: boolean }> {
+  if (await servicesEnabled()) return { on: true, justEnabled: false }
+  if (!promptIfNeeded) return { on: false, justEnabled: false }
 
   if (Platform.OS === "android") {
     try {
       // Google Play services dialog: turn on location / high accuracy.
+      // It resolves only when the user taps Turn on, so location is on even if the phone
+      // hasn't reported it yet. Give it a moment instead of saying "turn on location" again.
       await Location.enableNetworkProviderAsync()
-      return await Location.hasServicesEnabledAsync().catch(() => false)
+      await waitForServices(SERVICES_SETTLE_MS)
+      return { on: true, justEnabled: true }
     } catch {
-      return false
+      // Dismissed, or no Play services dialog: the user may still have switched it on.
+      return { on: await servicesEnabled(), justEnabled: false }
     }
   }
 
   // iOS: only the user can enable Location Services in Settings.
-  return false
+  return { on: false, justEnabled: false }
 }
 
 async function readCoordinates(options: {
@@ -124,13 +152,14 @@ export async function getDeviceCoordinates(options?: {
   const granted = await ensureForegroundLocationPermission(prompt)
   if (!granted) return null
 
-  if (prompt) {
-    await ensureLocationServicesEnabled(true)
-  }
+  const services = prompt
+    ? await ensureLocationServicesDetailed(true)
+    : { on: true, justEnabled: false }
 
   return readCoordinates({
-    promptSettingsDialog: prompt,
-    timeoutMs: options?.timeoutMs ?? GPS_TIMEOUT_MS,
+    promptSettingsDialog: prompt && !services.justEnabled,
+    timeoutMs:
+      options?.timeoutMs ?? (services.justEnabled ? FRESH_GPS_TIMEOUT_MS : GPS_TIMEOUT_MS),
   })
 }
 
@@ -152,15 +181,18 @@ export async function getDeviceCoordinatesDetailed(options?: {
     return { ok: false, reason: "permission_denied" }
   }
 
-  const servicesOn = await ensureLocationServicesEnabled(prompt)
-  if (!servicesOn) return { ok: false, reason: "services_off" }
+  const services = await ensureLocationServicesDetailed(prompt)
 
+  // Try for a fix even when the phone still says location is off: the "is it on" check can lag
+  // behind the real setting, and a fix is the real proof. Only blame the setting if that fails.
   const coords = await readCoordinates({
-    promptSettingsDialog: prompt,
-    timeoutMs: options?.timeoutMs ?? GPS_TIMEOUT_MS,
+    promptSettingsDialog: prompt && !services.justEnabled,
+    timeoutMs:
+      options?.timeoutMs ?? (services.justEnabled ? FRESH_GPS_TIMEOUT_MS : GPS_TIMEOUT_MS),
   })
-  if (!coords) return { ok: false, reason: "unavailable" }
-  return { ok: true, coords }
+  if (coords) return { ok: true, coords }
+  if (!services.on && !(await servicesEnabled())) return { ok: false, reason: "services_off" }
+  return { ok: false, reason: "unavailable" }
 }
 
 function placeFromNativeAddress(

@@ -1,4 +1,7 @@
+import NetInfo from "@react-native-community/netinfo"
+
 import { API_URL } from "@/lib/config"
+import { isDeviceOffline } from "@/lib/network"
 import { getAccessToken } from "@/lib/session"
 import { clearLocalSession } from "@/lib/user"
 
@@ -24,6 +27,20 @@ export class ApiError extends Error {
     this.status = status
     this.extras = extras
   }
+}
+
+export const OFFLINE_MESSAGE = "You're offline. Check your Wi-Fi or mobile data and try again."
+export const SERVER_UNREACHABLE_MESSAGE = "Glammzo isn't responding right now. Try again in a moment."
+export const TIMED_OUT_MESSAGE = "That took too long. Check your connection and try again."
+
+/** The request never got an answer: say "you're offline" when that's why, not fetch's raw error. */
+export async function networkFailure(error: unknown): Promise<ApiError> {
+  if (__DEV__) console.warn(`[api] request to ${API_URL} failed`, error)
+  const state = await NetInfo.fetch().catch(() => null)
+  const offline = state ? isDeviceOffline(state) : false
+  return new ApiError(0, offline ? OFFLINE_MESSAGE : SERVER_UNREACHABLE_MESSAGE, {
+    network: offline ? "offline" : "unreachable",
+  })
 }
 
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
@@ -59,9 +76,9 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
       error instanceof Error &&
       (error.name === "AbortError" || controller.signal.aborted)
     ) {
-      throw new ApiError(408, "Request timed out")
+      throw new ApiError(408, TIMED_OUT_MESSAGE)
     }
-    throw error
+    throw await networkFailure(error)
   } finally {
     clearTimeout(timeoutId)
   }

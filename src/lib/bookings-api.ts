@@ -1,5 +1,5 @@
 import type { Booking } from "@/data/types"
-import { ApiError, apiFetch } from "@/lib/api"
+import { ApiError, apiFetch, networkFailure, TIMED_OUT_MESSAGE } from "@/lib/api"
 import { API_URL } from "@/lib/config"
 import { getAccessToken } from "@/lib/session"
 
@@ -124,9 +124,9 @@ export async function downloadBookingInvoicePdf(
       error instanceof Error &&
       (error.name === "AbortError" || controller.signal.aborted)
     ) {
-      throw new ApiError(408, "Request timed out")
+      throw new ApiError(408, TIMED_OUT_MESSAGE)
     }
-    throw error
+    throw await networkFailure(error)
   } finally {
     clearTimeout(timeoutId)
   }

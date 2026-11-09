@@ -21,7 +21,7 @@ import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
-import { ApiError } from "@/lib/api"
+import { ApiError, SERVER_UNREACHABLE_MESSAGE } from "@/lib/api"
 import { requestOtp, verifyOtp } from "@/lib/auth-api"
 import { API_URL } from "@/lib/config"
 import { LEGAL } from "@/lib/legal"
@@ -192,9 +192,11 @@ export default function LoginScreen() {
         setError(
           err instanceof ApiError
             ? err.message
-            : `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
-                err instanceof Error ? err.message : ""
-              }`.trim(),
+            : __DEV__
+              ? `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
+                  err instanceof Error ? err.message : ""
+                }`.trim()
+              : SERVER_UNREACHABLE_MESSAGE,
         )
       } finally {
         setLoading(false)
@@ -236,9 +238,11 @@ export default function LoginScreen() {
         } else {
           // Usually unreachable API (stale LAN IP / simulator host) — not a wrong OTP.
           setError(
-            `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
-              err instanceof Error ? err.message : ""
-            }`.trim(),
+            __DEV__
+              ? `Can't reach ${API_URL}. Is Glammzo-web on :4008? ${
+                  err instanceof Error ? err.message : ""
+                }`.trim()
+              : SERVER_UNREACHABLE_MESSAGE,
           )
         }
       } finally {

@@ -1,6 +1,6 @@
 import { Image } from "expo-image"
 import { useLocalSearchParams, useRouter, type Href } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Keyboard,
   KeyboardAvoidingView,
@@ -24,6 +24,7 @@ import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
 import { Screen } from "@/components/ui/Screen"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
+import { OneTapPayBar } from "@/components/payments/OneTapPayBar"
 import { StickyCta } from "@/components/ui/StickyCta"
 import { Text } from "@/components/ui/Text"
 import { useCart } from "@/context/CartContext"
@@ -124,6 +125,11 @@ export default function BookingScreen() {
   const [walletBalance, setWalletBalance] = useState(0)
   const [phoneMissing, setPhoneMissing] = useState(false)
   const [marketingOptIn, setMarketingOptIn] = useState(false)
+  /** Profile already had a name and email: show "Booking for … · Edit" instead of the form. */
+  const [detailsFromProfile, setDetailsFromProfile] = useState(false)
+  const [editingDetails, setEditingDetails] = useState(false)
+  /** The held booking's confirmation, for after the one-tap advance payment. */
+  const advanceConfirmation = useRef<Record<string, string> | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [step, setStep] = useState(0)
 
@@ -207,6 +213,7 @@ export default function BookingScreen() {
       if (!active) return
       if (nextName) setName(nextName)
       if (nextEmail) setEmail(nextEmail)
+      setDetailsFromProfile(nextName.length >= 2 && isValidEmail(nextEmail))
       if (nextPhone.length >= 10) {
         setPhone(nextPhone)
         setPhoneMissing(false)
@@ -594,8 +601,23 @@ export default function BookingScreen() {
       : []),
   ]
 
-  async function submitBooking() {
-    if (submitting || !salon || !selectedDate || !slotValue) return
+  /** One-tap pay: creates the booking (holding the slot) and returns its advance token. */
+  async function reserveForAdvance(): Promise<string | null> {
+    return submitBooking({ forAdvance: true })
+  }
+
+  function onAdvancePaid(paidRupees: number) {
+    const details = advanceConfirmation.current
+    if (!details) return
+    if (salon) cart.clearSalon(salon.id)
+    router.replace({
+      pathname: "/book/confirmation",
+      params: { ...details, status: "confirmed", advancePaid: String(paidRupees) },
+    } as Href)
+  }
+
+  async function submitBooking(options?: { forAdvance?: boolean }): Promise<string | null> {
+    if (submitting || !salon || !selectedDate || !slotValue) return null
     const customerPhone = normalizeMobileDigits(phone)
     if (customerPhone.length < 10 || !isValidEmail(email)) {
       setSubmitError(
@@ -603,7 +625,7 @@ export default function BookingScreen() {
           ? "Verified mobile is missing. Please sign in again."
           : "Enter a valid email for your invoice.",
       )
-      return
+      return null
     }
     setSubmitting(true)
     setSubmitError(null)
@@ -640,7 +662,8 @@ export default function BookingScreen() {
       })
       // Keep profile in sync when the guest adds/updates email at checkout.
       void syncProfileEmailFromBooking(email)
-      cart.clearSalon(salon.id)
+      // One-tap pay keeps the cart until the advance is paid, so the bar can retry.
+      if (!options?.forAdvance) cart.clearSalon(salon.id)
       setConfirmSheetOpen(false)
       const confirmation = {
         salonId: salon.id,
@@ -649,6 +672,12 @@ export default function BookingScreen() {
         slot: result.booking.time || selectedSlotLabel,
         name: name.trim(),
         date: result.booking.date || selectedDate,
+      }
+      if (options?.forAdvance && !result.booking.advanceToken) cart.clearSalon(salon.id)
+      // One-tap pay bar: it takes the payment from here, on this screen.
+      if (options?.forAdvance && result.booking.advanceToken) {
+        advanceConfirmation.current = { ...confirmation, payToken: result.booking.advanceToken }
+        return result.booking.advanceToken
       }
       // The salon asks for an advance: pay it in the app, then land on the confirmation.
       if (result.booking.advanceToken) {
@@ -659,7 +688,7 @@ export default function BookingScreen() {
             next: JSON.stringify({ ...confirmation, payToken: result.booking.advanceToken }),
           },
         } as Href)
-        return
+        return null
       }
       router.replace({
         pathname: "/book/confirmation",
@@ -673,10 +702,12 @@ export default function BookingScreen() {
           status: result.booking.status,
         },
       })
+      return null
     } catch (err) {
       setSubmitError(
         err instanceof ApiError ? err.message : "Could not create booking.",
       )
+      return null
     } finally {
       setSubmitting(false)
     }
@@ -853,6 +884,32 @@ export default function BookingScreen() {
           </Text>
         </View>
         <View style={styles.card}>
+          {detailsFromProfile && !editingDetails ? (
+            <View style={styles.bookingFor}>
+              <View style={styles.bookingForCopy}>
+                <Text variant="caption" muted>
+                  Booking for
+                </Text>
+                <Text variant="bodyStrong" numberOfLines={1}>
+                  {name.trim()}
+                  {normalizeMobileDigits(phone).length >= 10 ? ` · +91 ${normalizeMobileDigits(phone)}` : ""}
+                </Text>
+                <Text variant="caption" muted numberOfLines={1}>
+                  Invoice to {email.trim()}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setEditingDetails(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit your name or email"
+                hitSlop={8}
+                style={styles.bookingForEdit}
+              >
+                <Text variant="bodyStrong">Edit</Text>
+              </Pressable>
+            </View>
+          ) : (
+          <>
           <Text variant="label" muted>
             Customer info
           </Text>
@@ -887,6 +944,8 @@ export default function BookingScreen() {
             hint="We'll send your invoice to this email."
             error={email.trim() && !isValidEmail(email) ? "Check the email, it doesn't look complete." : null}
           />
+          </>
+          )}
           <Pressable
             onPress={() => setMarketingOptIn((value) => !value)}
             accessibilityRole="checkbox"
@@ -1369,67 +1428,87 @@ export default function BookingScreen() {
         onClose={() => setPromoCelebration(null)}
       />
 
-      <StickyCta
-        title={
-          step === 0
-            ? hasSelection
-              ? `Continue · ${formatRupees(total)}`
-              : "Select services to continue"
-            : step === 1
-              ? selectedDate && slotValue
-                ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-                : "Pick a date and time"
-              : `Book · pay at salon ${formatRupees(total)}`
-        }
-        subtitle={
-          phoneMissing
-            ? "Sign in again to restore your verified mobile"
-            : step === 0
-              ? "Next · choose date and time"
+      {step === 2 && advanceDue > 0 ? (
+        <OneTapPayBar
+          amountRupees={advanceDue}
+          reserve={reserveForAdvance}
+          onPaid={onAdvancePaid}
+          error={submitError}
+          disabledReason={
+            phoneMissing
+              ? "Sign in again to restore your verified mobile"
+              : name.trim().length < 2
+                ? "Add your name to book."
+                : !isValidEmail(email)
+                  ? "Add a valid email to book. Your invoice goes there."
+                  : !hasSelection || noStaffForServices || !selectedDate || !slotValue
+                    ? "Pick your services, date and time to book."
+                    : null
+          }
+        />
+      ) : (
+        <StickyCta
+          title={
+            step === 0
+              ? hasSelection
+                ? `Continue · ${formatRupees(total)}`
+                : "Select services to continue"
               : step === 1
-                ? "Next · confirm your booking"
-                : name.trim().length < 2
-                  ? "Add your name to book"
-                  : !isValidEmail(email)
-                    ? "Add a valid email to book. Your invoice goes there."
-                    : hasSelection && selectedDate && slotValue
+                ? selectedDate && slotValue
                   ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-                  : "Review details below"
-        }
-        error={step === 2 && !confirmSheetOpen ? submitError : null}
-        label={step < 2 ? "Continue" : advanceDue > 0 ? `Book and pay ${formatRupees(advanceDue)}` : "Book"}
-        bottomOffset={keyboardHeight}
-        disabled={
-          submitting ||
-          phoneMissing ||
-          (step === 0 && !hasSelection) ||
-          (step === 1 &&
-            (!hasSelection ||
-              noStaffForServices ||
-              !selectedDate ||
-              !slotValue)) ||
-          (step === 2 &&
-            (!hasSelection ||
-              noStaffForServices ||
-              !selectedDate ||
-              !slotValue ||
-              name.trim().length < 2 ||
-              normalizeMobileDigits(phone).length < 10 ||
-              !isValidEmail(email)))
-        }
-        onPress={() => {
-          if (step === 0) {
-            if (hasSelection) setStep(1)
-            return
+                  : "Pick a date and time"
+                : `Book · pay at salon ${formatRupees(total)}`
           }
-          if (step === 1) {
-            if (selectedDate && slotValue) setStep(2)
-            return
+          subtitle={
+            phoneMissing
+              ? "Sign in again to restore your verified mobile"
+              : step === 0
+                ? "Next · choose date and time"
+                : step === 1
+                  ? "Next · confirm your booking"
+                  : name.trim().length < 2
+                    ? "Add your name to book"
+                    : !isValidEmail(email)
+                      ? "Add a valid email to book. Your invoice goes there."
+                      : hasSelection && selectedDate && slotValue
+                    ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
+                    : "Review details below"
           }
-          setSubmitError(null)
-          setConfirmSheetOpen(true)
-        }}
-      />
+          error={step === 2 && !confirmSheetOpen ? submitError : null}
+          label={step < 2 ? "Continue" : advanceDue > 0 ? `Book and pay ${formatRupees(advanceDue)}` : "Book"}
+          bottomOffset={keyboardHeight}
+          disabled={
+            submitting ||
+            phoneMissing ||
+            (step === 0 && !hasSelection) ||
+            (step === 1 &&
+              (!hasSelection ||
+                noStaffForServices ||
+                !selectedDate ||
+                !slotValue)) ||
+            (step === 2 &&
+              (!hasSelection ||
+                noStaffForServices ||
+                !selectedDate ||
+                !slotValue ||
+                name.trim().length < 2 ||
+                normalizeMobileDigits(phone).length < 10 ||
+                !isValidEmail(email)))
+          }
+          onPress={() => {
+            if (step === 0) {
+              if (hasSelection) setStep(1)
+              return
+            }
+            if (step === 1) {
+              if (selectedDate && slotValue) setStep(2)
+              return
+            }
+            setSubmitError(null)
+            setConfirmSheetOpen(true)
+          }}
+        />
+      )}
     </KeyboardAvoidingView>
   )
 }
@@ -1445,6 +1524,22 @@ const styles = StyleSheet.create({
   },
   gap: {
     marginTop: spacing.sm,
+  },
+  bookingFor: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  bookingForCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  bookingForEdit: {
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   lockedInput: {
     backgroundColor: colors.muted,

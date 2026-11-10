@@ -25,21 +25,21 @@ import { getConsumerProfile } from "@/lib/user"
 import { colors, radii, spacing, status as statusColors } from "@/theme/tokens"
 
 /** The banks most clients look for, shown first. */
-const POPULAR_BANKS = ["HDFC", "SBIN", "ICIC", "UTIB", "KKBK"]
+export const POPULAR_BANKS = ["HDFC", "SBIN", "ICIC", "UTIB", "KKBK"]
 /** Razorpay needs an email on every payment; artist clients may not have added one. */
-const FALLBACK_EMAIL = "payments@glammzo.com"
+export const FALLBACK_EMAIL = "payments@glammzo.com"
 
 type Selection =
   | { kind: "upi"; app: UpiApp }
   | { kind: "bank"; bank: Bank }
   | null
 
-function formatLeft(ms: number) {
+export function formatLeft(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000))
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`
 }
 
-function Option({
+export function Option({
   selected,
   title,
   subtitle,
@@ -84,7 +84,7 @@ function Option({
   )
 }
 
-function UpiIcon({ app }: { app: UpiApp }) {
+export function UpiIcon({ app }: { app: UpiApp }) {
   const uri = app.iconBase64
     ? app.iconBase64.startsWith("data:")
       ? app.iconBase64
@@ -94,7 +94,7 @@ function UpiIcon({ app }: { app: UpiApp }) {
   return <Icon name="phone-portrait-outline" size={20} color={colors.text} />
 }
 
-function BankIcon({ code }: { code: string }) {
+export function BankIcon({ code }: { code: string }) {
   return (
     <Image
       source={{ uri: `https://cdn.razorpay.com/bank/${encodeURIComponent(code)}.gif` }}

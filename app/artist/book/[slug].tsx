@@ -16,7 +16,7 @@ import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
 import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
 import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { AdvancePaymentSheet } from "@/components/payments/AdvancePaymentSheet"
+import { OneTapPayBar } from "@/components/payments/OneTapPayBar"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
@@ -128,7 +128,6 @@ export default function ArtistBookScreen() {
   const [phone, setPhone] = useState("")
   const [verifiedFor, setVerifiedFor] = useState<{ phone: string; token: string } | null>(null)
   const [busy, setBusy] = useState<"book" | "session" | null>(null)
-  const [paySheet, setPaySheet] = useState(false)
   const paidBooking = useRef<Record<string, string> | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -507,12 +506,6 @@ export default function ArtistBookScreen() {
     } as Href)
   }
 
-  /** Tapped Pay, then left: not booked yet. Home shows the held slot with its countdown. */
-  function leaveUnpaid() {
-    setPaySheet(false)
-    router.replace("/(tabs)/explore" as Href)
-  }
-
   async function onBook() {
     if (!artist || selectedIds.length === 0 || !slot) return
     if (name.trim().length < 2) {
@@ -524,11 +517,8 @@ export default function ArtistBookScreen() {
       return
     }
     setError(null)
-    // An advance is due: choose how to pay first. The slot is held on the Pay tap, not here.
-    if (advanceDue > 0) {
-      setPaySheet(true)
-      return
-    }
+    // An advance is due: the one-tap pay bar books and pays in one go.
+    if (advanceDue > 0) return
     void createBooking()
   }
 
@@ -576,7 +566,6 @@ export default function ArtistBookScreen() {
         paidBooking.current = { ...confirmation, payToken: res.booking.token }
         return res.booking.token
       }
-      setPaySheet(false)
       router.replace({
         pathname: "/book/confirmation",
         params: { ...confirmation, status: "confirmed" },
@@ -587,7 +576,6 @@ export default function ArtistBookScreen() {
         err instanceof ApiError || err instanceof Error
           ? err.message
           : "Couldn't book."
-      setPaySheet(false)
       setError(message)
       if (/no longer available/i.test(message)) setSlot(null)
       return null
@@ -1238,77 +1226,85 @@ export default function ArtistBookScreen() {
         ) : null}
       </Screen>
 
-      <View
-        style={[
-          styles.ctaBar,
-          step < 2 && styles.ctaBarRow,
-          { paddingBottom: Math.max(insets.bottom, spacing.md) },
-        ]}
-      >
-        {step < 2 ? (
-          <View
-            style={styles.ctaPrice}
-            accessible
-            accessibilityLiveRegion="polite"
-            accessibilityLabel={`Total ${barPrice}. ${barNote}.`}
-          >
-            <Text variant="heading" numberOfLines={1}>
-              {barPrice}
-            </Text>
-            <Text variant="caption" muted numberOfLines={1}>
-              {barNote}
-            </Text>
-          </View>
-        ) : null}
-        <Button
-          style={step < 2 ? styles.ctaButton : undefined}
-          label={
-            busy === "book"
-              ? "Booking…"
-              : step === 0
-                ? "Continue"
-                : step === 1
-                  ? "Continue"
-                  : advanceDue > 0
-                    ? `Continue to pay ${formatRupees(advanceDue)}`
-                    : quote
-                      ? `Confirm · ${formatRupees(payableTotal)}`
-                      : "Confirm booking"
+      {step === 2 && advanceDue > 0 ? (
+        <OneTapPayBar
+          amountRupees={advanceDue}
+          reserve={createBooking}
+          onPaid={onAdvancePaid}
+          error={error}
+          disabledReason={
+            busy === "session"
+              ? "Getting your booking ready…"
+              : canBook
+                ? null
+                : name.trim().length < 2
+                  ? "Add your name in Profile before booking."
+                  : needsHome && (address.trim().length < 5 || !pin)
+                    ? "Add your address and location for a home visit."
+                    : "Finish the steps above to book."
           }
-          loading={busy === "book" || busy === "session"}
-          disabled={
-            busy === "book" ||
-            busy === "session" ||
-            (step === 0 && !stepReady.services) ||
-            (step === 1 && !stepReady.details) ||
-            (step === 2 && !canBook)
-          }
-          onPress={() => {
-            if (step === 0) {
-              if (stepReady.services) setStep(1)
-              return
-            }
-            if (step === 1) {
-              if (stepReady.details) setStep(2)
-              return
-            }
-            void onBook()
-          }}
         />
-      </View>
+      ) : (
+        <View
+          style={[
+            styles.ctaBar,
+            step < 2 && styles.ctaBarRow,
+            { paddingBottom: Math.max(insets.bottom, spacing.md) },
+          ]}
+        >
+          {step < 2 ? (
+            <View
+              style={styles.ctaPrice}
+              accessible
+              accessibilityLiveRegion="polite"
+              accessibilityLabel={`Total ${barPrice}. ${barNote}.`}
+            >
+              <Text variant="heading" numberOfLines={1}>
+                {barPrice}
+              </Text>
+              <Text variant="caption" muted numberOfLines={1}>
+                {barNote}
+              </Text>
+            </View>
+          ) : null}
+          <Button
+            style={step < 2 ? styles.ctaButton : undefined}
+            label={
+              busy === "book"
+                ? "Booking…"
+                : step === 0
+                  ? "Continue"
+                  : step === 1
+                    ? "Continue"
+                    : advanceDue > 0
+                      ? `Continue to pay ${formatRupees(advanceDue)}`
+                      : quote
+                        ? `Confirm · ${formatRupees(payableTotal)}`
+                        : "Confirm booking"
+            }
+            loading={busy === "book" || busy === "session"}
+            disabled={
+              busy === "book" ||
+              busy === "session" ||
+              (step === 0 && !stepReady.services) ||
+              (step === 1 && !stepReady.details) ||
+              (step === 2 && !canBook)
+            }
+            onPress={() => {
+              if (step === 0) {
+                if (stepReady.services) setStep(1)
+                return
+              }
+              if (step === 1) {
+                if (stepReady.details) setStep(2)
+                return
+              }
+              void onBook()
+            }}
+          />
+        </View>
+      )}
 
-      <AdvancePaymentSheet
-        visible={paySheet}
-        token={null}
-        reserve={createBooking}
-        summary={{
-          amountRupees: advanceDue,
-          label: `${selectedServices.map((s) => s.name).join(", ")} with ${artist.displayName}`,
-        }}
-        onPaid={onAdvancePaid}
-        onClose={(held) => (held ? leaveUnpaid() : setPaySheet(false))}
-        confirmBeforeClose
-      />
 
       <BookingDateSheet
         visible={dateSheetOpen}

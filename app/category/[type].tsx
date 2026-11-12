@@ -17,6 +17,7 @@ import { Text } from "@/components/ui/Text"
 import { isBusinessType, type BusinessType } from "@/data/business-types"
 import type { Salon } from "@/data/types"
 import {
+  browseModeFor,
   salonsInSelectedLocation,
   withSalonDistanceFromLocation,
 } from "@/lib/explore-location"
@@ -39,7 +40,7 @@ function salonsForCategory(
   location: SavedLocation | null,
   category: BusinessType,
 ): Salon[] {
-  return salonsInSelectedLocation(catalog, location, "nearby")
+  return salonsInSelectedLocation(catalog, location, browseModeFor(location))
     .filter((salon) => salon.businessType?.trim() === category)
     .map((salon) => withSalonDistanceFromLocation(salon, location))
 }

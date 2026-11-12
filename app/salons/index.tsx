@@ -19,7 +19,7 @@ import {
   sortExploreSalons,
   type ExploreFilterState,
 } from "@/lib/explore-filters"
-import { salonsInSelectedLocation } from "@/lib/explore-location"
+import { browseModeFor, resolveExploreLocationSalons } from "@/lib/explore-location"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
@@ -108,7 +108,17 @@ export default function SalonsScreen() {
   }, [])
 
   const hasPin = location?.latitude !== undefined && location?.longitude !== undefined
-  const nearby = useMemo(() => salonsInSelectedLocation(catalog ?? [], location, "nearby"), [catalog, location])
+  // Same list Home shows (whole city for a city pick, 10 km and wider for an address), uncapped.
+  const scoped = useMemo(() => {
+    if (!location) return null
+    const result = resolveExploreLocationSalons({
+      catalog: catalog ?? [],
+      location,
+      mode: browseModeFor(location),
+    })
+    return result.emptyKind === "none" ? result : null
+  }, [catalog, location])
+  const nearby = useMemo(() => scoped?.salons ?? [], [scoped])
   const salons = useMemo(
     () => sortExploreSalons(filterExploreSalons(nearby, filters, { query: search }), filters.sort),
     [filters, nearby, search],
@@ -134,7 +144,7 @@ export default function SalonsScreen() {
   const header = (
     <View style={styles.header}>
       <Text variant="body" muted>
-        {location?.label ? `Near ${location.label}` : "Salons and spas near you."}
+        {scoped?.scopeLabel ?? (location?.label ? `Near ${location.label}` : "Salons and spas near you.")}
       </Text>
 
       <View style={styles.search}>

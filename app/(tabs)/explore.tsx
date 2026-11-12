@@ -59,7 +59,9 @@ import {
   partitionSalonsByCurrentArea,
   currentAreaLabel,
   NEARBY_RADIUS_KM,
-  type LocationBrowseMode,
+  HOME_CAROUSEL_LIMIT,
+  browseModeFor,
+  isCityLevelPlace,
 } from "@/lib/explore-location"
 import {
   pickFeaturedSectionSalons,
@@ -132,7 +134,8 @@ export default function ExploreScreen() {
     peekCachedGreeting(),
   )
   const [savedLocation, setSavedLocationState] = useState<SavedLocation | null>(null)
-  const [locationMode, setLocationMode] = useState<LocationBrowseMode>("nearby")
+  // A whole-city pick lists the whole city; GPS or an address lists salons nearby.
+  const locationMode = browseModeFor(savedLocation)
   const [locationDraft, setLocationDraft] = useState("")
   const [locationOpen, setLocationOpen] = useState(false)
   const [placePredictions, setPlacePredictions] = useState<PlacePrediction[]>([])
@@ -523,6 +526,11 @@ export default function ExploreScreen() {
     }
     return partitionSalonsByCurrentArea(gridSalons, savedLocation)
   }, [gridSalons, savedLocation, showHomeSections])
+  // Home keeps each row short; "See all" opens the full list.
+  const homeLocalSalons = showHomeSections
+    ? localGridSalons.slice(0, HOME_CAROUSEL_LIMIT)
+    : localGridSalons
+  const homeNearbyAreaSalons = nearbyAreaGridSalons.slice(0, HOME_CAROUSEL_LIMIT)
 
   const cartEntries = useMemo(() => {
     return cart.carts.flatMap((salonCart) => {
@@ -716,7 +724,6 @@ export default function ExploreScreen() {
     markSessionLocationManual()
     await setSavedLocation(next)
     setSavedLocationState(next)
-    setLocationMode("nearby")
     setPlacePredictions([])
     setPlacesError(null)
     setLocationOpen(false)
@@ -735,11 +742,11 @@ export default function ExploreScreen() {
       label: city,
       city,
       area: undefined,
+      scope: "city",
     }
     markSessionLocationManual()
     await setSavedLocation(next)
     setSavedLocationState(next)
-    setLocationMode("city")
   }
 
   function openLocationSheet() {
@@ -774,6 +781,7 @@ export default function ExploreScreen() {
         area: place.area,
         state: place.state,
         formattedAddress: place.formattedAddress,
+        scope: isCityLevelPlace(place) ? "city" : undefined,
       })
     } catch (err) {
       setPlacesError(
@@ -1138,7 +1146,7 @@ export default function ExploreScreen() {
                         ? locationResult.scopeLabel
                         : undefined
                   }
-                  salons={localGridSalons}
+                  salons={homeLocalSalons}
                   onSeeAll={
                     searchQuery.trim() ? undefined : () => router.push("/salons")
                   }
@@ -1148,8 +1156,13 @@ export default function ExploreScreen() {
               {showHomeSections && nearbyAreaGridSalons.length > 0 ? (
                 <SalonCarousel
                   title="Nearby areas"
-                  subtitle={`Within ${NEARBY_RADIUS_KM} km of ${areaName ?? "you"}`}
-                  salons={nearbyAreaGridSalons}
+                  subtitle={
+                    locationMode === "city" && locationResult.cityLabel
+                      ? `Elsewhere in ${locationResult.cityLabel}`
+                      : `Within ${locationResult.radiusKm ?? NEARBY_RADIUS_KM} km of ${areaName ?? "you"}`
+                  }
+                  salons={homeNearbyAreaSalons}
+                  onSeeAll={() => router.push("/salons")}
                 />
               ) : null}
 

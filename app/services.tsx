@@ -12,7 +12,7 @@ import {
   type BusinessType,
 } from "@/data/business-types"
 import type { Salon } from "@/data/types"
-import { salonsInSelectedLocation } from "@/lib/explore-location"
+import { browseModeFor, salonsInSelectedLocation } from "@/lib/explore-location"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { bootstrapLaunchPermissions } from "@/lib/launch-permissions"
 import {
@@ -25,7 +25,7 @@ import { colors, radii, spacing } from "@/theme/tokens"
 function countsForLocation(catalog: Salon[], location: SavedLocation | null) {
   // Match Explore's default nearby scope so categories don't appear without places.
   return countSalonsByBusinessType(
-    salonsInSelectedLocation(catalog, location, "nearby"),
+    salonsInSelectedLocation(catalog, location, browseModeFor(location)),
   )
 }
 

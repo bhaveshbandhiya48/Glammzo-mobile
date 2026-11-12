@@ -6,6 +6,14 @@ import type { SavedLocation } from "@/lib/user"
 /** Matches Glammzo-web DEFAULT_NEARBY_RADIUS_KM */
 export const NEARBY_RADIUS_KM = 10
 
+/** When fewer salons than this are within 10 km, look further out. */
+export const WIDEN_MIN_RESULTS = 3
+/** The next radius tried before falling back to the whole city. */
+export const WIDE_RADIUS_KM = 25
+
+/** Home shows this many salons per row; "See all" lists the rest. */
+export const HOME_CAROUSEL_LIMIT = 10
+
 export type LocationBrowseMode = "nearby" | "city"
 
 export type LocationEmptyKind = "none" | "nearby_city_available" | "out_of_service"
@@ -17,6 +25,10 @@ export type ExploreLocationResult = {
   nearbyCount: number
   cityCount: number
   scopeLabel: string | null
+  /** Radius used for this list, or null when it is the whole city or text matched. */
+  radiusKm?: number | null
+  /** True when the list reaches past 10 km because too few salons were closer. */
+  widened?: boolean
 }
 
 function hasCoords(location: SavedLocation | null): location is SavedLocation & {
@@ -28,6 +40,35 @@ function hasCoords(location: SavedLocation | null): location is SavedLocation & 
     Number.isFinite(location.latitude) &&
     Number.isFinite(location.longitude)
   )
+}
+
+function sameName(a: string | null | undefined, b: string | null | undefined) {
+  const left = normalizeCityName(a ?? "") || (a ?? "").trim().toLowerCase()
+  const right = normalizeCityName(b ?? "") || (b ?? "").trim().toLowerCase()
+  return left.length > 0 && left === right
+}
+
+/**
+ * True when a place picked from search is a whole city ("Jamnagar"),
+ * not an area or address inside one ("Patel Colony, Jamnagar").
+ */
+export function isCityLevelPlace(place: {
+  label?: string
+  city?: string
+  area?: string
+  formattedAddress?: string
+}): boolean {
+  if (!place.city?.trim()) return false
+  // Google formats a city as "Jamnagar, Gujarat, India" and an address as
+  // "Street, Area, Jamnagar, Gujarat 361001, India", so the first part tells them apart.
+  const firstPart = place.formattedAddress?.split(",")[0]?.trim()
+  if (firstPart) return sameName(firstPart, place.city)
+  return !place.area?.trim() || sameName(place.area, place.city)
+}
+
+/** A whole-city pick lists the whole city; GPS or an address lists salons nearby. */
+export function browseModeFor(location: SavedLocation | null): LocationBrowseMode {
+  return location?.scope === "city" ? "city" : "nearby"
 }
 
 /** Same haversine distance Explore uses for list cards. */
@@ -84,6 +125,24 @@ export function filterSalonsNearby(
 
   withDistance.sort((a, b) => a.distanceKm - b.distanceKm)
   return withDistance
+}
+
+/** City salons with their distance from the pin, nearest first; salons with no pin go last. */
+function citySalonsByDistance(
+  salons: Salon[],
+  location: SavedLocation & { latitude: number; longitude: number },
+): Salon[] {
+  const withDistance = salons.map((salon) => withSalonDistanceFromLocation(salon, location))
+  return withDistance.sort((a, b) => {
+    const left = a.distanceKm > 0 ? a.distanceKm : Number.POSITIVE_INFINITY
+    const right = b.distanceKm > 0 ? b.distanceKm : Number.POSITIVE_INFINITY
+    return left - right
+  })
+}
+
+function mergeById(first: Salon[], second: Salon[]): Salon[] {
+  const seen = new Set(first.map((salon) => salon.id))
+  return [...first, ...second.filter((salon) => !seen.has(salon.id))]
 }
 
 function filterSalonsByLabelText(salons: Salon[], location: SavedLocation): Salon[] {
@@ -145,36 +204,20 @@ export function resolveExploreLocationSalons(input: {
         }
       }
       return {
-        salons: citySalons.map((salon) => {
-          if (
-            salon.latitude == null ||
-            salon.longitude == null ||
-            !Number.isFinite(salon.latitude) ||
-            !Number.isFinite(salon.longitude)
-          ) {
-            return salon
-          }
-          return {
-            ...salon,
-            distanceKm: haversineKm(
-              location.latitude,
-              location.longitude,
-              salon.latitude,
-              salon.longitude,
-            ),
-          }
-        }),
+        salons: citySalonsByDistance(citySalons, location),
         emptyKind: "none",
         cityLabel,
         nearbyCount,
         cityCount,
         scopeLabel: cityLabel ? `In ${cityLabel}` : null,
+        radiusKm: null,
+        widened: false,
       }
     }
 
     // mode === nearby
-    if (nearbyCount > 0) {
-      const anchor = location.area?.trim() || location.label
+    const anchor = location.area?.trim() || location.label
+    if (nearbyCount >= WIDEN_MIN_RESULTS) {
       return {
         salons: nearby,
         emptyKind: "none",
@@ -182,17 +225,56 @@ export function resolveExploreLocationSalons(input: {
         nearbyCount,
         cityCount,
         scopeLabel: `Within ${NEARBY_RADIUS_KM} km of ${anchor}`,
+        radiusKm: NEARBY_RADIUS_KM,
+        widened: false,
       }
     }
 
-    if (cityCount > 0 && cityLabel) {
+    // Too few close by: try 25 km, then the whole city, before showing an empty state.
+    const wide = filterSalonsNearby(
+      catalog,
+      location.latitude,
+      location.longitude,
+      WIDE_RADIUS_KM,
+    )
+    if (wide.length >= WIDEN_MIN_RESULTS || (wide.length > nearbyCount && wide.length >= cityCount)) {
       return {
-        salons: [],
-        emptyKind: "nearby_city_available",
+        salons: wide,
+        emptyKind: "none",
         cityLabel,
         nearbyCount,
         cityCount,
-        scopeLabel: null,
+        scopeLabel: `Salons a little further away · within ${WIDE_RADIUS_KM} km`,
+        radiusKm: WIDE_RADIUS_KM,
+        widened: true,
+      }
+    }
+
+    if (cityCount > Math.max(nearbyCount, wide.length) && cityLabel) {
+      // Keep the closest ones first, then the rest of the city.
+      const merged = mergeById(wide, citySalonsByDistance(citySalons, location))
+      return {
+        salons: merged,
+        emptyKind: "none",
+        cityLabel,
+        nearbyCount,
+        cityCount,
+        scopeLabel: `Salons a little further away · in ${cityLabel}`,
+        radiusKm: null,
+        widened: true,
+      }
+    }
+
+    if (nearbyCount > 0) {
+      return {
+        salons: nearby,
+        emptyKind: "none",
+        cityLabel,
+        nearbyCount,
+        cityCount,
+        scopeLabel: `Within ${NEARBY_RADIUS_KM} km of ${anchor}`,
+        radiusKm: NEARBY_RADIUS_KM,
+        widened: false,
       }
     }
 
@@ -203,6 +285,8 @@ export function resolveExploreLocationSalons(input: {
       nearbyCount,
       cityCount,
       scopeLabel: null,
+      radiusKm: null,
+      widened: false,
     }
   }
 
@@ -294,7 +378,7 @@ export function resolveExploreLocationSalons(input: {
 export function salonsInSelectedLocation(
   catalog: Salon[],
   location: SavedLocation | null,
-  mode: LocationBrowseMode = "nearby",
+  mode: LocationBrowseMode = browseModeFor(location),
 ): Salon[] {
   if (!location) return []
 

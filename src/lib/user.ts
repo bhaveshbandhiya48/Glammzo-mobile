@@ -17,6 +17,11 @@ export type SavedLocation = {
   area?: string
   state?: string
   formattedAddress?: string
+  /**
+   * "city" when the person picked a whole city (for example "Jamnagar") from search,
+   * so Home lists the whole city instead of a radius around its centre point.
+   */
+  scope?: "city"
 }
 
 /** Fallback when location permission is denied or GPS fails. */
@@ -188,6 +193,7 @@ export async function getSavedLocation(): Promise<SavedLocation | null> {
       area: parsed.area,
       state: parsed.state,
       formattedAddress: parsed.formattedAddress,
+      scope: parsed.scope === "city" ? "city" : undefined,
     }
   } catch {
     return null
@@ -210,6 +216,7 @@ export async function setSavedLocation(location: SavedLocation): Promise<void> {
     area: location.area,
     state: location.state,
     formattedAddress: location.formattedAddress,
+    scope: location.scope === "city" ? "city" : undefined,
   }
   await AsyncStorage.setItem(LOCATION_KEY, label)
   await AsyncStorage.setItem(LOCATION_DETAILS_KEY, JSON.stringify(next))

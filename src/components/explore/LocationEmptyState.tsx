@@ -13,6 +13,8 @@ type LocationProps = {
   cityLabel?: string | null
   onBrowseCity?: () => void
   onChangeLocation: () => void
+  /** Solo artists are listed just above: a short note instead of the full "expanding soon" card. */
+  artistsShown?: boolean
   onClearFilters?: never
   onRetry?: never
   message?: never
@@ -93,8 +95,27 @@ export function LocationEmptyState(props: Props) {
     )
   }
 
-  const { kind, cityLabel, onBrowseCity, onChangeLocation } = props
+  const { kind, cityLabel, onBrowseCity, onChangeLocation, artistsShown } = props
   const nearbyWithCity = kind === "nearby_city_available" && Boolean(cityLabel)
+
+  if (artistsShown) {
+    return (
+      <View style={styles.note}>
+        <Text variant="bodyStrong">No salons {cityLabel ? `in ${cityLabel} ` : "here "}yet</Text>
+        <Text variant="caption" muted>
+          {nearbyWithCity
+            ? `You can book a solo artist above, or browse salons across ${cityLabel}.`
+            : "You can book a solo artist above, or choose another location for salons."}
+        </Text>
+        <View style={styles.noteActions}>
+          {nearbyWithCity && onBrowseCity ? (
+            <Button label={`Browse ${cityLabel}`} variant="secondary" onPress={onBrowseCity} style={styles.noteButton} />
+          ) : null}
+          <Button label="Change location" variant="secondary" onPress={onChangeLocation} style={styles.noteButton} />
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.wrap}>
@@ -162,5 +183,22 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 320,
     gap: spacing.sm,
+  },
+  note: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radii.xl,
+    backgroundColor: colors.surface,
+    gap: spacing.xs,
+  },
+  noteActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  noteButton: {
+    flexGrow: 1,
   },
 })

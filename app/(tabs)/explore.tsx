@@ -361,6 +361,9 @@ export default function ExploreScreen() {
     }
   }, [loadCatalog, loadOfferBanners])
 
+  /** Solo artists near the saved location; null until the carousel has loaded them. */
+  const [nearbyArtistCount, setNearbyArtistCount] = useState<number | null>(null)
+
   const locationResult = useMemo(
     () => {
       if (!savedLocation) {
@@ -1079,12 +1082,22 @@ export default function ExploreScreen() {
               onRetry={() => void loadCatalog(true)}
             />
           ) : showLocationEmpty && locationResult.emptyKind !== "none" ? (
-            <LocationEmptyState
-              kind={locationResult.emptyKind}
-              cityLabel={locationResult.cityLabel}
-              onBrowseCity={() => void browseCity()}
-              onChangeLocation={openLocationSheet}
-            />
+            // No salons here, but solo artists may still cover this area: list them too.
+            <>
+              <ArtistsCarousel
+                latitude={savedLocation?.latitude}
+                longitude={savedLocation?.longitude}
+                refreshKey={homeRefreshKey}
+                onCount={setNearbyArtistCount}
+              />
+              <LocationEmptyState
+                kind={locationResult.emptyKind}
+                cityLabel={locationResult.cityLabel}
+                onBrowseCity={() => void browseCity()}
+                onChangeLocation={openLocationSheet}
+                artistsShown={(nearbyArtistCount ?? 0) > 0}
+              />
+            </>
           ) : searchQuery.trim() && activeFilterCount === 0 && gridSalons.length === 0 ? (
             <View style={styles.searchEmpty}>
               <Text variant="bodyStrong">No salons for “{searchQuery.trim()}” nearby</Text>

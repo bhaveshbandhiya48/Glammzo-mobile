@@ -28,9 +28,11 @@ type Props = {
   query?: string
   /** Bump to force a network refresh (e.g. Home pull-to-refresh). */
   refreshKey?: number
+  /** How many artists it found, so Home can soften its "no salons here" state. */
+  onCount?: (count: number) => void
 }
 
-export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0 }: Props) {
+export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0, onCount }: Props) {
   const router = useRouter()
   const { width: windowWidth } = useWindowDimensions()
   const lat = latitude ?? undefined
@@ -88,6 +90,10 @@ export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0 }: 
       cancelled = true
     }
   }, [lat, lng, q, refreshKey, force])
+
+  useEffect(() => {
+    onCount?.(artists?.length ?? 0)
+  }, [artists, onCount])
 
   if (!artists || artists.length === 0) return null
 

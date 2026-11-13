@@ -22,6 +22,7 @@ import {
   serviceLineAmount,
 } from "@/lib/service-pricing"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 type Props = {
   visible: boolean
@@ -139,7 +140,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
                 </Text>
                 {line?.durationMin ? (
                   <Text variant="caption" muted>
-                    {line.durationMin} min
+                    {formatDuration(line.durationMin)}
                   </Text>
                 ) : null}
                 <Text variant="bodyStrong">
@@ -218,7 +219,7 @@ export function CartItemsSheet({ visible, salonId, onClose, onContinue }: Props)
                 <Text variant="caption" muted>
                   Package
                   {selectedPackage.totalDurationMin > 0
-                    ? ` · ${selectedPackage.totalDurationMin} min`
+                    ? ` · ${formatDuration(selectedPackage.totalDurationMin)}`
                     : ""}
                 </Text>
                 <Text variant="bodyStrong">₹{selectedPackage.packagePrice}</Text>

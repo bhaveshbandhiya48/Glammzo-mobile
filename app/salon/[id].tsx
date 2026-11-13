@@ -70,6 +70,7 @@ import {
 import { getSavedLocation } from "@/lib/user"
 import { salonWhatsAppUrl } from "@/lib/whatsapp"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 const PACKAGES_CATEGORY = "Packages"
 
@@ -794,7 +795,7 @@ export default function SalonDetailScreen() {
                                   <>
                                     <Icon name="time-outline" size={13} color={colors.textSubtle} />
                                     <Text variant="caption" muted>
-                                      {pkg.totalDurationMin} min
+                                      {formatDuration(pkg.totalDurationMin)}
                                     </Text>
                                     <Text variant="caption" muted>
                                       ·
@@ -1098,7 +1099,7 @@ export default function SalonDetailScreen() {
               ) : null}
             </View>
             <Text muted style={{ marginTop: spacing.xs }}>
-              {detailService.category} · {detailService.durationMin} min
+              {detailService.category} · {formatDuration(detailService.durationMin)}
             </Text>
             <View style={styles.sheetPriceBox}>
               <Text variant="caption" muted>
@@ -1219,7 +1220,7 @@ export default function SalonDetailScreen() {
             <Text muted style={{ marginTop: spacing.xs }}>
               Package
               {detailPackage.totalDurationMin > 0
-                ? ` · ${detailPackage.totalDurationMin} min`
+                ? ` · ${formatDuration(detailPackage.totalDurationMin)}`
                 : ""}
               {detailPackage.items.length > 0
                 ? ` · ${detailPackage.items.length} services`

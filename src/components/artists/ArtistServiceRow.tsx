@@ -9,6 +9,7 @@ import {
 } from "@/lib/artists-api"
 import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 function locationLabel(mode: PublicArtistService["locationMode"]) {
   if (mode === "both") return "Studio or home visit"
@@ -76,7 +77,7 @@ export function ArtistServiceRow({
             <View style={styles.meta}>
               <Icon name="time-outline" size={13} color={colors.textSubtle} />
               <Text variant="caption" muted>
-                {service.durationMinutes} min
+                {formatDuration(service.durationMinutes)}
               </Text>
               <Text variant="caption" muted>
                 ·

@@ -5,6 +5,7 @@ import {
   parsePricingUnit,
   quantityForService,
 } from "@/lib/pricing-unit"
+import { formatDuration } from "@/lib/booking-display"
 
 export function serviceHasPriceOptions(
   service: Pick<SalonService, "priceOptions"> | null | undefined,
@@ -137,7 +138,7 @@ export function serviceCartCaption(
   const qtyCaption = formatPricingUnitQuantityCaption(unit, quantity)
   const optionName = selectedOptionName(service, optionId)
   const duration = service.durationMin * quantity
-  return [service.category, qtyCaption, `${duration} min`, optionName]
+  return [service.category, qtyCaption, `${formatDuration(duration)}`, optionName]
     .filter(Boolean)
     .join(" · ")
 }

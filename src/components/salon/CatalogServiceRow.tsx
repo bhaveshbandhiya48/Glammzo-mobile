@@ -15,6 +15,7 @@ import {
   serviceHasPriceOptions,
 } from "@/lib/service-pricing"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 type Props = {
   service: SalonService
@@ -109,7 +110,7 @@ export function CatalogServiceRow({
             <View style={styles.meta}>
               <Icon name="time-outline" size={13} color={colors.textSubtle} />
               <Text variant="caption" muted>
-                {service.durationMin} min
+                {formatDuration(service.durationMin)}
               </Text>
               <Text variant="caption" muted>
                 ·

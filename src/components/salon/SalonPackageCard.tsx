@@ -6,6 +6,7 @@ import { Text } from "@/components/ui/Text"
 import type { SalonPackage } from "@/data/types"
 import { resolvePackageBadge } from "@/lib/package-badges"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 type Props = {
   pkg: SalonPackage
@@ -99,7 +100,7 @@ export function SalonPackageCard({
             <View style={styles.metaChip}>
               <Icon name="time-outline" size={14} color={colors.textSubtle} />
               <Text variant="caption" muted>
-                {pkg.totalDurationMin} min
+                {formatDuration(pkg.totalDurationMin)}
               </Text>
             </View>
           ) : null}

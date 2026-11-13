@@ -49,6 +49,7 @@ import {
 import { LEGAL } from "@/lib/legal"
 import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 function locationLabel(mode: PublicArtistService["locationMode"]) {
   if (mode === "both") return "Artist's studio or they can come to you"
@@ -575,7 +576,7 @@ export default function ArtistDetailScreen() {
             <Text variant="heading">{detailService.name}</Text>
             <Text muted style={{ marginTop: spacing.xs }}>
               {detailService.category || locationLabel(detailService.locationMode)} ·{" "}
-              {detailService.durationMinutes} min
+              {formatDuration(detailService.durationMinutes)}
             </Text>
             <View style={styles.sheetPriceBox}>
               <Text variant="caption" muted>

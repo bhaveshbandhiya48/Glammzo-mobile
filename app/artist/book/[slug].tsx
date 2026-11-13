@@ -57,6 +57,7 @@ import {
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 function dayKeys(from: Date, count: number, timeZone: string) {
   const keys: string[] = []
@@ -1336,7 +1337,7 @@ export default function ArtistBookScreen() {
           <View style={{ gap: spacing.xs, paddingBottom: spacing.md }}>
             <Text variant="heading">{detailService.name}</Text>
             <Text muted style={{ marginTop: spacing.xs }}>
-              {detailService.durationMinutes} min ·{" "}
+              {formatDuration(detailService.durationMinutes)} ·{" "}
               {formatRupees(artistServiceUnitPrice(detailService, "studio"))} at
               studio
             </Text>

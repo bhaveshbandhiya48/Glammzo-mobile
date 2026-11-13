@@ -70,6 +70,7 @@ import {
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
 import { colors, radii, spacing } from "@/theme/tokens"
+import { formatDuration } from "@/lib/booking-display"
 
 function formatDayChip(dateKey: string) {
   const date = new Date(`${dateKey}T12:00:00`)
@@ -546,7 +547,7 @@ export default function BookingScreen() {
     ? [
         {
           title: selectedPackage.name,
-          subtitle: `Package · ${selectedPackage.totalDurationMin} min`,
+          subtitle: `Package · ${formatDuration(selectedPackage.totalDurationMin)}`,
           priceLabel: `₹${selectedPackage.packagePrice}`,
         },
       ]
@@ -794,7 +795,7 @@ export default function BookingScreen() {
                 <Text variant="caption" muted>
                   Package
                   {selectedPackage.totalDurationMin > 0
-                    ? ` · ${selectedPackage.totalDurationMin} min`
+                    ? ` · ${formatDuration(selectedPackage.totalDurationMin)}`
                     : ""}
                 </Text>
                 <Text variant="bodyStrong">₹{selectedPackage.packagePrice}</Text>

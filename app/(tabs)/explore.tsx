@@ -12,6 +12,7 @@ import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { HomeV4 } from "@/components/home/HomeV4"
+import { AllSalonsSection, OffersLabel, SalonFilterChips } from "@/components/home/AllSalonsSection"
 import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
 import { MapOverlay } from "@/components/explore/MapOverlay"
@@ -478,10 +479,6 @@ export default function ExploreScreen() {
     showHomeSections,
   ])
 
-  const sortLabel =
-    EXPLORE_SORT_FILTERS.find((item) => item.id === filters.sort)?.label ??
-    "Recommended"
-
   const availableBusinessTypes = useMemo(() => {
     const scoped = salonsInSelectedLocation(catalog, savedLocation, locationMode)
     const counts = countSalonsByBusinessType(scoped)
@@ -530,7 +527,6 @@ export default function ExploreScreen() {
   const homeLocalSalons = showHomeSections
     ? localGridSalons.slice(0, HOME_CAROUSEL_LIMIT)
     : localGridSalons
-  const homeNearbyAreaSalons = nearbyAreaGridSalons.slice(0, HOME_CAROUSEL_LIMIT)
 
   const cartEntries = useMemo(() => {
     return cart.carts.flatMap((salonCart) => {
@@ -702,6 +698,18 @@ export default function ExploreScreen() {
       cancelled = true
     }
   }, [locationOpen, savedLocation?.latitude, savedLocation?.longitude])
+
+  function openFilterSheet() {
+    setDraftFilters(filters)
+    setFilterSection("category")
+    setFilterOpen(true)
+  }
+
+  function clearFilters() {
+    const cleared: ExploreFilterState = { ...DEFAULT_EXPLORE_FILTERS, sort: filters.sort }
+    setDraftFilters(cleared)
+    setFilters(cleared)
+  }
 
   function dismissSearch() {
     setSearchOpen(false)
@@ -892,6 +900,12 @@ export default function ExploreScreen() {
             onLocationPress={openLocationSheet}
           />
 
+          {homeReady &&
+          !searchQuery.trim() &&
+          offerBanners.some((item) => Boolean(item.imageUrl?.trim())) ? (
+            <OffersLabel />
+          ) : null}
+
           {homeReady && !searchQuery.trim() ? (
             <PromoBannerCarousel
               items={offerBanners}
@@ -904,160 +918,16 @@ export default function ExploreScreen() {
             />
           ) : null}
 
-          {activeFilterCount > 0 || filters.sort !== "recommended" ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              directionalLockEnabled
-              contentContainerStyle={styles.chipRow}
-            >
-              {filters.category !== "all" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, category: "all" }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    {filters.category}
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-              {filters.price !== "any" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, price: "any" }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    {
-                      EXPLORE_PRICE_FILTERS.find((item) => item.id === filters.price)
-                        ?.label
-                    }
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-              {filters.rating !== "any" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, rating: "any" }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    {
-                      EXPLORE_RATING_FILTERS.find(
-                        (item) => item.id === filters.rating,
-                      )?.label
-                    }
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-              {filters.radius !== "any" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, radius: "any" }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    {
-                      EXPLORE_RADIUS_FILTERS.find(
-                        (item) => item.id === filters.radius,
-                      )?.label
-                    }
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-              {filters.openOnly ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, openOnly: false }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    Open now
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-              {filters.sort !== "recommended" ? (
-                <Pressable
-                  accessibilityRole="button"
-                  style={[styles.filterChip, styles.filterChipActive]}
-                  onPress={() =>
-                    setFilters((prev) => ({ ...prev, sort: "recommended" }))
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    {sortLabel}
-                  </Text>
-                  <Icon name="close" size={14} color={colors.primary} />
-                </Pressable>
-              ) : null}
-            </ScrollView>
-          ) : null}
-
-          {homeReady ? (
-          <View style={styles.filterBar}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Show salons on a map"
-              style={styles.filterChip}
-              onPress={() => setMapOpen(true)}
-            >
-              <Icon name="map-outline" size={16} color={colors.text} />
-              <Text variant="caption">Map</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" style={styles.filterChip} onPress={() => setSortOpen(true)}>
-              <Icon name="swap-vertical-outline" size={16} color={colors.text} />
-              <Text variant="caption" numberOfLines={1}>
-                {sortLabel}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              style={[
-                styles.filterChip,
-                activeFilterCount > 0 && styles.filterChipActive,
-              ]}
-              onPress={() => {
-                setDraftFilters(filters)
-                setFilterSection("category")
-                setFilterOpen(true)
-              }}
-            >
-              <Icon
-                name="options-outline"
-                size={16}
-                color={activeFilterCount > 0 ? colors.primary : colors.text}
+          {homeReady && searchQuery.trim() ? (
+            <View style={styles.searchChips}>
+              <SalonFilterChips
+                filters={filters}
+                onChange={setFilters}
+                onOpenFilters={openFilterSheet}
+                onOpenSort={() => setSortOpen(true)}
+                onClearAll={clearFilters}
               />
-              <Text
-                variant="caption"
-                color={activeFilterCount > 0 ? colors.primary : colors.text}
-              >
-                Filter
-              </Text>
-              {activeFilterCount > 0 ? (
-                <View style={styles.filterCount}>
-                  <Text variant="caption" color={colors.primaryFg}>
-                    {activeFilterCount}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
+            </View>
           ) : null}
 
           {(catalogLoading && catalog.length === 0) || !homeReady ? (
@@ -1092,6 +962,20 @@ export default function ExploreScreen() {
                 Try another word, like haircut or facial. Solo artists who offer it show below.
               </Text>
             </View>
+          ) : !searchQuery.trim() ? (
+            <AllSalonsSection
+              salons={scopedFiltered}
+              location={savedLocation}
+              areaLabel={areaName ?? locationResult.cityLabel}
+              filters={filters}
+              onChange={setFilters}
+              onOpenFilters={openFilterSheet}
+              onOpenSort={() => setSortOpen(true)}
+              onClearAll={clearFilters}
+              onOpenMap={() => setMapOpen(true)}
+              onSeeAll={() => router.push("/salons")}
+              emptyState={<LocationEmptyState variant="filters" onClearFilters={clearFilters} />}
+            />
           ) : showFilterEmpty ||
             (gridSalons.length === 0 && featuredSection.salons.length === 0) ? (
             <LocationEmptyState
@@ -1108,10 +992,6 @@ export default function ExploreScreen() {
             />
           ) : (
             <>
-              {showHomeSections && featuredSection.salons.length > 0 ? (
-                <SalonCarousel title="Featured" salons={featuredSection.salons} />
-              ) : null}
-
               {localGridSalons.length > 0 ? (
                 <SalonCarousel
                   title={sectionTitle}
@@ -1129,27 +1009,6 @@ export default function ExploreScreen() {
                   onSeeAll={
                     searchQuery.trim() ? undefined : () => router.push("/salons")
                   }
-                />
-              ) : null}
-
-              {showHomeSections && nearbyAreaGridSalons.length > 0 ? (
-                <SalonCarousel
-                  title="Nearby areas"
-                  subtitle={
-                    locationMode === "city" && locationResult.cityLabel
-                      ? `Elsewhere in ${locationResult.cityLabel}`
-                      : `Within ${locationResult.radiusKm ?? NEARBY_RADIUS_KM} km of ${areaName ?? "you"}`
-                  }
-                  salons={homeNearbyAreaSalons}
-                  onSeeAll={() => router.push("/salons")}
-                />
-              ) : null}
-
-              {showHomeSections ? (
-                <ArtistsCarousel
-                  latitude={savedLocation?.latitude}
-                  longitude={savedLocation?.longitude}
-                  refreshKey={homeRefreshKey}
                 />
               ) : null}
             </>
@@ -1525,6 +1384,12 @@ const styles = StyleSheet.create({
   nextVisit: {
     marginBottom: spacing.md,
   },
+  // SalonFilterChips pads 20 itself; run it edge to edge.
+  searchChips: {
+    marginHorizontal: -spacing.lg,
+    marginTop: spacing.lg,
+    marginBottom: spacing.md,
+  },
   searchEmpty: {
     gap: 4,
     paddingVertical: spacing.lg,
@@ -1536,40 +1401,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
     flexDirection: "row",
     alignItems: "center",
-  },
-  filterBar: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  chipRow: {
-    gap: spacing.sm,
-    paddingTop: spacing.md,
-  },
-  filterChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    height: 34,
-    borderRadius: radii.pill,
-    backgroundColor: colors.muted,
-  },
-  filterChipActive: {
-    borderWidth: 1,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-  },
-  filterCount: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 5,
-    backgroundColor: colors.primary,
   },
   grid: {
     flexDirection: "row",

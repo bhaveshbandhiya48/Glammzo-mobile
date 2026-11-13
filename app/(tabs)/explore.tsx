@@ -11,16 +11,14 @@ import {
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { BusinessTypeStrip } from "@/components/explore/BusinessTypeStrip"
+import { HomeV4 } from "@/components/home/HomeV4"
 import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
 import { MapOverlay } from "@/components/explore/MapOverlay"
 import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
-import { NextBookingCard } from "@/components/explore/NextBookingCard"
 import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
 import { SalonCarousel } from "@/components/explore/SalonCarousel"
 import { SearchSuggestionsPanel } from "@/components/explore/SearchSuggestionsPanel"
-import { TopChrome } from "@/components/layout/TopChrome"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
@@ -847,21 +845,6 @@ export default function ExploreScreen() {
 
   return (
     <View style={styles.root}>
-      <TopChrome
-        username={username}
-        locationLabel={location}
-        searchQuery={searchQuery}
-        onSearchPress={openSearch}
-        onClearSearch={() => setSearchQuery("")}
-        onLocationChangePress={openLocationSheet}
-        onNotificationsPress={() => router.push("/notifications")}
-        onCartPress={() => {
-          const first = cart.carts[0]
-          setActiveCartSalonId(first?.salonId ?? null)
-          setCartOpen(true)
-        }}
-      />
-
       <SearchSuggestionsPanel
         visible={searchOpen}
         initialQuery={searchQuery}
@@ -896,9 +879,17 @@ export default function ExploreScreen() {
             />
           }
         >
-          {homeReady && !searchQuery.trim() ? (
-            <NextBookingCard style={styles.nextVisit} refreshKey={homeRefreshKey} />
-          ) : null}
+          <HomeV4
+            username={username}
+            location={locationReady ? savedLocation : null}
+            searchQuery={searchQuery}
+            showSections={homeReady && !searchQuery.trim()}
+            salons={locationResult.salons}
+            refreshKey={homeRefreshKey}
+            onSearchPress={openSearch}
+            onClearSearch={() => setSearchQuery("")}
+            onLocationPress={openLocationSheet}
+          />
 
           {homeReady && !searchQuery.trim() ? (
             <PromoBannerCarousel
@@ -910,22 +901,6 @@ export default function ExploreScreen() {
                 }
               }}
             />
-          ) : null}
-
-          {homeReady && availableBusinessTypes.length > 0 ? (
-            <View style={styles.section}>
-              <BusinessTypeStrip
-                selected={null}
-                availableTypes={availableBusinessTypes}
-                onSelect={(type) => {
-                  if (!type) return
-                  router.push({
-                    pathname: "/category/[type]",
-                    params: { type },
-                  })
-                }}
-              />
-            </View>
           ) : null}
 
           {activeFilterCount > 0 || filters.sort !== "recommended" ? (
@@ -1190,6 +1165,11 @@ export default function ExploreScreen() {
         </ScrollView>
 
         {showCart ? <CartStrip entries={cartEntries} aboveTabBar /> : null}
+        {/* Home header scrolls; keep the status bar area readable (matches the header's top colour). */}
+        <View
+          pointerEvents="none"
+          style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top, backgroundColor: "#fdf3ee" }}
+        />
       </View>
 
       <CartItemsSheet
@@ -1529,7 +1509,7 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: colors.surface,
   },
   content: {
     flex: 1,

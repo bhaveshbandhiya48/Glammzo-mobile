@@ -25,7 +25,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
-import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
+import { useCollapseTabBarOnScroll, useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { Icon } from "@/components/ui/Icon"
 import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
@@ -124,6 +124,7 @@ const FILTER_SECTIONS: Array<{ id: FilterSectionId; label: string }> = [
 
 export default function ExploreScreen() {
   const tabBarSpace = useFloatingTabBarSpace()
+  const onTabBarScroll = useCollapseTabBarOnScroll()
   const router = useRouter()
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
@@ -878,6 +879,8 @@ export default function ExploreScreen() {
       <View style={styles.content}>
         <ScrollView
           showsVerticalScrollIndicator={false}
+          onScroll={onTabBarScroll}
+          scrollEventThrottle={16}
           bounces
           alwaysBounceVertical
           overScrollMode="always"

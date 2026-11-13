@@ -1,6 +1,15 @@
 import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs"
-import { useEffect, useRef } from "react"
-import { Animated, Platform, Pressable, StyleSheet, View } from "react-native"
+import { useCallback, useEffect, useRef, useSyncExternalStore } from "react"
+import {
+  Animated,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -10,6 +19,50 @@ const BAR_HEIGHT = 58
 /** Same inset all round, so the selected pill sits evenly inside the bar. */
 const BAR_INSET = 5
 const BAR_MARGIN = 22
+/** Mini bar while scrolling down: smaller, centred, icons only. */
+const MINI_WIDTH = 180
+const MINI_HEIGHT = 50
+const MINI_ICON_SCALE = 20 / 22
+
+// Collapsed state shared between the bar and the screen that scrolls.
+let collapsed = false
+const listeners = new Set<() => void>()
+
+/** Shrink (true) or restore (false) the floating tab bar. */
+export function setTabBarCollapsed(next: boolean) {
+  if (collapsed === next) return
+  collapsed = next
+  for (const listener of listeners) listener()
+}
+
+function subscribeCollapsed(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function useTabBarCollapsed() {
+  return useSyncExternalStore(subscribeCollapsed, () => collapsed, () => false)
+}
+
+/**
+ * Pass the result to a tab screen's ScrollView `onScroll` (with `scrollEventThrottle={16}`).
+ * Scrolling down shrinks the bar; scrolling up a little or reaching the top brings it back.
+ */
+export function useCollapseTabBarOnScroll() {
+  const lastY = useRef(0)
+  // Leaving the screen always restores the full bar.
+  useEffect(() => () => setTabBarCollapsed(false), [])
+  return useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = event.nativeEvent.contentOffset.y
+    const dy = y - lastY.current
+    lastY.current = y
+    if (y <= 24) setTabBarCollapsed(false)
+    else if (dy > 6) setTabBarCollapsed(true)
+    else if (dy < -12) setTabBarCollapsed(false)
+  }, [])
+}
 
 /**
  * Gap under the bar: close to the screen edge, just clear of the iPhone home indicator.
@@ -39,6 +92,22 @@ export function useFloatingTabBarSpace() {
  */
 export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
+  const { width: screenWidth } = useWindowDimensions()
+  const isCollapsed = useTabBarCollapsed()
+  const progress = useRef(new Animated.Value(collapsed ? 1 : 0)).current
+  useEffect(() => {
+    Animated.spring(progress, {
+      toValue: isCollapsed ? 1 : 0,
+      damping: 20,
+      stiffness: 260,
+      useNativeDriver: false,
+    }).start()
+  }, [isCollapsed, progress])
+  // Switching tab shows the full bar again.
+  useEffect(() => {
+    setTabBarCollapsed(false)
+  }, [state.index])
+  const fullWidth = Math.max(MINI_WIDTH, screenWidth - BAR_MARGIN * 2)
   // "index" only redirects to Home; it has no tab.
   const routes = state.routes.filter((route) => route.name !== "index")
   // A screen can hide the bar, like Home does while its map is open.
@@ -48,7 +117,24 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: barBottomGap(insets.bottom) }]}>
-      <View style={styles.bar} accessibilityRole="tablist">
+      <Animated.View
+        style={[
+          styles.bar,
+          {
+            width: progress.interpolate({ inputRange: [0, 1], outputRange: [fullWidth, MINI_WIDTH] }),
+            height: progress.interpolate({ inputRange: [0, 1], outputRange: [BAR_HEIGHT, MINI_HEIGHT] }),
+          },
+        ]}
+        accessibilityRole="tablist"
+      >
+        {/* While mini, a tap on the bar outside the icons brings back the full bar. */}
+        {isCollapsed ? (
+          <Pressable
+            accessibilityLabel="Show full menu"
+            onPress={() => setTabBarCollapsed(false)}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
         {routes.map((route) => {
           const index = state.routes.indexOf(route)
           const focused = state.index === index
@@ -59,6 +145,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
               key={route.key}
               label={label}
               focused={focused}
+              iconScale={progress.interpolate({ inputRange: [0, 1], outputRange: [1, MINI_ICON_SCALE] })}
               icon={options.tabBarIcon?.({ focused, color: focused ? colors.primaryFg : colors.text, size: 22 })}
               onPress={() => {
                 const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
@@ -68,7 +155,7 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
             />
           )
         })}
-      </View>
+      </Animated.View>
     </View>
   )
 }
@@ -77,12 +164,14 @@ function Tab({
   label,
   focused,
   icon,
+  iconScale,
   onPress,
   onLongPress,
 }: {
   label: string
   focused: boolean
   icon: React.ReactNode
+  iconScale: Animated.AnimatedInterpolation<number>
   onPress: () => void
   onLongPress: () => void
 }) {
@@ -108,7 +197,7 @@ function Tab({
           },
         ]}
       >
-        {icon}
+        <Animated.View style={{ transform: [{ scale: iconScale }] }}>{icon}</Animated.View>
       </Animated.View>
     </Pressable>
   )
@@ -122,6 +211,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     paddingHorizontal: BAR_MARGIN,
+    alignItems: "center",
   },
   bar: {
     flexDirection: "row",
@@ -132,11 +222,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
+    // Clean, minimal lift: a soft close shadow instead of a wide grey haze.
     shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
   tabHit: {
     flex: 1,

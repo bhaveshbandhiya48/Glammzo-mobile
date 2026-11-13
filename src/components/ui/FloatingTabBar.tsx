@@ -2,6 +2,7 @@ import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs"
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react"
 import {
   Animated,
+  Easing,
   Platform,
   Pressable,
   StyleSheet,
@@ -45,14 +46,24 @@ const ACTIVE_LABEL = "#111111"
 const INACTIVE = "#4b5563"
 const BADGE_BG = "#e5484d"
 
+/** Full↔mini switch: ease-out, no overshoot, transforms and opacity only (native driver). */
+const MORPH_MS = 240
+/** Scroll this far in one direction before the bar switches. */
+const SWITCH_DISTANCE = 28
+/** Near the top the full bar always shows. */
+const TOP_ZONE = 40
+
 // Collapsed state shared between the bar and the screen that scrolls.
 let collapsed = false
+/** No new switch until the running full↔mini animation has finished. */
+let lockedUntil = 0
 const listeners = new Set<() => void>()
 
 /** Shrink (true) or restore (false) the floating tab bar. */
 export function setTabBarCollapsed(next: boolean) {
   if (collapsed === next) return
   collapsed = next
+  lockedUntil = Date.now() + MORPH_MS
   for (const listener of listeners) listener()
 }
 
@@ -69,19 +80,45 @@ function useTabBarCollapsed() {
 
 /**
  * Pass the result to a tab screen's ScrollView `onScroll` (with `scrollEventThrottle={16}`).
- * Scrolling down shrinks the bar; scrolling up a little or reaching the top brings it back.
+ * Scrolling down shrinks the bar; scrolling back up brings it back. It only switches after
+ * ~28pt of steady movement one way, ignores iOS bounce past either end, and keeps the full
+ * bar near the top. Nothing here re-renders the screen: state changes only when the mode does.
  */
 export function useCollapseTabBarOnScroll() {
   const lastY = useRef(0)
+  const travel = useRef(0)
   // Leaving the screen always restores the full bar.
   useEffect(() => () => setTabBarCollapsed(false), [])
   return useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = event.nativeEvent.contentOffset.y
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
+    const maxY = Math.max(0, contentSize.height - layoutMeasurement.height)
+    const y = contentOffset.y
+    if (y < TOP_ZONE) {
+      // Includes the pull-to-refresh / top bounce (negative offsets).
+      lastY.current = Math.max(y, 0)
+      travel.current = 0
+      setTabBarCollapsed(false)
+      return
+    }
+    if (y > maxY) {
+      // Bottom bounce: the rubber band springing back is not the user scrolling up.
+      lastY.current = maxY
+      travel.current = 0
+      return
+    }
     const dy = y - lastY.current
     lastY.current = y
-    if (y <= 24) setTabBarCollapsed(false)
-    else if (dy > 6) setTabBarCollapsed(true)
-    else if (dy < -12) setTabBarCollapsed(false)
+    if (dy === 0) return
+    // Count distance in one direction; turning around starts the count again.
+    travel.current = Math.sign(dy) === Math.sign(travel.current) ? travel.current + dy : dy
+    if (Date.now() < lockedUntil) return
+    if (travel.current >= SWITCH_DISTANCE && !collapsed) {
+      travel.current = 0
+      setTabBarCollapsed(true)
+    } else if (travel.current <= -SWITCH_DISTANCE && collapsed) {
+      travel.current = 0
+      setTabBarCollapsed(false)
+    }
   }, [])
 }
 
@@ -111,6 +148,10 @@ export function useFloatingTabBarSpace() {
  * Bottom navigation as a separate rounded bar floating above the screen edge.
  * Each tab shows its icon above a label; the selected one sits on a soft peach pill.
  * While Home scrolls down it shrinks to a centred, icons-only mini bar.
+ *
+ * The outer frame never changes size. The full bar and the mini bar are two fixed layers
+ * that cross-fade and scale on the native driver, so the switch never triggers layout
+ * and can't feed back into the screen's scroll.
  */
 export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
@@ -119,12 +160,14 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
   const upcomingCount = useUpcomingBookingsCount()
   const progress = useRef(new Animated.Value(collapsed ? 1 : 0)).current
   useEffect(() => {
-    Animated.spring(progress, {
+    const animation = Animated.timing(progress, {
       toValue: isCollapsed ? 1 : 0,
-      damping: 20,
-      stiffness: 260,
-      useNativeDriver: false,
-    }).start()
+      duration: MORPH_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    })
+    animation.start()
+    return () => animation.stop()
   }, [isCollapsed, progress])
   // Switching tab shows the full bar again.
   useEffect(() => {
@@ -141,79 +184,85 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
   const tabCount = Math.max(routes.length, 1)
   const fullSlot = (fullWidth - BAR_PADDING * 2) / tabCount
   const miniSlot = (MINI_WIDTH - MINI_PADDING * 2) / tabCount
-  const layout: TabLayout = {
-    iconAreaHeight: progress.interpolate({ inputRange: [0, 1], outputRange: [PILL_HEIGHT, MINI_PILL_HEIGHT] }),
-    pillWidth: progress.interpolate({
-      inputRange: [0, 1],
-      outputRange: [Math.min(PILL_WIDTH, fullSlot), miniSlot],
-    }),
-    // Labels fade out early in the shrink, then their space folds away.
-    labelOpacity: progress.interpolate({ inputRange: [0, 0.3], outputRange: [1, 0], extrapolate: "clamp" }),
-    labelHeight: progress.interpolate({ inputRange: [0, 1], outputRange: [LABEL_HEIGHT, 0] }),
-    labelGap: progress.interpolate({ inputRange: [0, 1], outputRange: [LABEL_GAP, 0] }),
+  const fullPill = { width: Math.min(PILL_WIDTH, fullSlot), height: PILL_HEIGHT }
+  const miniPill = { width: miniSlot, height: MINI_PILL_HEIGHT }
+
+  // Full layer fades out early and settles back slightly; the mini layer fades in late from slightly larger.
+  const fullStyle = {
+    opacity: progress.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0], extrapolate: "clamp" }),
+    transform: [
+      { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [0, (BAR_HEIGHT - MINI_HEIGHT) / 2] }) },
+      { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.94] }) },
+    ],
   }
+  const miniStyle = {
+    opacity: progress.interpolate({ inputRange: [0.3, 1], outputRange: [0, 1], extrapolate: "clamp" }),
+    transform: [{ scale: progress.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) }],
+  }
+
+  const renderTabs = (mini: boolean) =>
+    routes.map((route) => {
+      const index = state.routes.indexOf(route)
+      const focused = state.index === index
+      const { options } = descriptors[route.key]!
+      const label =
+        typeof options.tabBarLabel === "string"
+          ? options.tabBarLabel
+          : typeof options.title === "string"
+            ? options.title
+            : route.name
+      // Signed out the shared bookings list is empty, so the count is 0 and the badge hides.
+      const badge = route.name === "bookings" && !focused && upcomingCount > 0 ? upcomingCount : 0
+      return (
+        <Tab
+          key={route.key}
+          label={label}
+          accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
+          focused={focused}
+          badge={badge}
+          mini={mini}
+          pill={mini ? miniPill : fullPill}
+          icon={options.tabBarIcon?.({ focused, color: focused ? ACTIVE_ICON : INACTIVE, size: ICON_SIZE })}
+          onPress={() => {
+            const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
+            if (!focused && !event.defaultPrevented) navigateToTab(route.key)
+          }}
+          onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
+        />
+      )
+    })
+
+  // Only the visible layer takes touches and is read by screen readers.
+  const hidden = { accessibilityElementsHidden: true, importantForAccessibility: "no-hide-descendants" as const }
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { paddingBottom: barBottomGap(insets.bottom) }]}>
-      <Animated.View
-        style={[
-          styles.bar,
-          {
-            width: progress.interpolate({ inputRange: [0, 1], outputRange: [fullWidth, MINI_WIDTH] }),
-            height: progress.interpolate({ inputRange: [0, 1], outputRange: [BAR_HEIGHT, MINI_HEIGHT] }),
-            padding: progress.interpolate({ inputRange: [0, 1], outputRange: [BAR_PADDING, MINI_PADDING] }),
-          },
-        ]}
-        accessibilityRole="tablist"
-      >
-        {/* While mini, a tap on the bar outside the icons brings back the full bar. */}
-        {isCollapsed ? (
+      <View pointerEvents="box-none" style={{ width: fullWidth, height: BAR_HEIGHT }}>
+        <Animated.View
+          pointerEvents={isCollapsed ? "none" : "auto"}
+          {...(isCollapsed ? hidden : null)}
+          style={[styles.bar, styles.fullBar, fullStyle]}
+          accessibilityRole="tablist"
+        >
+          {renderTabs(false)}
+        </Animated.View>
+        <Animated.View
+          pointerEvents={isCollapsed ? "auto" : "none"}
+          {...(isCollapsed ? null : hidden)}
+          style={[styles.bar, styles.miniBar, { left: (fullWidth - MINI_WIDTH) / 2 }, miniStyle]}
+          accessibilityRole="tablist"
+        >
+          {/* While mini, a tap on the bar outside the icons brings back the full bar. */}
           <Pressable
             accessibilityLabel="Show full menu"
             onPress={() => setTabBarCollapsed(false)}
             style={StyleSheet.absoluteFill}
           />
-        ) : null}
-        {routes.map((route) => {
-          const index = state.routes.indexOf(route)
-          const focused = state.index === index
-          const { options } = descriptors[route.key]!
-          const label =
-            typeof options.tabBarLabel === "string"
-              ? options.tabBarLabel
-              : typeof options.title === "string"
-                ? options.title
-                : route.name
-          // Signed out the shared bookings list is empty, so the count is 0 and the badge hides.
-          const badge = route.name === "bookings" && !focused && upcomingCount > 0 ? upcomingCount : 0
-          return (
-            <Tab
-              key={route.key}
-              label={label}
-              accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
-              focused={focused}
-              badge={badge}
-              layout={layout}
-              icon={options.tabBarIcon?.({ focused, color: focused ? ACTIVE_ICON : INACTIVE, size: ICON_SIZE })}
-              onPress={() => {
-                const event = emitter.emit({ type: "tabPress", target: route.key, canPreventDefault: true })
-                if (!focused && !event.defaultPrevented) navigateToTab(route.key)
-              }}
-              onLongPress={() => emitter.emit({ type: "tabLongPress", target: route.key })}
-            />
-          )
-        })}
-      </Animated.View>
+          {renderTabs(true)}
+        </Animated.View>
+      </View>
     </View>
   )
-}
-
-type TabLayout = {
-  iconAreaHeight: Animated.AnimatedInterpolation<number>
-  pillWidth: Animated.AnimatedInterpolation<number>
-  labelOpacity: Animated.AnimatedInterpolation<number>
-  labelHeight: Animated.AnimatedInterpolation<number>
-  labelGap: Animated.AnimatedInterpolation<number>
 }
 
 function Tab({
@@ -221,8 +270,9 @@ function Tab({
   accessibilityLabel,
   focused,
   badge,
+  mini,
+  pill,
   icon,
-  layout,
   onPress,
   onLongPress,
 }: {
@@ -230,15 +280,16 @@ function Tab({
   accessibilityLabel: string
   focused: boolean
   badge: number
+  mini: boolean
+  pill: { width: number; height: number }
   icon: React.ReactNode
-  layout: TabLayout
   onPress: () => void
   onLongPress: () => void
 }) {
   // The selected pill fades and scales in on the tab that becomes active.
   const grow = useRef(new Animated.Value(focused ? 1 : 0)).current
   useEffect(() => {
-    Animated.spring(grow, { toValue: focused ? 1 : 0, damping: 18, stiffness: 220, useNativeDriver: false }).start()
+    Animated.spring(grow, { toValue: focused ? 1 : 0, damping: 18, stiffness: 220, useNativeDriver: true }).start()
   }, [focused, grow])
 
   return (
@@ -251,14 +302,13 @@ function Tab({
       onLongPress={onLongPress}
       style={styles.tab}
     >
-      <Animated.View style={[styles.iconArea, { height: layout.iconAreaHeight }]}>
+      <View style={[styles.iconArea, { height: pill.height }]}>
         <Animated.View
           pointerEvents="none"
           style={[
             styles.pill,
+            pill,
             {
-              width: layout.pillWidth,
-              height: layout.iconAreaHeight,
               opacity: grow,
               transform: [{ scale: grow.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }],
             },
@@ -274,21 +324,18 @@ function Tab({
             </View>
           ) : null}
         </View>
-      </Animated.View>
-      <Animated.View
-        style={[
-          styles.labelWrap,
-          { height: layout.labelHeight, marginTop: layout.labelGap, opacity: layout.labelOpacity },
-        ]}
-      >
-        <Text
-          numberOfLines={1}
-          allowFontScaling={false}
-          style={[styles.label, focused ? styles.labelActive : styles.labelInactive]}
-        >
-          {label}
-        </Text>
-      </Animated.View>
+      </View>
+      {mini ? null : (
+        <View style={styles.labelWrap}>
+          <Text
+            numberOfLines={1}
+            allowFontScaling={false}
+            style={[styles.label, focused ? styles.labelActive : styles.labelInactive]}
+          >
+            {label}
+          </Text>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -304,10 +351,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   bar: {
+    position: "absolute",
     flexDirection: "row",
     alignItems: "center",
-    height: BAR_HEIGHT,
-    padding: BAR_PADDING,
     borderRadius: BAR_RADIUS,
     backgroundColor: BAR_BG,
     borderWidth: StyleSheet.hairlineWidth,
@@ -318,6 +364,20 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+  },
+  // Both layers sit on the same bottom edge inside the fixed frame.
+  fullBar: {
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: BAR_HEIGHT,
+    padding: BAR_PADDING,
+  },
+  miniBar: {
+    bottom: 0,
+    width: MINI_WIDTH,
+    height: MINI_HEIGHT,
+    padding: MINI_PADDING,
   },
   tab: {
     flex: 1,
@@ -362,7 +422,8 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.bold,
   },
   labelWrap: {
-    overflow: "hidden",
+    height: LABEL_HEIGHT,
+    marginTop: LABEL_GAP,
     justifyContent: "center",
   },
   label: {

@@ -68,6 +68,8 @@ type CartContextValue = {
   setServicePriceOption: (salonId: string, serviceId: string, optionId: string) => void
   setPackage: (salonId: string, packageId: string | null) => void
   clearSalon: (salonId: string) => void
+  /** Drops these services from one cart (the cart goes away once it is empty). */
+  removeServices: (salonId: string, serviceIds: string[]) => void
   clearAll: () => void
 }
 
@@ -392,6 +394,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
       },
       clearSalon: (salonId) => {
         setCarts((prev) => prev.filter((cart) => cart.salonId !== salonId))
+      },
+      removeServices: (salonId, serviceIds) => {
+        if (serviceIds.length === 0) return
+        const drop = new Set(serviceIds)
+        setCarts((prev) => {
+          const existing = prev.find((cart) => cart.salonId === salonId)
+          if (!existing) return prev
+          const remaining = existing.serviceIds.filter((id) => !drop.has(id))
+          if (remaining.length === existing.serviceIds.length) return prev
+          return replaceCart(prev, {
+            ...existing,
+            serviceIds: remaining,
+            serviceLines: pruneServiceLines(remaining, existing.serviceLines),
+            ...pruneCartMeta(remaining, existing.quantities, existing.priceOptionIds),
+          })
+        })
       },
       clearAll: () => setCarts([]),
     }),

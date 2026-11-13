@@ -33,7 +33,9 @@ import {
   type PublicArtist,
   type PublicArtistService,
 } from "@/lib/artists-api"
+import { useCart } from "@/context/CartContext"
 import { ApiError } from "@/lib/api"
+import { artistCartId } from "@/lib/artist-cart"
 import { fetchMe } from "@/lib/auth-api"
 import {
   canApplyLoyalty,
@@ -102,6 +104,7 @@ export default function ArtistBookScreen() {
     promo?: string
   }>()
   const safeSlug = (slug ?? "").trim().toLowerCase()
+  const cart = useCart()
   const initialPromo =
     typeof promoParam === "string" ? promoParam.trim().toUpperCase() : ""
 
@@ -130,6 +133,8 @@ export default function ArtistBookScreen() {
   const [verifiedFor, setVerifiedFor] = useState<{ phone: string; token: string } | null>(null)
   const [busy, setBusy] = useState<"book" | "session" | null>(null)
   const paidBooking = useRef<Record<string, string> | null>(null)
+  /** Services in the held booking, dropped from the artist's cart once it is paid. */
+  const paidServiceIds = useRef<string[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const [promoInput, setPromoInput] = useState(initialPromo)
@@ -498,9 +503,16 @@ export default function ArtistBookScreen() {
     setPromoError(null)
   }
 
+  /** Booked services leave the artist's cart; anything else in it stays. */
+  function clearBookedFromCart(bookedSlug: string, serviceIds: string[]) {
+    const ids = new Set([artistCartId(bookedSlug), safeSlug ? artistCartId(safeSlug) : ""])
+    for (const id of ids) if (id) cart.removeServices(id, serviceIds)
+  }
+
   function onAdvancePaid(paidRupees: number) {
     const details = paidBooking.current
     if (!details) return
+    clearBookedFromCart(details.salonId, paidServiceIds.current)
     router.replace({
       pathname: "/book/confirmation",
       params: { ...details, status: "confirmed", advancePaid: String(paidRupees) },
@@ -531,9 +543,10 @@ export default function ArtistBookScreen() {
     try {
       // Keep session warm for CRM; booking itself goes through Glammzo-web for rewards.
       await ensureVerifiedSession()
+      const bookedIds = [...selectedIds]
       const res = await createArtistBookingWithRewards({
         slug: artist.slug,
-        serviceIds: selectedIds,
+        serviceIds: bookedIds,
         startAt: slot,
         locationType,
         address: address.trim(),
@@ -565,8 +578,10 @@ export default function ArtistBookScreen() {
       // The artist asks for an advance: the open sheet takes it from here.
       if (res.awaitingPayment) {
         paidBooking.current = { ...confirmation, payToken: res.booking.token }
+        paidServiceIds.current = bookedIds
         return res.booking.token
       }
+      clearBookedFromCart(artist.slug, bookedIds)
       router.replace({
         pathname: "/book/confirmation",
         params: { ...confirmation, status: "confirmed" },

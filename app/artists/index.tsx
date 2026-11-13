@@ -1,4 +1,4 @@
-import { useRouter, type Href } from "expo-router"
+import { useLocalSearchParams, useRouter, type Href } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -105,14 +105,23 @@ function FilterPill({
 
 export default function ArtistsScreen() {
   const router = useRouter()
+  // Home "Top rated" See all: /artists?where=home or ?sort=nearest.
+  const params = useLocalSearchParams<{ where?: string; sort?: string }>()
+  const initialFilters = useMemo<ArtistsFilterDraft>(() => {
+    const where = WHERE_OPTIONS.find((option) => option.id === params.where)?.id
+    const sort = SORTS.find((option) => option.id === params.sort)?.id
+    return { ...DEFAULT_FILTERS, ...(where ? { where } : {}), ...(sort ? { sort } : {}) }
+    // Only the params the screen opened with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [catalog, setCatalog] = useState<{
     total: number
     categories: ArtistCategory[]
     occasions: ArtistOccasion[]
   } | null | undefined>(undefined)
   const [location, setLocation] = useState<SavedLocation | null>(null)
-  const [filters, setFilters] = useState<ArtistsFilterDraft>(DEFAULT_FILTERS)
-  const [draft, setDraft] = useState<ArtistsFilterDraft>(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState<ArtistsFilterDraft>(initialFilters)
+  const [draft, setDraft] = useState<ArtistsFilterDraft>(initialFilters)
   const [filterOpen, setFilterOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [debounced, setDebounced] = useState("")

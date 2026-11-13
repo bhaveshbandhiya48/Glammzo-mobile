@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router"
 
-import { AudienceSwitch } from "@/components/home/HomeHeader"
+import { AudienceSwitch } from "@/components/home/AudienceSwitch"
 import { ArtistCard } from "@/components/ui/ArtistCard"
 import { Button } from "@/components/ui/Button"
 import { SalonCard } from "@/components/ui/SalonCard"

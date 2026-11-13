@@ -1,6 +1,7 @@
 import { useRouter, type Href } from "expo-router"
 import { Pressable, StyleSheet, View } from "react-native"
 
+import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Booking, Salon } from "@/data/types"
 import { serviceSummary } from "@/lib/booking-display"
@@ -20,7 +21,7 @@ export function formatKm(km: number | null | undefined): string | null {
   return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`
 }
 
-/** Dark "next booking" card. `salon` (from the catalog) gives distance and directions. */
+/** Compact light "next booking" row. `salon` (from the catalog) gives distance and directions. */
 export function HomeNextBookingCard({
   booking,
   salon,
@@ -52,29 +53,29 @@ export function HomeNextBookingCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${payToken ? "Complete your payment" : "Your next booking"}: ${title}, ${subtitle}`}
+      accessibilityLabel={`${payToken ? "Complete your payment" : "Your next booking"}: ${title}, ${payToken ? "payment pending" : subtitle}`}
       onPress={openBooking}
       style={({ pressed }) => [styles.card, pressed && styles.pressed]}
     >
       {parts ? (
-        <View style={styles.dateBlock}>
+        <View style={styles.dateChip}>
           <Text style={styles.weekday}>{parts.weekday}</Text>
           <Text style={styles.day}>{parts.day}</Text>
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {title}
         </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {payToken ? "Payment pending · tap to pay" : subtitle}
+        <Text style={[styles.subtitle, payToken && styles.subtitlePay]} numberOfLines={1} ellipsizeMode="tail">
+          {payToken ? "Payment pending" : subtitle}
         </Text>
       </View>
       {canDirect ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Directions to ${booking.salonName}`}
-          hitSlop={6}
+          accessibilityLabel="Directions"
+          hitSlop={4}
           onPress={() =>
             openDirections({
               latitude: salon?.latitude,
@@ -82,13 +83,13 @@ export function HomeNextBookingCard({
               query: salon?.address || [booking.salonName, booking.salonArea].filter(Boolean).join(", "),
             })
           }
-          style={({ pressed }) => [styles.pill, pressed && styles.pillPressed]}
+          style={({ pressed }) => [styles.directions, pressed && styles.darkPressed]}
         >
-          <Text style={styles.pillText}>Directions</Text>
+          <Icon name="navigate" size={18} color="#ffffff" />
         </Pressable>
       ) : payToken ? (
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>Pay now</Text>
+        <View style={styles.payPill}>
+          <Text style={styles.payText}>Pay now</Text>
         </View>
       ) : null}
     </Pressable>
@@ -99,36 +100,38 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 20,
     marginTop: 20,
-    backgroundColor: "#111111",
-    borderRadius: 18,
-    padding: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#ececec",
+    borderRadius: 16,
+    padding: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
   pressed: {
-    backgroundColor: "#2b2b2b",
+    backgroundColor: "#f7f7f7",
   },
-  dateBlock: {
-    width: 44,
-    height: 48,
+  dateChip: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: "#262626",
+    backgroundColor: "#fff1ec",
     alignItems: "center",
     justifyContent: "center",
   },
   weekday: {
-    fontFamily: fontFamily.semibold,
+    fontFamily: fontFamily.bold,
     fontSize: 10,
     lineHeight: 12,
-    letterSpacing: 0.6,
-    color: "#fbd0c9",
+    letterSpacing: 0.4,
+    color: "#b03a26",
   },
   day: {
     fontFamily: fontFamily.bold,
-    fontSize: 18,
-    lineHeight: 22,
-    color: "#ffffff",
+    fontSize: 16,
+    lineHeight: 20,
+    color: "#111111",
   },
   body: {
     flex: 1,
@@ -139,28 +142,40 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semibold,
     fontSize: 14,
     lineHeight: 19,
-    color: "#ffffff",
+    color: "#111111",
   },
   subtitle: {
     fontFamily: fontFamily.regular,
     fontSize: 12,
     lineHeight: 16,
-    color: "#bdbdbd",
+    color: "#595959",
   },
-  pill: {
-    height: 34,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "#ffffff",
+  subtitlePay: {
+    fontFamily: fontFamily.semibold,
+    color: "#b03a26",
+  },
+  directions: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#111111",
     alignItems: "center",
     justifyContent: "center",
   },
-  pillPressed: {
-    backgroundColor: "#e5e5e5",
+  darkPressed: {
+    backgroundColor: "#333333",
   },
-  pillText: {
+  payPill: {
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: "#111111",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payText: {
     fontFamily: fontFamily.semibold,
     fontSize: 13,
-    color: "#111111",
+    color: "#ffffff",
   },
 })

@@ -7,12 +7,13 @@ import { GetQuotesBanner, isGetQuotesEnabled } from "@/components/home/GetQuotes
 import { HomeHeader } from "@/components/home/HomeHeader"
 import { HomeNextBookingCard } from "@/components/home/HomeNextBookingCard"
 import { AllServicesSheet, ServiceTilesSection } from "@/components/home/ServiceTiles"
-import { TopRatedRow } from "@/components/home/TopRatedRow"
+import { TopRatedRow, type DiscoveryKind } from "@/components/home/TopRatedRow"
 import {
   pickBookAgain,
   pickNextHomeBooking,
   useHomeBookings,
 } from "@/components/home/useHomeBookings"
+import { useTopArtists } from "@/components/home/useTopArtists"
 import type { Salon } from "@/data/types"
 import { currentAreaLabel } from "@/lib/explore-location"
 import { haversineKm } from "@/lib/geo"
@@ -39,7 +40,7 @@ type Props = {
 }
 
 /**
- * Home V4 top: header, next booking, service tiles, quotes banner, book again
+ * Home top (V5): header, next booking, service tiles, quotes banner, book again
  * and top rated. Explore renders it first inside its ScrollView; the existing
  * Home sections (offers, carousels) follow below it.
  */
@@ -62,6 +63,7 @@ export function HomeV4({
   const nextBooking = useMemo(() => pickNextHomeBooking(bookings), [bookings])
   const bookAgain = useMemo(() => pickBookAgain(bookings), [bookings])
   const topRated = useMemo(() => topRatedSalons(salons), [salons])
+  const topArtists = useTopArtists(location?.latitude, location?.longitude, refreshKey)
 
   const nextSalon = useMemo(() => {
     if (!nextBooking || nextBooking.kind === "artist") return undefined
@@ -84,6 +86,12 @@ export function HomeV4({
   const city = location?.city?.trim()
   const cityLabel = city && city.toLowerCase() !== areaLabel.toLowerCase() ? city : null
 
+  function seeAllTopRated(kind: DiscoveryKind) {
+    if (kind === "salons") router.push("/salons")
+    else if (kind === "home") router.push({ pathname: "/artists", params: { where: "home" } })
+    else router.push({ pathname: "/artists", params: { sort: "nearest" } })
+  }
+
   function openTile(tile: ServiceTile) {
     router.push({ pathname: "/service/[key]", params: { key: tile.key, audience } })
   }
@@ -95,8 +103,6 @@ export function HomeV4({
         areaLabel={areaLabel}
         cityLabel={cityLabel}
         searchQuery={searchQuery}
-        audience={audience}
-        onAudienceChange={setAudience}
         onLocationPress={onLocationPress}
         onSearchPress={onSearchPress}
         onClearSearch={onClearSearch}
@@ -111,12 +117,19 @@ export function HomeV4({
           ) : null}
           <ServiceTilesSection
             audience={audience}
+            onAudienceChange={setAudience}
             onPressTile={openTile}
             onSeeAll={() => setAllOpen(true)}
           />
           {isGetQuotesEnabled() ? <GetQuotesBanner onPress={() => router.push("/artists")} /> : null}
           <BookAgainRow bookings={bookAgain} />
-          <TopRatedRow salons={topRated} onSeeAll={() => router.push("/salons")} />
+          <TopRatedRow
+            salons={topRated}
+            artists={topArtists.artists}
+            homeArtists={topArtists.homeArtists}
+            artistLabels={topArtists.labels}
+            onSeeAll={seeAllTopRated}
+          />
         </>
       ) : null}
 

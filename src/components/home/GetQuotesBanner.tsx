@@ -52,9 +52,9 @@ const styles = StyleSheet.create({
   },
   eyebrow: {
     fontFamily: fontFamily.semibold,
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: 1.4,
-    color: "#9a3f2c",
+    color: "#8a3524",
   },
   title: {
     marginTop: 6,

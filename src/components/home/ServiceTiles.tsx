@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, View } from "react-native"
 
+import { AudienceSwitch } from "@/components/home/AudienceSwitch"
 import { AllServicesIcon, ServiceTileIcon } from "@/components/home/ServiceTileIcon"
 import { GradientFill } from "@/components/home/GradientFill"
 import { BottomSheet } from "@/components/ui/BottomSheet"
@@ -52,20 +53,25 @@ function AllServicesButton({ onPress }: { onPress: () => void }) {
   )
 }
 
-/** "BOOK A SERVICE": 7 tiles for the audience plus "All services", 4 per row. */
+/** "BOOK A SERVICE": Women/Men switch, 7 tiles for the audience plus "All services", 4 per row. */
 export function ServiceTilesSection({
   audience,
+  onAudienceChange,
   onPressTile,
   onSeeAll,
 }: {
   audience: HomeAudience
+  onAudienceChange: (next: HomeAudience) => void
   onPressTile: (tile: ServiceTile) => void
   onSeeAll: () => void
 }) {
   const tiles = homeTiles(audience)
   return (
     <View style={styles.section}>
-      <SectionLabel title="Book a service" onSeeAll={onSeeAll} />
+      <View style={styles.labelRow}>
+        <Text style={styles.sectionLabel}>BOOK A SERVICE</Text>
+        <AudienceSwitch value={audience} onChange={onAudienceChange} />
+      </View>
       <View style={styles.grid}>
         {tiles.map((tile) => (
           <ServiceTileButton key={tile.key} tile={tile} onPress={() => onPressTile(tile)} />

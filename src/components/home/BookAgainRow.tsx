@@ -1,7 +1,7 @@
-import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 
+import { ThumbOrFallback } from "@/components/home/PhotoFallback"
 import { SectionLabel } from "@/components/home/ServiceTiles"
 import { Text } from "@/components/ui/Text"
 import { salonProfileImageUrl } from "@/data/mocks/salons"
@@ -50,13 +50,7 @@ export function BookAgainRow({ bookings }: { bookings: Booking[] }) {
               }}
               style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
             >
-              {image ? (
-                <Image source={{ uri: image }} style={styles.thumb} contentFit="cover" />
-              ) : (
-                <View style={[styles.thumb, styles.thumbFallback]}>
-                  <Text style={styles.initial}>{name.charAt(0).toUpperCase()}</Text>
-                </View>
-              )}
+              <ThumbOrFallback uri={image} name={name} />
               <View style={styles.text}>
                 <Text style={styles.name} numberOfLines={1}>
                   {name}
@@ -99,21 +93,6 @@ const styles = StyleSheet.create({
   pressed: {
     backgroundColor: "#f6f6f6",
   },
-  thumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#f2f2f2",
-  },
-  thumbFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  initial: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 15,
-    color: "#6b6b6b",
-  },
   text: {
     flexShrink: 1,
     minWidth: 0,
@@ -128,6 +107,6 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 12,
     lineHeight: 16,
-    color: "#6b6b6b",
+    color: "#595959",
   },
 })

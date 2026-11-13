@@ -23,7 +23,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
 import { CartStrip } from "@/components/ui/CartStrip"
-import { useCollapseTabBarOnScroll, useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
+import { useCollapseTabBarOnScroll, useFloatingTabBarTop } from "@/components/ui/FloatingTabBar"
 import { Icon } from "@/components/ui/Icon"
 import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
@@ -121,7 +121,8 @@ const FILTER_SECTIONS: Array<{ id: FilterSectionId; label: string }> = [
 ]
 
 export default function ExploreScreen() {
-  const tabBarSpace = useFloatingTabBarSpace()
+  // Floating bar height + its gap over the safe-area inset; content ends ~16pt above it.
+  const tabBarTop = useFloatingTabBarTop()
   const onTabBarScroll = useCollapseTabBarOnScroll()
   const router = useRouter()
   const navigation = useNavigation()
@@ -868,7 +869,7 @@ export default function ExploreScreen() {
           alwaysBounceVertical
           overScrollMode="always"
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.scroll, { paddingBottom: tabBarSpace + (showCart ? 88 : spacing.lg) }]}
+          contentContainerStyle={[styles.scroll, { paddingBottom: tabBarTop + (showCart ? 88 : spacing.lg) }]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -5,7 +5,6 @@ import { GradientFill } from "@/components/home/GradientFill"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useNotifications } from "@/context/NotificationsContext"
-import type { HomeAudience } from "@/lib/service-tiles"
 import { fontFamily } from "@/theme/tokens"
 
 type Props = {
@@ -14,8 +13,6 @@ type Props = {
   areaLabel: string
   cityLabel?: string | null
   searchQuery: string
-  audience: HomeAudience
-  onAudienceChange: (next: HomeAudience) => void
   onLocationPress: () => void
   onSearchPress: () => void
   onClearSearch: () => void
@@ -28,8 +25,6 @@ export function HomeHeader({
   areaLabel,
   cityLabel,
   searchQuery,
-  audience,
-  onAudienceChange,
   onLocationPress,
   onSearchPress,
   onClearSearch,
@@ -108,16 +103,16 @@ export function HomeHeader({
       <View style={styles.search}>
         <Pressable
           accessibilityRole="search"
-          accessibilityLabel="Search salons, artists and services"
+          accessibilityLabel="Search salons, artists or services"
           onPress={onSearchPress}
           style={({ pressed }) => [styles.searchHit, pressed && styles.pressed]}
         >
-          <Icon name="search-outline" size={19} color="#111111" />
+          <Icon name="search-outline" size={19} color="#4b5563" />
           <Text
             style={[styles.searchText, !hasQuery && styles.placeholder]}
             numberOfLines={1}
           >
-            {hasQuery ? searchQuery.trim() : "Search “gel nails”"}
+            {hasQuery ? searchQuery.trim() : "Search salons, artists or services"}
           </Text>
         </Pressable>
         {hasQuery ? (
@@ -127,46 +122,10 @@ export function HomeHeader({
             accessibilityRole="button"
             accessibilityLabel="Clear search"
           >
-            <Icon name="close-circle" size={18} color="#9a9a9a" />
+            <Icon name="close-circle" size={18} color="#595959" />
           </Pressable>
         ) : null}
-        <AudienceSwitch value={audience} onChange={onAudienceChange} />
       </View>
-    </View>
-  )
-}
-
-export function AudienceSwitch({
-  value,
-  onChange,
-}: {
-  value: HomeAudience
-  onChange: (next: HomeAudience) => void
-}) {
-  const options: Array<{ id: HomeAudience; label: string }> = [
-    { id: "women", label: "Women" },
-    { id: "men", label: "Men" },
-  ]
-  return (
-    <View style={styles.segment} accessibilityRole="radiogroup">
-      {options.map((option) => {
-        const active = option.id === value
-        return (
-          <Pressable
-            key={option.id}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={option.label}
-            onPress={() => onChange(option.id)}
-            hitSlop={4}
-            style={[styles.segmentPill, active && styles.segmentPillActive]}
-          >
-            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        )
-      })}
     </View>
   )
 }
@@ -230,7 +189,7 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.regular,
     fontSize: 12,
     lineHeight: 16,
-    color: "#6b6b6b",
+    color: "#595959",
   },
   actions: {
     flexDirection: "row",
@@ -272,7 +231,7 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
   hiMuted: {
-    color: "#9a9a9a",
+    color: "#6b6b6b",
   },
   search: {
     marginTop: 18,
@@ -283,8 +242,7 @@ const styles = StyleSheet.create({
     borderColor: "#ece6e2",
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 16,
-    paddingRight: 8,
+    paddingHorizontal: 16,
     gap: 8,
     ...softShadow,
   },
@@ -303,43 +261,9 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
   placeholder: {
-    color: "#9a9a9a",
+    color: "#595959",
   },
   pressed: {
     opacity: 0.7,
-  },
-  segment: {
-    flexDirection: "row",
-    backgroundColor: "#f5f2f0",
-    borderRadius: 12,
-    padding: 3,
-  },
-  segmentPill: {
-    height: 34,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentPillActive: {
-    backgroundColor: "#ffffff",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#000",
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
-        shadowOffset: { width: 0, height: 1 },
-      },
-      default: { elevation: 1 },
-    }),
-  },
-  segmentText: {
-    fontFamily: fontFamily.medium,
-    fontSize: 13,
-    color: "#6b6b6b",
-  },
-  segmentTextActive: {
-    fontFamily: fontFamily.semibold,
-    color: "#111111",
   },
 })

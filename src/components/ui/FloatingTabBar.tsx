@@ -1,6 +1,6 @@
 import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs"
 import { useEffect, useRef } from "react"
-import { Animated, Pressable, StyleSheet, View } from "react-native"
+import { Animated, Platform, Pressable, StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { colors, radii, spacing } from "@/theme/tokens"
@@ -11,8 +11,13 @@ const BAR_HEIGHT = 58
 const BAR_INSET = 5
 const BAR_MARGIN = 22
 
-/** Gap under the bar: close to the screen edge, just clear of the iPhone home indicator. */
+/**
+ * Gap under the bar: close to the screen edge, just clear of the iPhone home indicator.
+ * On Android the bar must sit fully above the phone's own navigation bar (on-screen
+ * Back/Home/Recents buttons can be ~48pt tall), so it clears the whole inset there.
+ */
 function barBottomGap(insetBottom: number) {
+  if (Platform.OS === "android") return Math.max(insetBottom + spacing.sm, spacing.lg)
   return Math.max(Math.min(insetBottom, BAR_MARGIN), spacing.lg)
 }
 

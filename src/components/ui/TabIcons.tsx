@@ -7,9 +7,12 @@ type Props = {
   focused?: boolean
 }
 
+/** Soft peach fill inside the selected tab's house, calendar or person shape. */
+export const TAB_ICON_ACTIVE_FILL = "#ffd9cc"
+
 /** Modern stroke icons for the tab bar (not Ionicons/Material). */
 export function HomeTabIcon({ color, size = 24, focused = false }: Props) {
-  const stroke = focused ? 2.25 : 1.75
+  const stroke = focused ? 2 : 1.8
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -18,15 +21,14 @@ export function HomeTabIcon({ color, size = 24, focused = false }: Props) {
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
-        fill={focused ? color : "none"}
-        fillOpacity={focused ? 0.12 : 0}
+        fill={focused ? TAB_ICON_ACTIVE_FILL : "none"}
       />
     </Svg>
   )
 }
 
 export function BookingsTabIcon({ color, size = 24, focused = false }: Props) {
-  const stroke = focused ? 2.25 : 1.75
+  const stroke = focused ? 2 : 1.8
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Rect
@@ -37,8 +39,7 @@ export function BookingsTabIcon({ color, size = 24, focused = false }: Props) {
         rx="3"
         stroke={color}
         strokeWidth={stroke}
-        fill={focused ? color : "none"}
-        fillOpacity={focused ? 0.12 : 0}
+        fill={focused ? TAB_ICON_ACTIVE_FILL : "none"}
       />
       <Path
         d="M8 3.75v3M16 3.75v3M3.75 10.5h16.5"
@@ -61,7 +62,7 @@ export function BookingsTabIcon({ color, size = 24, focused = false }: Props) {
 }
 
 export function ProfileTabIcon({ color, size = 24, focused = false }: Props) {
-  const stroke = focused ? 2.25 : 1.75
+  const stroke = focused ? 2 : 1.8
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Circle
@@ -70,8 +71,7 @@ export function ProfileTabIcon({ color, size = 24, focused = false }: Props) {
         r="3.25"
         stroke={color}
         strokeWidth={stroke}
-        fill={focused ? color : "none"}
-        fillOpacity={focused ? 0.12 : 0}
+        fill={focused ? TAB_ICON_ACTIVE_FILL : "none"}
       />
       <Path
         d="M5.5 19.25c1.4-3.1 3.7-4.75 6.5-4.75s5.1 1.65 6.5 4.75"

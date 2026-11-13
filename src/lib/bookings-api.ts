@@ -1,6 +1,7 @@
 import type { Booking } from "@/data/types"
 import { ApiError, apiFetch, networkFailure, TIMED_OUT_MESSAGE } from "@/lib/api"
 import { API_URL } from "@/lib/config"
+import { publishBookings } from "@/lib/bookings-badge"
 import { getAccessToken } from "@/lib/session"
 
 export type CreateBookingInput = {
@@ -37,9 +38,12 @@ export async function fetchBookings(): Promise<Booking[]> {
   )
   // Latest activity first: whatever was just booked, changed or cancelled is on top.
   const changedAt = (booking: Booking) => Date.parse(booking.updatedAt ?? booking.createdAt) || 0
-  return (data.bookings ?? [])
+  const bookings = (data.bookings ?? [])
     .map((booking) => withPaymentStatus(booking))
     .sort((a, b) => changedAt(b) - changedAt(a))
+  // Keeps the tab bar's Bookings badge current without a fetch of its own.
+  publishBookings(bookings)
+  return bookings
 }
 
 export async function fetchBookingById(id: string): Promise<Booking | undefined> {

@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as SecureStore from "expo-secure-store"
 
+import { clearPublishedBookings } from "@/lib/bookings-badge"
+
 const TOKEN_KEY = "glammzo_access_token"
 
 async function readToken(): Promise<string | null> {
@@ -36,6 +38,7 @@ export async function setAccessToken(token: string): Promise<void> {
 }
 
 export async function clearAccessToken(): Promise<void> {
+  clearPublishedBookings()
   try {
     await SecureStore.deleteItemAsync(TOKEN_KEY)
   } catch {

@@ -3,6 +3,7 @@ import { useCallback, useState } from "react"
 
 import type { Booking } from "@/data/types"
 import { fetchBookings } from "@/lib/bookings-api"
+import { isUpcomingVisit } from "@/lib/bookings-badge"
 import { getAccessToken } from "@/lib/session"
 
 /** The customer's bookings for Home (empty when signed out or on error). Refetches on focus. */
@@ -39,21 +40,14 @@ function bookingStartMs(booking: Booking) {
     : Date.parse(`${booking.date}T23:59:00`)
 }
 
-const CONFIRMED = new Set(["confirmed", "upcoming"])
-
 /**
  * Soonest upcoming visit to show on Home: a confirmed one, or one still waiting
  * for its advance payment (so the customer doesn't lose the held slot).
  */
 export function pickNextHomeBooking(bookings: Booking[], now = Date.now()): Booking | null {
   const upcoming = bookings
-    .filter((b) => {
-      const deadline = b.paymentDeadline ? Date.parse(b.paymentDeadline) : Number.NaN
-      const awaitingPayment = b.status === "pending" && Number.isFinite(deadline) && deadline > now
-      return CONFIRMED.has(b.status) || awaitingPayment
-    })
+    .filter((b) => isUpcomingVisit(b, now))
     .map((b) => ({ b, at: bookingStartMs(b) }))
-    .filter(({ at }) => Number.isFinite(at) && at >= now)
     .sort((a, b) => a.at - b.at)
   return upcoming[0]?.b ?? null
 }

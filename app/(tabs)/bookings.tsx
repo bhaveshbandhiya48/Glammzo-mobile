@@ -1,21 +1,30 @@
 import { useCallback, useMemo, useState } from "react"
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
-import { useFocusEffect, useRouter, type Href } from "expo-router"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { useFocusEffect, useRouter } from "expo-router"
 import { formatRupees } from "@/lib/service-pricing"
 
+import { BookingCompactCard, BookingHeroCard } from "@/components/bookings/BookingCards"
+import { advanceDueToken, BookingPayStrip } from "@/components/bookings/BookingPayStrip"
+import { ActionPill } from "@/components/bookings/BookingPills"
+import {
+  BookingsEmpty,
+  BookingsError,
+  BookingsSignedOut,
+  BookingsSkeleton,
+} from "@/components/bookings/BookingsStates"
 import { BookingTimeline } from "@/components/bookings/BookingTimeline"
+import { bookingSortMs, groupByMonth, groupUpcoming } from "@/components/bookings/bookingGroups"
 import { RefundPreview } from "@/components/bookings/RefundPreview"
 import { WaitlistStrip } from "@/components/bookings/WaitlistStrip"
+import { GradientFill } from "@/components/home/GradientFill"
+import { sp, ui } from "@/components/salon-page/theme"
 import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
-import { BookingsEmptyState } from "@/components/bookings/BookingsEmptyState"
 import { DownloadInvoiceButton } from "@/components/bookings/DownloadInvoiceButton"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { formatHoldLeft, useHoldCountdown } from "@/components/payments/useHoldCountdown"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
-import { BookingsListSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import type { Booking, BookingStatus } from "@/data/types"
 import { ApiError } from "@/lib/api"
@@ -24,13 +33,11 @@ import {
   canDownloadBookingInvoice,
   FILTER_LABELS,
   formatBookingDate,
-  formatBookingDateShort,
   formatBookingWhen,
   formatDuration,
   getBookingStatusLabel,
   isArtistBooking,
   relativeBookingDay,
-  serviceSummary,
   statusBadgeColors,
   visitTypeLabel,
 } from "@/lib/booking-display"
@@ -46,8 +53,9 @@ import {
   canRescheduleWithNotice,
   getRescheduleBlockedReason,
 } from "@/lib/reschedule-policy"
+import { openDirections } from "@/lib/visit-links"
 import { getAccessToken } from "@/lib/session"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
 
 type Filter = keyof typeof FILTER_LABELS
 
@@ -140,113 +148,6 @@ function DetailRow({
   )
 }
 
-function BookingCard({
-  booking,
-  onPress,
-  onPaymentExpired,
-}: {
-  booking: Booking
-  onPress: () => void
-  onPaymentExpired: () => void
-}) {
-  const artist = isArtistBooking(booking)
-  const duration = bookingDurationMin(booking)
-  const relative = relativeBookingDay(booking.date)
-  const visit = visitTypeLabel(booking)
-  const services = booking.services.map((s) => s.name).filter(Boolean)
-  const serviceLine =
-    services.length === 0
-      ? serviceSummary(booking)
-      : services.length <= 2
-        ? services.join(" · ")
-        : `${services.slice(0, 2).join(" · ")} +${services.length - 2}`
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-      onPress={onPress}
-    >
-      <View style={styles.cardTop}>
-        <StatusBadge status={booking.status} />
-        <KindPill artist={artist} />
-      </View>
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTitleBlock}>
-          <Text variant="heading" numberOfLines={2} style={styles.cardTitle}>
-            {booking.salonName}
-          </Text>
-          <View style={styles.areaRow}>
-            <Icon name="location-outline" size={14} color={colors.textMuted} />
-            <Text variant="caption" muted numberOfLines={1} style={{ flex: 1 }}>
-              {[booking.salonArea, visit].filter(Boolean).join(" · ") || "—"}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.whenBlock}>
-          <View style={styles.whenMain}>
-            {relative ? (
-              <Text variant="caption" color={colors.primary} style={styles.relative}>
-                {relative}
-              </Text>
-            ) : null}
-            <Text variant="bodyStrong">{formatBookingDateShort(booking.date)}</Text>
-            <Text variant="caption" muted>
-              {booking.time?.trim() || "—"}
-              {duration > 0 ? ` · ~${formatDuration(duration)}` : ""}
-            </Text>
-          </View>
-          {!artist && booking.staffName?.trim() ? (
-            <View style={styles.staffChip}>
-              <Icon name="person-outline" size={13} color={colors.textMuted} />
-              <Text variant="caption" muted numberOfLines={1}>
-                {booking.staffName.trim()}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.cardFooter}>
-        <Text variant="caption" muted style={{ flex: 1 }} numberOfLines={2}>
-          {serviceLine}
-        </Text>
-        <View style={styles.priceRow}>
-          <Text variant="heading">{formatRupees(booking.price)}</Text>
-          <Icon name="chevron-forward" size={16} color={colors.textSubtle} />
-        </View>
-      </View>
-
-      <PayAdvanceStrip booking={booking} onExpired={onPaymentExpired} />
-
-      {booking.hasVerifiedReview && booking.review ? (
-        <View style={styles.cardReview}>
-          <View style={styles.ratingPill}>
-            <Text variant="caption" color={colors.primaryFg}>
-              ★ {booking.review.rating.toFixed(1)}
-            </Text>
-          </View>
-          <Text variant="caption" muted numberOfLines={1} style={{ flex: 1 }}>
-            Your review
-            {booking.review.reviewType ? ` · ${booking.review.reviewType}` : ""}
-          </Text>
-        </View>
-      ) : null}
-    </Pressable>
-  )
-}
-
-/** Booking token when an artist's advance is still due and the slot is still held. */
-function advanceDueToken(booking: Booking): string | null {
-  // Artists: the booking's public token. Pro salons: a signed advance token.
-  const token = booking.kind === "artist" ? booking.artistPublicToken : booking.advanceToken
-  if (!token || !booking.paymentDeadline) return null
-  if (new Date(booking.paymentDeadline).getTime() <= Date.now()) return null
-  return token
-}
-
 /** Tax or charges the salon billed on top of the listed services. */
 function salonExtras(booking: Booking): string {
   const services = booking.services.reduce((sum, item) => sum + item.price, 0)
@@ -254,22 +155,12 @@ function salonExtras(booking: Booking): string {
   return services > 0 && extra > 0 ? ` · includes ${formatRupees(extra)} tax and charges` : ""
 }
 
-function PayAdvanceStrip({ booking, onExpired }: { booking: Booking; onExpired?: () => void }) {
-  const router = useRouter()
-  const token = advanceDueToken(booking)
-  const left = useHoldCountdown(booking.paymentDeadline, onExpired)
-  if (!token || left == null || left <= 0) return null
-  return (
-    <View style={styles.payStrip} accessibilityLabel={`Payment pending. Slot held for ${formatHoldLeft(left)}`}>
-      <Text variant="caption" style={{ flex: 1 }}>
-        Slot held for {formatHoldLeft(left)}. Pay {formatRupees(booking.advanceAmount ?? 0)} to confirm.
-      </Text>
-      <Button label={`Pay ${formatRupees(booking.advanceAmount ?? 0)}`} onPress={() => router.push({ pathname: "/pay/advance/[token]", params: { token } } as Href)} />
-    </View>
-  )
+function SectionLabel({ children }: { children: string }) {
+  return <Text style={[ui.sectionLabel, page.sectionLabel]}>{children}</Text>
 }
 
 export default function BookingsScreen() {
+  const insets = useSafeAreaInsets()
   const tabBarSpace = useFloatingTabBarSpace()
   const cart = useCart()
   const router = useRouter()
@@ -378,59 +269,34 @@ export default function BookingsScreen() {
     })
   }, [bookings, filter])
 
-  const subtitle = useMemo(() => {
-    if (!authed) return "Sign in to see salon and solo-artist visits."
-    if (loading && bookings.length === 0) return "Loading your appointments…"
-    if (counts.upcoming > 0) {
-      return `${counts.upcoming} upcoming · ${counts.all} total`
+  /** Upcoming soonest first (the first one is the hero); everything else newest first, by month. */
+  const sections = useMemo(() => {
+    const upcoming = list
+      .filter((b) => upcomingStatuses.includes(b.status))
+      .sort((a, b) => bookingSortMs(a) - bookingSortMs(b))
+    const past = list
+      .filter((b) => !upcomingStatuses.includes(b.status))
+      .sort((a, b) => bookingSortMs(b) - bookingSortMs(a))
+    return {
+      hero: upcoming[0] ?? null,
+      upcomingGroups: groupUpcoming(upcoming.slice(1)),
+      pastGroups: groupByMonth(past),
     }
-    if (counts.all > 0) return `${counts.all} booking${counts.all === 1 ? "" : "s"}`
-    return "Your salon and solo-artist appointments."
-  }, [authed, loading, bookings.length, counts.upcoming, counts.all])
+  }, [list])
+
+  const subtitle = useMemo(() => {
+    if (!authChecked || (authed && loading && bookings.length === 0)) return "Loading your appointments…"
+    if (!authed) return "Sign in to see salon and solo-artist visits."
+    if (counts.upcoming > 0) return `${counts.upcoming} upcoming · ${counts.all} total`
+    if (counts.all > 0) return `No upcoming visits · ${counts.all} total`
+    return "No upcoming visits"
+  }, [authChecked, authed, loading, bookings.length, counts.upcoming, counts.all])
 
   function showToast(message: string) {
     setToast(message)
     setTimeout(() => setToast(null), 2200)
   }
 
-  if (!authChecked || (!authed && loading)) {
-    return (
-      <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
-        <Text variant="title">My bookings</Text>
-        <Text muted style={styles.gap}>
-          Loading your appointments…
-        </Text>
-        <ScrollView
-          style={styles.listScroll}
-          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <BookingsListSkeleton count={3} />
-        </ScrollView>
-      </Screen>
-    )
-  }
-
-  if (!authed) {
-    return (
-      <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
-        <Text variant="title">My bookings</Text>
-        <Text muted style={styles.gap}>
-          Sign in to see salon and solo-artist visits.
-        </Text>
-        <BookingsEmptyState
-          signedOut
-          onSignIn={() =>
-            router.push({ pathname: "/login", params: { next: "/(tabs)/bookings" } })
-          }
-        />
-      </Screen>
-    )
-  }
-
-  const selectedArtist = selected ? isArtistBooking(selected) : false
-  const selectedVisit = selected ? visitTypeLabel(selected) : null
-  const visitDone = selected?.status === "completed"
   /** Same services (and stylist) as this booking, straight to picking a time. */
   function bookAgain(booking: Booking) {
     setSelected(null)
@@ -454,6 +320,132 @@ export default function BookingsScreen() {
       params: booking.staffId ? { salonId: booking.salonId, staffId: booking.staffId } : { salonId: booking.salonId },
     })
   }
+
+  /** Same rules as the details sheet's Book again button. */
+  function canBookAgain(booking: Booking) {
+    if (!isArtistBooking(booking)) return true
+    return Boolean(booking.artistSlug || booking.salonId) &&
+      (upcomingStatuses.includes(booking.status) || booking.status === "completed")
+  }
+
+  function artistToken(booking: Booking) {
+    return booking.artistPublicToken?.trim() || booking.id.replace(/^artist:/, "").trim()
+  }
+
+  /** Same rules as the details sheet's Leave a review button. */
+  function canReview(booking: Booking) {
+    if (booking.status !== "completed" || booking.hasVerifiedReview) return false
+    return isArtistBooking(booking) ? Boolean(artistToken(booking)) : true
+  }
+
+  function openReview(booking: Booking) {
+    setSelected(null)
+    if (isArtistBooking(booking)) {
+      router.push({
+        pathname: "/review",
+        params: { kind: "artist", artistPublicToken: artistToken(booking), salonName: booking.salonName },
+      })
+      return
+    }
+    const staffName = booking.staffName?.trim() || ""
+    router.push({
+      pathname: "/review",
+      params: { appointmentId: booking.id, salonName: booking.salonName, ...(staffName ? { staffName } : {}) },
+    })
+  }
+
+  function heroActions(booking: Booking) {
+    const artist = isArtistBooking(booking)
+    const canReschedule = !artist && canRescheduleWithNotice(booking.startsAt).allowed
+    // Same rule as Home's next-booking card: salon visits with nothing left to pay.
+    const canDirect = !artist && !advanceDueToken(booking)
+    return (
+      <>
+        <ActionPill label="View details" onPress={() => setSelected(booking)} />
+        {canDirect ? (
+          <ActionPill
+            label="Directions"
+            icon="navigate-outline"
+            outline
+            onPress={() =>
+              openDirections({ query: [booking.salonName, booking.salonArea].filter(Boolean).join(", ") })
+            }
+          />
+        ) : null}
+        {canReschedule ? (
+          <ActionPill
+            label="Reschedule"
+            outline
+            onPress={() => router.push({ pathname: "/bookings/[id]/reschedule", params: { id: booking.id } })}
+          />
+        ) : null}
+      </>
+    )
+  }
+
+  function pastActions(booking: Booking) {
+    if (upcomingStatuses.includes(booking.status)) return undefined
+    const review = canReview(booking)
+    const again = canBookAgain(booking)
+    if (!review && !again) return undefined
+    return (
+      <>
+        {review ? <ActionPill small label="Rate" icon="star-outline" onPress={() => openReview(booking)} /> : null}
+        {again ? <ActionPill small outline label="Book again" onPress={() => bookAgain(booking)} /> : null}
+      </>
+    )
+  }
+
+  function renderCompact(booking: Booking) {
+    return (
+      <BookingCompactCard
+        key={booking.id}
+        booking={booking}
+        onPress={() => setSelected(booking)}
+        onPaymentExpired={applyPaymentTimeouts}
+        actions={pastActions(booking)}
+      />
+    )
+  }
+
+  const header = (
+    <View style={[page.header, { paddingTop: insets.top + 12 }]}>
+      <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />
+      <Text style={page.title} accessibilityRole="header">
+        My bookings
+      </Text>
+      <Text style={page.subtitle} numberOfLines={1}>
+        {subtitle}
+      </Text>
+    </View>
+  )
+
+  if (!authChecked || !authed) {
+    return (
+      <ScrollView
+        style={page.page}
+        contentContainerStyle={{ paddingBottom: tabBarSpace + 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {header}
+        <View style={page.body}>
+          {!authChecked || loading ? (
+            <BookingsSkeleton />
+          ) : (
+            <BookingsSignedOut
+              onSignIn={() =>
+                router.push({ pathname: "/login", params: { next: "/(tabs)/bookings" } })
+              }
+            />
+          )}
+        </View>
+      </ScrollView>
+    )
+  }
+
+  const selectedArtist = selected ? isArtistBooking(selected) : false
+  const selectedVisit = selected ? visitTypeLabel(selected) : null
+  const visitDone = selected?.status === "completed"
   const providerSlug = selected ? selected.artistSlug || selected.salonId : ""
   // After a visit, Review / Book again lead and the profile link drops to the bottom.
   const viewProviderButton =
@@ -472,92 +464,86 @@ export default function BookingsScreen() {
       />
     ) : null
   const selectedRelative = selected ? relativeBookingDay(selected.date) : null
+  const { hero, upcomingGroups, pastGroups } = sections
 
   return (
-    <Screen edges={["top", "left", "right"]} contentStyle={styles.screen}>
-      <Text variant="title">My bookings</Text>
-      <Text muted style={styles.gap}>
-        {subtitle}
-      </Text>
-      {toast ? (
-        <View style={styles.toast}>
-          <Text variant="caption">{toast}</Text>
-        </View>
-      ) : null}
-      <WaitlistStrip />
+    <View style={page.page}>
+      <ScrollView
+        style={page.page}
+        contentContainerStyle={{ paddingBottom: tabBarSpace + 16 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {header}
 
-      <View style={styles.filtersWrap}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filters}
-          style={styles.filtersScroll}
+          contentContainerStyle={page.chips}
+          style={page.chipsScroll}
         >
           {(Object.keys(FILTER_LABELS) as Filter[]).map((item) => {
             const active = filter === item
             return (
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`${FILTER_LABELS[item]}, ${counts[item]}`}
                 key={item}
-                style={[styles.chip, active && styles.chipActive]}
+                style={({ pressed }) => [ui.chip, page.chip, active && ui.chipActive, pressed && ui.pressed]}
                 onPress={() => setFilter(item)}
               >
-                <Text
-                  variant="caption"
-                  color={active ? colors.primary : colors.text}
-                  style={active ? styles.chipLabelActive : undefined}
-                >
-                  {FILTER_LABELS[item]}
-                </Text>
-                <View style={[styles.countPill, active && styles.countPillActive]}>
-                  <Text
-                    variant="caption"
-                    color={active ? colors.primary : colors.textMuted}
-                    style={styles.countText}
-                  >
-                    {counts[item]}
-                  </Text>
-                </View>
+                <Text style={[ui.chipText, active && ui.chipTextActive]}>{FILTER_LABELS[item]}</Text>
+                <Text style={[page.chipCount, active && page.chipCountActive]}>{counts[item]}</Text>
               </Pressable>
             )
           })}
         </ScrollView>
-      </View>
 
-      {loading ? (
-        <ScrollView
-          style={styles.listScroll}
-          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
-          showsVerticalScrollIndicator={false}
-        >
-          <BookingsListSkeleton count={3} />
-        </ScrollView>
-      ) : loadError ? (
-        <View style={styles.errorState}>
-          <Text variant="bodyStrong">Couldn&apos;t load bookings</Text>
-          <Text muted style={{ textAlign: "center" }}>
-            {loadError}
-          </Text>
-          <Button label="Try again" onPress={() => void reloadBookings()} />
+        <View style={page.body}>
+          {toast ? (
+            <View style={page.toast}>
+              <Text style={page.toastText}>{toast}</Text>
+            </View>
+          ) : null}
+          <WaitlistStrip />
+
+          {loading ? (
+            <View style={page.top}>
+              <BookingsSkeleton />
+            </View>
+          ) : loadError ? (
+            <BookingsError message={loadError} onRetry={() => void reloadBookings()} />
+          ) : list.length === 0 ? (
+            <BookingsEmpty filter={filter} onFind={() => router.push("/(tabs)")} />
+          ) : (
+            <>
+              {hero ? (
+                <View style={page.top}>
+                  <SectionLabel>Next visit</SectionLabel>
+                  <BookingHeroCard
+                    booking={hero}
+                    onPress={() => setSelected(hero)}
+                    onPaymentExpired={applyPaymentTimeouts}
+                    actions={heroActions(hero)}
+                  />
+                </View>
+              ) : null}
+              {upcomingGroups.map((group) => (
+                <View key={`u-${group.label}`} style={page.group}>
+                  <SectionLabel>{group.label}</SectionLabel>
+                  {group.items.map(renderCompact)}
+                </View>
+              ))}
+              {pastGroups.map((group) => (
+                <View key={`p-${group.label}`} style={page.group}>
+                  <SectionLabel>{group.label}</SectionLabel>
+                  {group.items.map(renderCompact)}
+                </View>
+              ))}
+            </>
+          )}
         </View>
-      ) : list.length === 0 ? (
-        <BookingsEmptyState filter={filter} />
-      ) : (
-        <ScrollView
-          style={styles.listScroll}
-          contentContainerStyle={[styles.list, { paddingBottom: tabBarSpace }]}
-          showsVerticalScrollIndicator={false}
-        >
-          {list.map((booking) => (
-            <BookingCard
-              key={booking.id}
-              booking={booking}
-              onPress={() => setSelected(booking)}
-              onPaymentExpired={applyPaymentTimeouts}
-            />
-          ))}
-        </ScrollView>
-      )}
+      </ScrollView>
 
       <BottomSheet
         visible={Boolean(selected)}
@@ -839,7 +825,7 @@ export default function BookingsScreen() {
               </Text>
             </View>
 
-            <PayAdvanceStrip booking={selected} onExpired={applyPaymentTimeouts} />
+            <BookingPayStrip booking={selected} onExpired={applyPaymentTimeouts} />
 
             {!selectedArtist && canDownloadBookingInvoice(selected) ? (
               <DownloadInvoiceButton
@@ -980,9 +966,27 @@ export default function BookingsScreen() {
           </View>
         ) : null}
       </BottomSheet>
-    </Screen>
+    </View>
   )
 }
+
+const page = StyleSheet.create({
+  page: { flex: 1, backgroundColor: "#ffffff" },
+  header: { paddingHorizontal: 16, paddingBottom: 16 },
+  title: { fontFamily: fontFamily.bold, fontSize: 24, lineHeight: 30, color: sp.text },
+  subtitle: { marginTop: 4, fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 19, color: sp.secondary },
+  chipsScroll: { flexGrow: 0 },
+  chips: { flexDirection: "row", gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
+  chip: { height: 36 },
+  chipCount: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 16, color: sp.secondary },
+  chipCountActive: { color: "rgba(255,255,255,0.75)" },
+  body: { paddingHorizontal: 16 },
+  top: { marginTop: 20, gap: 10 },
+  group: { marginTop: 24, gap: 10 },
+  sectionLabel: { paddingHorizontal: 4 },
+  toast: { marginTop: 12, padding: 12, borderRadius: 12, backgroundColor: sp.grey },
+  toastText: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: sp.text },
+})
 
 const styles = StyleSheet.create({
   refundNote: {

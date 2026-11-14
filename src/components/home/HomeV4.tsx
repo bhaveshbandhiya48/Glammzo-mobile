@@ -20,6 +20,7 @@ import { haversineKm } from "@/lib/geo"
 import { useHomeAudience } from "@/lib/home-audience"
 import { topRatedSalons } from "@/lib/home-salon-info"
 import { resolveSalonById } from "@/lib/salons-api"
+import { artistsSeeAllParams, salonsSeeAllParams } from "@/lib/see-all-params"
 import type { ServiceTile } from "@/lib/service-tiles"
 import type { SavedLocation } from "@/lib/user"
 import { spacing } from "@/theme/tokens"
@@ -87,9 +88,14 @@ export function HomeV4({
   const cityLabel = city && city.toLowerCase() !== areaLabel.toLowerCase() ? city : null
 
   function seeAllTopRated(kind: DiscoveryKind) {
-    if (kind === "salons") router.push("/salons")
-    else if (kind === "home") router.push({ pathname: "/artists", params: { where: "home" } })
-    else router.push({ pathname: "/artists", params: { sort: "nearest" } })
+    // Top rated: salons open sorted by rating; artists keep their where / nearest params.
+    if (kind === "salons") {
+      router.push({ pathname: "/salons", params: salonsSeeAllParams({ filters: { sort: "rating" }, audience }) })
+    } else if (kind === "home") {
+      router.push({ pathname: "/artists", params: artistsSeeAllParams({ where: "home", audience }) })
+    } else {
+      router.push({ pathname: "/artists", params: artistsSeeAllParams({ sort: "nearest", audience }) })
+    }
   }
 
   function openTile(tile: ServiceTile) {

@@ -18,6 +18,8 @@ import {
 } from "@/lib/explore-filters"
 import { NEARBY_RADIUS_KM, partitionSalonsByCurrentArea } from "@/lib/explore-location"
 import { pickFeaturedSectionSalons, pickNearbyAfterFeatured } from "@/lib/featured-nearby"
+import { useHomeAudience } from "@/lib/home-audience"
+import { artistsSeeAllParams, salonsSeeAllParams } from "@/lib/see-all-params"
 import type { SavedLocation } from "@/lib/user"
 import { fontFamily, spacing } from "@/theme/tokens"
 
@@ -254,7 +256,11 @@ type Props = FilterChipsProps & {
   areaLabel: string | null
   /** Opens the map; in Artists mode it should start on artists only. */
   onOpenMap: (mode: AllNearMode) => void
-  onSeeAll: () => void
+  /**
+   * Ignored: "See all salons" now opens /salons itself with the current chips and Home audience.
+   * Kept optional so Explore can still pass it; drop it there with Explore's next change.
+   */
+  onSeeAll?: () => void
   /** Shown in place of the list when the filters leave nothing. */
   emptyState?: ReactNode
 }
@@ -268,11 +274,13 @@ export function AllSalonsSection({
   location,
   areaLabel,
   onOpenMap,
-  onSeeAll,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onSeeAll: _ignored,
   emptyState,
   ...chipProps
 }: Props) {
   const router = useRouter()
+  const [audience] = useHomeAudience()
   const [mode, setModeState] = useState<AllNearMode>(lastMode)
   const [artistChips, setArtistChips] = useState<ArtistChipState>(DEFAULT_ARTIST_CHIPS)
   const nearbyArtists = useNearbyArtists()
@@ -372,7 +380,12 @@ export function AllSalonsSection({
                   onPress={() =>
                     router.push({
                       pathname: "/artists",
-                      params: artistChips.home ? { sort: "nearest", where: "home" } : { sort: "nearest" },
+                      params: artistsSeeAllParams({
+                        where: artistChips.home ? "home" : artistChips.studio ? "studio" : null,
+                        // "Top rated" isn't an artists screen sort; that falls back to Recommended.
+                        sort: hasDistances && artistChips.sort === "nearest" ? "nearest" : null,
+                        audience,
+                      }),
                     })
                   }
                   style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
@@ -410,7 +423,12 @@ export function AllSalonsSection({
 
               <Pressable
                 accessibilityRole="button"
-                onPress={onSeeAll}
+                onPress={() =>
+                  router.push({
+                    pathname: "/salons",
+                    params: salonsSeeAllParams({ filters: chipProps.filters, audience }),
+                  })
+                }
                 style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
               >
                 <Text style={styles.seeAllText}>{`See all ${total} ${total === 1 ? "salon" : "salons"}`}</Text>

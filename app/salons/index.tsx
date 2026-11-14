@@ -1,97 +1,78 @@
-import { useRouter } from "expo-router"
-import { useEffect, useMemo, useState } from "react"
-import { Dimensions, FlatList, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native"
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { FlatList, StyleSheet, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { ArtistListRowSkeleton } from "@/components/home/ArtistListRow"
+import { SalonListRow } from "@/components/home/SalonListRow"
+import {
+  SEE_ALL_EMPTY_COLORS,
+  SeeAllChip,
+  SeeAllChipRow,
+  SeeAllClearLink,
+  SeeAllEmpty,
+  SeeAllHeader,
+  SeeAllSearch,
+} from "@/components/list/SeeAllParts"
 import { SalonsFilterSheet } from "@/components/salon/SalonsFilterSheet"
-import { Button } from "@/components/ui/Button"
-import { Icon } from "@/components/ui/Icon"
-import { SalonCard } from "@/components/ui/SalonCard"
-import { SkeletonBone } from "@/components/ui/Skeleton"
-import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
 import {
   DEFAULT_EXPLORE_FILTERS,
-  EXPLORE_PRICE_FILTERS,
-  EXPLORE_RATING_FILTERS,
   EXPLORE_SORT_FILTERS,
   countActiveExploreFilters,
   filterExploreSalons,
   sortExploreSalons,
   type ExploreFilterState,
 } from "@/lib/explore-filters"
-import { browseModeFor, resolveExploreLocationSalons } from "@/lib/explore-location"
+import { browseModeFor, currentAreaLabel, resolveExploreLocationSalons } from "@/lib/explore-location"
+import { salonsForTile } from "@/lib/home-salon-info"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
+import { parseSalonsSeeAllParams } from "@/lib/see-all-params"
+import { getServiceTile, type HomeAudience, type ServiceTileKey } from "@/lib/service-tiles"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
-import { colors, radii, shadows, spacing } from "@/theme/tokens"
 
-const GRID_ITEM_WIDTH = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2
+type Item =
+  | { kind: "search" }
+  | { kind: "chips" }
+  | { kind: "salon"; salon: Salon }
+  | { kind: "skeleton"; id: number }
+  | { kind: "empty" }
 
-function FilterPill({
-  label,
-  selected,
-  onPress,
-  onClear,
-}: {
-  label: string
-  selected?: boolean
-  onPress: () => void
-  onClear?: () => void
-}) {
-  return (
-    <View style={[styles.pill, selected && styles.pillOn]}>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityState={{ selected: Boolean(selected) }}
-        style={styles.pillMain}
-      >
-        <Text
-          variant="caption"
-          color={selected ? colors.primary : colors.text}
-          style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
-        >
-          {label}
-        </Text>
-        {!selected || !onClear ? (
-          <Icon name="chevron-down" size={14} color={selected ? colors.primary : colors.textMuted} />
-        ) : null}
-      </Pressable>
-      {selected && onClear ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClear}
-          hitSlop={8}
-          accessibilityLabel={`Clear ${label}`}
-          style={styles.pillClear}
-        >
-          <Icon name="close" size={14} color={colors.primary} />
-        </Pressable>
-      ) : null}
-    </View>
-  )
-}
-
-/** Every salon near the chosen location. Same layout as the artists list. */
+/**
+ * "Salons near you": every salon near the chosen location, as Home list rows.
+ * Opens with Home's filters when passed (see `salonsSeeAllParams`), and works with none.
+ */
 export default function SalonsScreen() {
   const router = useRouter()
+  const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
+  const params = useLocalSearchParams<Record<string, string>>()
+  // Only the params the screen opened with.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => parseSalonsSeeAllParams(params), [])
+
   const [catalog, setCatalog] = useState<Salon[] | null>(() => {
     const cached = getCatalogSnapshot()
     return cached.length > 0 ? cached : null
   })
   const [location, setLocation] = useState<SavedLocation | null>(null)
+  const [locationReady, setLocationReady] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [filters, setFilters] = useState<ExploreFilterState>(DEFAULT_EXPLORE_FILTERS)
-  const [draft, setDraft] = useState<ExploreFilterState>(DEFAULT_EXPLORE_FILTERS)
+  const [filters, setFilters] = useState<ExploreFilterState>(initial.filters)
+  const [draft, setDraft] = useState<ExploreFilterState>(initial.filters)
+  const [service, setService] = useState<ServiceTileKey | null>(initial.service)
+  const [audience, setAudience] = useState<HomeAudience | null>(initial.audience)
   const [filterOpen, setFilterOpen] = useState(false)
   const [search, setSearch] = useState("")
 
-  useEffect(() => {
+  // This screen draws its own peach header.
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false })
+  }, [navigation])
+
+  const load = useCallback(() => {
     let active = true
-    void getSavedLocation()
-      .then((saved) => {
-        if (active) setLocation(saved)
-      })
-      .catch(() => {})
+    setLoadFailed(false)
     fetchSalons()
       .then(({ salons }) => {
         if (active) setCatalog(salons)
@@ -107,6 +88,23 @@ export default function SalonsScreen() {
     }
   }, [])
 
+  useEffect(() => {
+    let active = true
+    void getSavedLocation()
+      .then((saved) => {
+        if (active) setLocation(saved)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLocationReady(true)
+      })
+    const stop = load()
+    return () => {
+      active = false
+      stop()
+    }
+  }, [load])
+
   const hasPin = location?.latitude !== undefined && location?.longitude !== undefined
   // Same list Home shows (whole city for a city pick, 10 km and wider for an address), uncapped.
   const scoped = useMemo(() => {
@@ -119,16 +117,31 @@ export default function SalonsScreen() {
     return result.emptyKind === "none" ? result : null
   }, [catalog, location])
   const nearby = useMemo(() => scoped?.salons ?? [], [scoped])
-  const salons = useMemo(
-    () => sortExploreSalons(filterExploreSalons(nearby, filters, { query: search }), filters.sort),
-    [filters, nearby, search],
-  )
+  const tile = service ? getServiceTile(service) : undefined
+  const salons = useMemo(() => {
+    // Audience only narrows a service pick, like the Home tiles and the Service page.
+    const forService = tile ? salonsForTile(nearby, tile, audience) : nearby
+    return sortExploreSalons(filterExploreSalons(forService, filters, { query: search }), filters.sort)
+  }, [audience, filters, nearby, search, tile])
 
+  const loading = catalog === null || !locationReady
+  const filterCount = countActiveExploreFilters(filters)
   const sortActive = filters.sort !== "recommended"
-  const activeFilterCount = countActiveExploreFilters(filters) + (sortActive ? 1 : 0)
-  const priceLabel = EXPLORE_PRICE_FILTERS.find((o) => o.id === filters.price)?.label ?? "Price"
-  const ratingLabel = EXPLORE_RATING_FILTERS.find((o) => o.id === filters.rating)?.label ?? "Rating"
-  const sortLabel = EXPLORE_SORT_FILTERS.find((o) => o.id === filters.sort)?.label ?? "Sort"
+  const anyActive = filterCount > 0 || sortActive || service !== null || search.trim().length > 0
+  const sortLabel = EXPLORE_SORT_FILTERS.find((o) => o.id === filters.sort)?.label ?? "Recommended"
+  const ratingOn = filters.rating !== "any"
+  const priceOn = filters.price === "under-500"
+
+  const area = location ? (currentAreaLabel(location) ?? location.label) : null
+  const count = salons.length
+  const subtitle = loading
+    ? "Finding salons near you…"
+    : `${count} ${count === 1 ? "salon" : "salons"}${area ? ` · ${area}` : ""}`
+
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/explore")
+  }
 
   function openFilters() {
     setDraft(filters)
@@ -138,142 +151,160 @@ export default function SalonsScreen() {
   function clearFilters() {
     setDraft(DEFAULT_EXPLORE_FILTERS)
     setFilters(DEFAULT_EXPLORE_FILTERS)
+    setService(null)
     setFilterOpen(false)
   }
 
-  const header = (
-    <View style={styles.header}>
-      <Text variant="body" muted>
-        {scoped?.scopeLabel ?? (location?.label ? `Near ${location.label}` : "Salons and spas near you.")}
-      </Text>
+  function clearEverything() {
+    clearFilters()
+    setSearch("")
+  }
 
-      <View style={styles.search}>
-        <Icon name="search-outline" size={18} color={colors.textSubtle} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by name, area or service"
-          accessibilityLabel="Search salons"
-          placeholderTextColor={colors.textSubtle}
-          style={styles.searchInput}
-          autoCorrect={false}
-          returnKeyType="search"
-        />
-        {search ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Clear search" onPress={() => setSearch("")} hitSlop={8}>
-            <Icon name="close-circle" size={18} color={colors.textSubtle} />
-          </Pressable>
-        ) : null}
-      </View>
+  const data: Item[] = useMemo(() => {
+    const head: Item[] = [{ kind: "search" }, { kind: "chips" }]
+    if (loading) return [...head, ...[0, 1, 2, 3].map((id) => ({ kind: "skeleton" as const, id }))]
+    if (salons.length === 0) return [...head, { kind: "empty" }]
+    return [...head, ...salons.map((salon) => ({ kind: "salon" as const, salon }))]
+  }, [loading, salons])
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-        <Pressable
-          onPress={openFilters}
-          accessibilityRole="button"
-          accessibilityLabel="Open filters"
-          style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnOn]}
-        >
-          <Icon name="options-outline" size={18} color={activeFilterCount > 0 ? colors.primary : colors.text} />
-          <Text
-            variant="caption"
-            color={activeFilterCount > 0 ? colors.primary : colors.text}
-            style={{ fontFamily: "Geist_600SemiBold" }}
-          >
-            Filters
-          </Text>
-          {activeFilterCount > 0 ? (
-            <View style={styles.badge}>
-              <Text variant="caption" color={colors.primaryFg} style={styles.badgeText}>
-                {activeFilterCount}
-              </Text>
-            </View>
-          ) : null}
-        </Pressable>
+  function renderEmpty() {
+    if (loadFailed && nearby.length === 0) {
+      return (
+        <SeeAllEmpty
+          icon="cloud-offline-outline"
+          colors={SEE_ALL_EMPTY_COLORS.error}
+          title="Couldn't load salons"
+          body="Check your connection and try again."
+          actionLabel="Try again"
+          onAction={() => {
+            setCatalog(null)
+            load()
+          }}
+        />
+      )
+    }
+    if (!location) {
+      return (
+        <SeeAllEmpty
+          icon="location-outline"
+          colors={SEE_ALL_EMPTY_COLORS.salons}
+          title="Set your location"
+          body="Pick a location on Home to see salons near you."
+        />
+      )
+    }
+    if (nearby.length === 0) {
+      return (
+        <SeeAllEmpty
+          icon="business-outline"
+          colors={SEE_ALL_EMPTY_COLORS.salons}
+          title={`No salons in ${location.label}`}
+          body="Try another location from Home."
+        />
+      )
+    }
+    return (
+      <SeeAllEmpty
+        icon="options-outline"
+        colors={SEE_ALL_EMPTY_COLORS.salons}
+        title="No salons match"
+        body="Try clearing filters or searching something else."
+        actionLabel={anyActive ? "Clear filters" : undefined}
+        onAction={anyActive ? clearEverything : undefined}
+      />
+    )
+  }
 
-        <FilterPill
-          label={filters.category === "all" ? "Type" : filters.category}
-          selected={filters.category !== "all"}
-          onPress={openFilters}
-          onClear={filters.category !== "all" ? () => setFilters((prev) => ({ ...prev, category: "all" })) : undefined}
-        />
-        <FilterPill
-          label={filters.price === "any" ? "Price" : priceLabel}
-          selected={filters.price !== "any"}
-          onPress={openFilters}
-          onClear={filters.price !== "any" ? () => setFilters((prev) => ({ ...prev, price: "any" })) : undefined}
-        />
-        <FilterPill
-          label={filters.rating === "any" ? "Rating" : ratingLabel}
-          selected={filters.rating !== "any"}
-          onPress={openFilters}
-          onClear={filters.rating !== "any" ? () => setFilters((prev) => ({ ...prev, rating: "any" })) : undefined}
-        />
-        <FilterPill
-          label={sortLabel}
-          selected={sortActive}
-          onPress={openFilters}
-          onClear={sortActive ? () => setFilters((prev) => ({ ...prev, sort: "recommended" })) : undefined}
-        />
-      </ScrollView>
-    </View>
-  )
-
-  const skeleton = (
-    <View style={{ gap: spacing.md }}>
-      {[0, 1, 2].map((i) => (
-        <View key={i} style={styles.gridRow}>
-          <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-          <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-        </View>
-      ))}
-    </View>
-  )
+  function renderItem({ item }: { item: Item }) {
+    switch (item.kind) {
+      case "search":
+        return <SeeAllSearch value={search} onChange={setSearch} label="Search salons" />
+      case "chips":
+        return (
+          <SeeAllChipRow>
+            <SeeAllChip
+              icon="options-outline"
+              label={filterCount > 0 ? `Filters · ${filterCount}` : "Filters"}
+              on={filterCount > 0}
+              onPress={openFilters}
+              a11y="Open filters"
+            />
+            <SeeAllChip
+              icon="swap-vertical-outline"
+              label={sortLabel}
+              on={sortActive}
+              onPress={openFilters}
+              a11y={`Sort: ${sortLabel}`}
+              trailing="chevron-down"
+            />
+            {tile ? (
+              <SeeAllChip
+                label={tile.label}
+                on
+                onPress={() => setService(null)}
+                a11y={`${tile.label}. Tap to clear`}
+                trailing="close"
+              />
+            ) : null}
+            {tile ? (
+              <SeeAllChip
+                icon="people-outline"
+                label={audience === "men" ? "Men" : audience === "women" ? "Women" : "Everyone"}
+                on={audience !== null}
+                onPress={() => setAudience(audience === "women" ? "men" : audience === "men" ? null : "women")}
+                a11y="For: tap to switch Women, Men or Everyone"
+              />
+            ) : null}
+            <SeeAllChip
+              label="Open now"
+              on={filters.openOnly}
+              onPress={() => setFilters({ ...filters, openOnly: !filters.openOnly })}
+            />
+            <SeeAllChip
+              label="4.0+"
+              on={ratingOn}
+              onPress={() => setFilters({ ...filters, rating: ratingOn ? "any" : "4" })}
+              a11y="Rated 4.0 and up"
+            />
+            <SeeAllChip
+              label="Under ₹500"
+              on={priceOn}
+              onPress={() => setFilters({ ...filters, price: priceOn ? "any" : "under-500" })}
+            />
+            {filterCount > 0 || sortActive || service ? <SeeAllClearLink onPress={clearFilters} /> : null}
+          </SeeAllChipRow>
+        )
+      case "skeleton":
+        return (
+          <View style={styles.pad}>
+            <ArtistListRowSkeleton />
+          </View>
+        )
+      case "empty":
+        return renderEmpty()
+      case "salon":
+        return (
+          <View style={styles.pad}>
+            <SalonListRow salon={item.salon} featured={item.salon.isFeatured === true} />
+          </View>
+        )
+    }
+  }
 
   return (
-    <>
+    <View style={styles.root}>
+      <SeeAllHeader title="Salons near you" subtitle={subtitle} onBack={goBack} />
       <FlatList
         style={styles.root}
-        contentContainerStyle={styles.list}
-        data={salons}
-        keyExtractor={(item) => item.id}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
-        ListHeaderComponent={header}
-        renderItem={({ item }) => (
-          <View style={styles.gridItem}>
-            <SalonCard
-              salon={item}
-              layout="carousel"
-              onPress={() => router.push({ pathname: "/salon/[id]", params: { id: item.id } })}
-            />
-          </View>
-        )}
-        ListEmptyComponent={
-          catalog === null || location === null ? (
-            skeleton
-          ) : (
-            <View style={styles.emptyList}>
-              <Text variant="heading" style={{ textAlign: "center" }}>
-                {loadFailed
-                  ? "Couldn't load salons"
-                  : nearby.length === 0
-                    ? `No salons in ${location.label}`
-                    : "No salons match"}
-              </Text>
-              <Text variant="body" muted style={{ textAlign: "center" }}>
-                {loadFailed
-                  ? "Check your connection and try again."
-                  : nearby.length === 0
-                    ? "Try another location from Home."
-                    : "Try clearing filters or searching something else."}
-              </Text>
-              {activeFilterCount > 0 && !loadFailed ? (
-                <Button label="Clear all filters" variant="secondary" onPress={clearFilters} style={styles.clearBtn} />
-              ) : null}
-            </View>
-          )
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        data={data}
+        keyExtractor={(item) =>
+          item.kind === "salon" ? item.salon.id : item.kind === "skeleton" ? `skeleton-${item.id}` : item.kind
         }
+        renderItem={renderItem}
+        stickyHeaderIndices={[1]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       />
 
@@ -289,109 +320,11 @@ export default function SalonsScreen() {
         }}
         onClear={clearFilters}
       />
-    </>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  gridRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  gridCell: {
-    flex: 1,
-  },
-  // Fixed width, so a lone card in the last row stays half width.
-  gridItem: {
-    width: GRID_ITEM_WIDTH,
-  },
-  header: { gap: spacing.md, marginBottom: spacing.lg },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    minHeight: 48,
-    ...shadows.card,
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: "Geist_400Regular",
-    fontSize: 15,
-    color: colors.text,
-    paddingVertical: 10,
-  },
-  pillRow: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-    alignItems: "center",
-  },
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  filterBtnOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    fontSize: 11,
-    fontFamily: "Geist_600SemiBold",
-    lineHeight: 14,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 40,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  pillOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  pillMain: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  pillClear: {
-    paddingRight: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  emptyList: {
-    alignItems: "center",
-    paddingVertical: spacing.xxl,
-    gap: spacing.sm,
-  },
-  clearBtn: {
-    marginTop: spacing.sm,
-  },
+  root: { flex: 1, backgroundColor: "#ffffff" },
+  pad: { paddingHorizontal: 20 },
 })

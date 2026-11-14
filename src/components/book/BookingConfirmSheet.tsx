@@ -1,10 +1,19 @@
-import { Image } from "expo-image"
 import { StyleSheet, View } from "react-native"
 
+import {
+  bk,
+  Hairline,
+  Notice,
+  PlaceRow,
+  ReceiptRow,
+  ReceiptTotal,
+} from "@/components/book/BookingUi"
+import { PrimaryPill } from "@/components/profile/ProfileScreenParts"
+import { ui } from "@/components/salon-page/theme"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { Button } from "@/components/ui/Button"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 export type BookingConfirmLine = {
   label: string
@@ -35,6 +44,23 @@ type Props = {
   onConfirm: () => void
 }
 
+function Fact({ icon, title, text }: { icon: IconName; title: string; text: string }) {
+  return (
+    <View style={styles.fact}>
+      <View style={styles.factIcon}>
+        <Icon name={icon} size={16} color={bk.text} />
+      </View>
+      <View style={styles.factCopy}>
+        <Text style={styles.factTitle}>{title}</Text>
+        <Text style={styles.factText} numberOfLines={2}>
+          {text}
+        </Text>
+      </View>
+    </View>
+  )
+}
+
+/** Last look before booking: receipt-style summary and one black pill. */
 export function BookingConfirmSheet({
   visible,
   onClose,
@@ -58,118 +84,55 @@ export function BookingConfirmSheet({
   return (
     <BottomSheet visible={visible} title="Booking summary" onClose={onClose}>
       <View style={styles.body}>
-        <View style={styles.salonRow}>
-          <Image
-            source={{ uri: salonImageUrl }}
-            style={styles.salonAvatar}
-            contentFit="cover"
-            transition={200}
+        <PlaceRow imageUrl={salonImageUrl} name={salonName} caption={salonArea} />
+
+        <View style={styles.card}>
+          <Fact icon="calendar-outline" title="When" text={`${dateLabel} · ${timeLabel}`} />
+          {staffLabel ? <Fact icon="person-outline" title="Specialist" text={staffLabel} /> : null}
+          <Fact
+            icon="id-card-outline"
+            title="Guest"
+            text={`${customerName} · ${customerPhone}\n${customerEmail}`}
           />
-          <View style={styles.salonCopy}>
-            <Text variant="label" muted>
-              Salon
-            </Text>
-            <Text variant="heading" numberOfLines={2}>
-              {salonName}
-            </Text>
-            <Text muted numberOfLines={1}>
-              {salonArea}
-            </Text>
-          </View>
+          {notes ? <Fact icon="chatbubble-ellipses-outline" title="Note" text={notes} /> : null}
         </View>
 
-        <View style={styles.section}>
-          <Text variant="label" muted>
-            Services
-          </Text>
+        <View style={styles.card}>
+          <Text style={ui.sectionLabel}>Services</Text>
           {serviceLines.map((line) => (
             <View key={`${line.title}-${line.subtitle}`} style={styles.serviceRow}>
-              <View style={styles.serviceCopy}>
-                <Text variant="bodyStrong" numberOfLines={2}>
+              <View style={styles.factCopy}>
+                <Text style={styles.serviceTitle} numberOfLines={2}>
                   {line.title}
                 </Text>
-                {line.subtitle ? (
-                  <Text variant="caption" muted>
-                    {line.subtitle}
-                  </Text>
-                ) : null}
+                {line.subtitle ? <Text style={styles.serviceSub}>{line.subtitle}</Text> : null}
               </View>
-              <Text variant="bodyStrong">{line.priceLabel}</Text>
+              <Text style={styles.servicePrice}>{line.priceLabel}</Text>
             </View>
           ))}
-        </View>
-
-        <View style={styles.metaGrid}>
-          <View style={styles.metaCard}>
-            <Text variant="label" muted>
-              Date
-            </Text>
-            <Text variant="bodyStrong">{dateLabel}</Text>
-          </View>
-          <View style={styles.metaCard}>
-            <Text variant="label" muted>
-              Time
-            </Text>
-            <Text variant="bodyStrong">{timeLabel}</Text>
-          </View>
-        </View>
-
-        {staffLabel ? (
-          <View style={styles.section}>
-            <Text variant="label" muted>
-              Specialist
-            </Text>
-            <Text variant="bodyStrong">{staffLabel}</Text>
-          </View>
-        ) : null}
-
-        <View style={styles.section}>
-          <Text variant="label" muted>
-            Guest
-          </Text>
-          <Text variant="bodyStrong">{customerName}</Text>
-          <Text muted>{customerPhone}</Text>
-          <Text muted>{customerEmail}</Text>
-          {notes ? (
-            <Text variant="caption" muted style={styles.notes}>
-              Note · {notes}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.section}>
-          <Text variant="label" muted>
-            Payment
-          </Text>
+          <Hairline />
           {priceLines.map((line) => (
-            <View key={line.label} style={styles.priceRow}>
-              <Text muted={line.muted !== false && !line.emphasis}>{line.label}</Text>
-              <Text
-                variant={line.emphasis ? "bodyStrong" : "body"}
-                color={line.success ? colors.success : undefined}
-              >
-                {line.value}
-              </Text>
-            </View>
+            <ReceiptRow
+              key={line.label}
+              label={line.label}
+              value={line.value}
+              tone={line.success ? "success" : line.muted ? "muted" : "default"}
+            />
           ))}
-          <View style={[styles.priceRow, styles.totalRow]}>
-            <Text variant="bodyStrong">Pay at salon</Text>
-            <Text variant="heading">{totalLabel}</Text>
-          </View>
+          <ReceiptTotal label="Pay at salon" value={totalLabel} />
         </View>
 
         {error ? (
-          <Text variant="caption" color={colors.primary}>
+          <Notice tone="red" icon="alert-circle-outline">
             {error}
-          </Text>
+          </Notice>
         ) : null}
 
-        <Button
+        <PrimaryPill
           label={submitting ? "Booking…" : "Book and confirm"}
           loading={submitting}
           disabled={submitting}
           onPress={onConfirm}
-          style={styles.cta}
         />
       </View>
     </BottomSheet>
@@ -177,68 +140,29 @@ export function BookingConfirmSheet({
 }
 
 const styles = StyleSheet.create({
-  body: {
-    gap: spacing.xl,
-    paddingBottom: spacing.md,
+  body: { gap: 16, paddingBottom: 12 },
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: bk.border,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    gap: 12,
   },
-  salonRow: {
-    flexDirection: "row",
+  fact: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  factIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: bk.peachBg,
     alignItems: "center",
-    gap: spacing.lg,
+    justifyContent: "center",
   },
-  salonAvatar: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-  },
-  salonCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  section: {
-    gap: spacing.sm,
-  },
-  serviceRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-  },
-  serviceCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  metaGrid: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  metaCard: {
-    flex: 1,
-    gap: spacing.xs,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  notes: {
-    marginTop: spacing.xs,
-  },
-  priceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  totalRow: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  cta: {
-    marginTop: spacing.sm,
-  },
+  factCopy: { flex: 1, minWidth: 0, gap: 2 },
+  factTitle: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 16, color: bk.secondary },
+  factText: { fontFamily: fontFamily.semibold, fontSize: 14, lineHeight: 20, color: bk.text },
+  serviceRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  serviceTitle: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: bk.text },
+  serviceSub: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 16, color: bk.secondary },
+  servicePrice: { fontFamily: fontFamily.bold, fontSize: 15, lineHeight: 20, color: bk.text },
 })

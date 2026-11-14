@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
 import { MAX_REVIEW_PHOTOS, uploadReviewPhoto } from "@/lib/reviews-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Props = {
   urls: string[]
@@ -56,9 +56,6 @@ export function ReviewPhotoPicker({ urls, onChange, onBusyChange }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Text variant="label" muted>
-        Photos (optional, up to {MAX_REVIEW_PHOTOS})
-      </Text>
       <View style={styles.row}>
         {urls.map((url, index) => (
           <View key={url} style={styles.thumb}>
@@ -70,13 +67,13 @@ export function ReviewPhotoPicker({ urls, onChange, onBusyChange }: Props) {
               style={styles.remove}
               onPress={() => onChange(urls.filter((u) => u !== url))}
             >
-              <Icon name="close" size={14} color={colors.primaryFg} />
+              <Icon name="close" size={14} color="#ffffff" />
             </Pressable>
           </View>
         ))}
         {Array.from({ length: uploading }).map((_, i) => (
           <View key={`up-${i}`} style={[styles.thumb, styles.placeholder]}>
-            <ActivityIndicator color={colors.primary} />
+            <ActivityIndicator color="#111111" />
           </View>
         ))}
         {room > 0 ? (
@@ -86,39 +83,37 @@ export function ReviewPhotoPicker({ urls, onChange, onBusyChange }: Props) {
             style={({ pressed }) => [styles.thumb, styles.add, pressed && styles.pressed]}
             onPress={() => void pick()}
           >
-            <Icon name="camera-outline" size={22} color={colors.text} />
-            <Text variant="caption">Add</Text>
+            <View style={styles.addIcon}>
+              <Icon name="camera-outline" size={18} color="#3b2a24" />
+            </View>
+            <Text style={styles.addText}>Add photo</Text>
           </Pressable>
         ) : null}
       </View>
       {error ? (
-        <Text variant="caption" color={colors.destructive}>
-          {error}
-        </Text>
+        <Text style={styles.error}>{error}</Text>
       ) : (
-        <Text variant="caption" muted>
-          Photos of your look help others choose. They show with your review.
-        </Text>
+        <Text style={styles.hint}>Photos of your look help others choose. They show with your review.</Text>
       )}
     </View>
   )
 }
 
-const SIZE = 84
+const SIZE = 96
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.sm,
+    gap: 10,
   },
   row: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.sm,
+    gap: 10,
   },
   thumb: {
     width: SIZE,
     height: SIZE,
-    borderRadius: radii.md,
+    borderRadius: 16,
     overflow: "hidden",
   },
   image: {
@@ -127,29 +122,56 @@ const styles = StyleSheet.create({
   },
   remove: {
     position: "absolute",
-    top: 4,
-    right: 4,
+    top: 6,
+    right: 6,
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.65)",
+    backgroundColor: "rgba(17,17,17,0.7)",
     alignItems: "center",
     justifyContent: "center",
   },
   placeholder: {
-    backgroundColor: colors.muted,
+    backgroundColor: "#f3f3f3",
     alignItems: "center",
     justifyContent: "center",
   },
   add: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: colors.inputBorder,
+    borderColor: "#d4d4d4",
+    backgroundColor: "#fafafa",
     alignItems: "center",
     justifyContent: "center",
-    gap: 2,
+    gap: 6,
+  },
+  addIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: "#ffe1d6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#111111",
+  },
+  hint: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+  },
+  error: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#c0392b",
   },
   pressed: {
-    backgroundColor: colors.muted,
+    opacity: 0.7,
   },
 })

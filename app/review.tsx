@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from "expo-router"
+import { Stack, useLocalSearchParams, useRouter } from "expo-router"
 import { useRef, useState } from "react"
 import {
   KeyboardAvoidingView,
@@ -9,18 +9,29 @@ import {
   View,
   type ScrollViewInstance,
 } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import {
+  BookingCard,
+  BookingHeader,
+  BookingSectionLabel,
+  CheckRow,
+  FlowSuccess,
+  PlaceRow,
+  bk,
+  bookingStyles,
+} from "@/components/book/BookingUi"
+import { SEE_ALL_EMPTY_COLORS, SeeAllEmpty } from "@/components/list/SeeAllParts"
+import { Chip, Field, PrimaryPill } from "@/components/profile/ProfileScreenParts"
 import { ReviewPhotoPicker } from "@/components/reviews/ReviewPhotoPicker"
-import { Button } from "@/components/ui/Button"
+import { pastels } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
-import { SuccessScreen } from "@/components/ui/SuccessScreen"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
-import { submitArtistReview, submitSalonReview } from "@/lib/reviews-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { MAX_REVIEW_PHOTOS, submitArtistReview, submitSalonReview } from "@/lib/reviews-api"
+import { fontFamily } from "@/theme/tokens"
+
+const RATING_LABELS = ["Poor", "Fair", "Good", "Great", "Loved it"]
 
 function firstParam(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value
@@ -38,6 +49,7 @@ const STAND_OUT = [
 
 export default function ReviewScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const scrollRef = useRef<ScrollViewInstance>(null)
   const params = useLocalSearchParams<{
     appointmentId?: string | string[]
@@ -112,270 +124,189 @@ export default function ReviewScreen() {
     })
   }
 
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/bookings")
+  }
+
   if (done) {
     return (
-      <SuccessScreen
-        title="Thanks for your review"
-        message="Your feedback helps other guests choose with confidence."
-        primary={{ label: "Back to bookings", onPress: () => router.replace("/(tabs)/bookings") }}
-        secondary={{ label: "Go to Home", onPress: () => router.replace("/(tabs)/explore") }}
-      >
-        <View style={styles.doneHead}>
-          <Text variant="bodyStrong" numberOfLines={1} style={{ flex: 1 }}>
-            {title}
-          </Text>
-          <View style={styles.doneStars} accessible accessibilityLabel={`${rating} out of 5 stars`}>
-            {[1, 2, 3, 4, 5].map((value) => (
-              <Icon
-                key={value}
-                name={value <= rating ? "star" : "star-outline"}
-                size={14}
-                color={colors.text}
-              />
-            ))}
+      <>
+        <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
+        <FlowSuccess
+          icon="star"
+          pastel={pastels.gold}
+          title="Thanks for your review"
+          message="Your feedback helps other guests choose with confidence."
+          primary={{ label: "Back to bookings", onPress: () => router.replace("/(tabs)/bookings") }}
+          secondary={{ label: "Go to Home", onPress: () => router.replace("/(tabs)/explore") }}
+        >
+          <View style={styles.doneHead}>
+            <Text style={styles.doneName} numberOfLines={1}>
+              {title}
+            </Text>
+            <View style={styles.doneStars} accessible accessibilityLabel={`${rating} out of 5 stars`}>
+              {[1, 2, 3, 4, 5].map((value) => (
+                <Icon key={value} name={value <= rating ? "star" : "star-outline"} size={14} color={bk.star} />
+              ))}
+            </View>
           </View>
-        </View>
-        <Text variant="body" muted numberOfLines={3}>
-          {`“${comment.trim()}”`}
-        </Text>
-      </SuccessScreen>
+          <Text style={styles.doneQuote} numberOfLines={3}>
+            {`“${comment.trim()}”`}
+          </Text>
+        </FlowSuccess>
+      </>
     )
   }
 
   if (!reviewTargetId) {
     return (
-      <Screen>
-        <Text variant="title">Review unavailable</Text>
-        <Text muted style={styles.gap}>
-          Open this screen from a completed booking.
-        </Text>
-        <Button
-          label="Back to bookings"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/bookings")}
+      <View style={bookingStyles.page}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingHeader title="Leave a review" onBack={goBack} />
+        <SeeAllEmpty
+          icon="star-outline"
+          colors={SEE_ALL_EMPTY_COLORS.salons}
+          title="Review unavailable"
+          body="Open this screen from a completed booking."
+          actionLabel="Back to bookings"
+          onAction={() => router.replace("/(tabs)/bookings")}
         />
-      </Screen>
+      </View>
     )
   }
 
+  const commentTooShort = comment.trim().length > 0 && comment.trim().length < 3
+
   return (
-    <SafeAreaView style={styles.safe} edges={["left", "right", "bottom"]}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
-      >
+    <View style={bookingStyles.page}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView style={bookingStyles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <BookingHeader title="Leave a review" subtitle={title} onBack={goBack} />
         <ScrollView
           ref={scrollRef}
-          contentContainerStyle={styles.scroll}
+          style={bookingStyles.page}
+          contentContainerStyle={[bookingStyles.body, styles.scroll]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="interactive"
-          automaticallyAdjustKeyboardInsets
           showsVerticalScrollIndicator={false}
         >
-          <Text variant="title">Leave a review</Text>
-          <Text muted style={styles.gap}>
-            {isArtist ? `How was your experience with ${title}?` : title}
-          </Text>
+          <BookingCard style={styles.placeCard}>
+            <PlaceRow
+              name={title}
+              caption={isArtist ? "Solo artist" : stylist ? `With ${stylist}` : "Salon visit"}
+            />
+          </BookingCard>
 
-          <Text variant="label" muted style={styles.section}>
-            Rating
-          </Text>
-          <View style={styles.stars}>
-            {[1, 2, 3, 4, 5].map((value) => {
-              const filled = value <= rating
-              return (
-                <Pressable
-                  key={value}
-                  onPress={() => setRating(value)}
-                  hitSlop={10}
-                  style={styles.starBtn}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${value} star${value === 1 ? "" : "s"}`}
-                  accessibilityState={{ selected: filled }}
-                >
-                  <Icon
-                    name={filled ? "star" : "star-outline"}
-                    size={32}
-                    color={filled ? colors.primary : colors.textSubtle}
-                  />
-                </Pressable>
-              )
-            })}
-          </View>
+          <BookingSectionLabel>Your rating</BookingSectionLabel>
+          <BookingCard style={styles.ratingCard}>
+            <View style={styles.stars} accessibilityRole="radiogroup" accessibilityLabel="Rating">
+              {[1, 2, 3, 4, 5].map((value) => {
+                const filled = value <= rating
+                return (
+                  <Pressable
+                    key={value}
+                    onPress={() => setRating(value)}
+                    hitSlop={6}
+                    style={({ pressed }) => [styles.starBtn, pressed && styles.pressed]}
+                    accessibilityRole="radio"
+                    accessibilityLabel={`${value} star${value === 1 ? "" : "s"}, ${RATING_LABELS[value - 1]}`}
+                    accessibilityState={{ selected: value === rating, checked: value === rating }}
+                  >
+                    <Icon name={filled ? "star" : "star-outline"} size={40} color={filled ? bk.star : "#c9c9c9"} />
+                  </Pressable>
+                )
+              })}
+            </View>
+            <Text style={styles.ratingLabel} accessibilityLiveRegion="polite">
+              {RATING_LABELS[rating - 1]}
+            </Text>
+          </BookingCard>
 
-          <Text variant="label" muted style={styles.section}>
-            What stood out
-          </Text>
+          <BookingSectionLabel>What stood out</BookingSectionLabel>
           <View style={styles.chips}>
             {STAND_OUT.map((item) => (
-              <Pressable
-                accessibilityRole="button"
-                key={item}
-                style={[styles.chip, chip === item && styles.chipActive]}
-                onPress={() => setChip(item)}
-              >
-                <Text
-                  variant="caption"
-                  color={chip === item ? colors.primary : colors.text}
-                >
-                  {item}
-                </Text>
-              </Pressable>
+              <Chip key={item} label={item} active={chip === item} onPress={() => setChip(item)} />
             ))}
           </View>
 
           {!isArtist && stylist ? (
-            <Pressable
-              style={[styles.staffCard, includeStaff && styles.staffCardActive]}
-              onPress={() => setIncludeStaff((value) => !value)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: includeStaff }}
-            >
-              <View
-                style={[styles.checkbox, includeStaff && styles.checkboxChecked]}
-              >
-                {includeStaff ? (
-                  <Icon name="checkmark" size={14} color={colors.primaryFg} />
-                ) : null}
-              </View>
-              <View style={styles.staffCopy}>
-                <Text variant="bodyStrong">Add review for {stylist}</Text>
-                <Text variant="caption" muted>
-                  Optional — your feedback will appear on this team member’s
-                  profile at the salon.
-                </Text>
-              </View>
-            </Pressable>
+            <BookingCard style={styles.staffCard}>
+              <CheckRow
+                checked={includeStaff}
+                onPress={() => setIncludeStaff((value) => !value)}
+                title={`Add review for ${stylist}`}
+                caption="Optional — your feedback will appear on this team member’s profile at the salon."
+              />
+            </BookingCard>
           ) : null}
 
-          <View style={styles.section}>
-            <Input
-              label="Comment"
-              value={comment}
-              onChangeText={setComment}
-              onFocus={scrollCommentIntoView}
-              placeholder="Share a few details (min 3 characters)"
-              multiline
-              style={{
-                minHeight: 96,
-                textAlignVertical: "top",
-                paddingTop: spacing.md,
-              }}
-            />
-          </View>
+          <BookingSectionLabel>Your review</BookingSectionLabel>
+          <Field
+            value={comment}
+            onChangeText={setComment}
+            onFocus={scrollCommentIntoView}
+            placeholder="Share a few details (min 3 characters)"
+            accessibilityLabel="Comment"
+            multiline
+            hint={commentTooShort ? "A few more characters, please." : undefined}
+          />
 
-          <View style={styles.section}>
-            <ReviewPhotoPicker urls={photoUrls} onChange={setPhotoUrls} onBusyChange={setPhotosBusy} />
-          </View>
+          <BookingSectionLabel>{`Photos (optional, up to ${MAX_REVIEW_PHOTOS})`}</BookingSectionLabel>
+          <ReviewPhotoPicker urls={photoUrls} onChange={setPhotoUrls} onBusyChange={setPhotosBusy} />
+        </ScrollView>
 
+        <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
           {error ? (
-            <Text variant="caption" color={colors.destructive} style={styles.gap}>
+            <Text style={styles.barError} accessibilityLiveRegion="polite">
               {error}
             </Text>
           ) : null}
-
-          <Button
-            label="Submit review"
+          <PrimaryPill
+            label={photosBusy ? "Uploading photos…" : "Submit review"}
             loading={loading}
             disabled={!canSubmit}
-            style={{ marginTop: spacing.xl }}
-            onPress={handleSubmit}
+            onPress={() => void handleSubmit()}
           />
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.bg,
+  scroll: { paddingBottom: 32 },
+  pressed: { opacity: 0.7 },
+  placeCard: { marginTop: 8 },
+  ratingCard: { alignItems: "center", paddingVertical: 20 },
+  stars: { flexDirection: "row", alignItems: "center", gap: 6 },
+  starBtn: { padding: 4 },
+  ratingLabel: {
+    marginTop: 10,
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: bk.text,
   },
-  flex: {
-    flex: 1,
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  staffCard: { marginTop: 16, paddingVertical: 4 },
+  bar: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: bk.hairline,
+    gap: 8,
   },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.xxxl,
+  barError: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: bk.red,
+    textAlign: "center",
   },
-  gap: {
-    marginTop: spacing.sm,
-  },
-  doneHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  doneStars: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  section: {
-    marginTop: spacing.xxl,
-    marginBottom: spacing.md,
-  },
-  stars: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  starBtn: {
-    padding: 2,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  staffCard: {
-    marginTop: spacing.xxl,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  staffCardActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-  },
-  checkboxChecked: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  staffCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
+  doneHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  doneName: { flex: 1, fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: bk.text },
+  doneStars: { flexDirection: "row", gap: 2 },
+  doneQuote: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: bk.secondary },
 })

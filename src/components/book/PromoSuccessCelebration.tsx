@@ -11,11 +11,13 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { Button } from "@/components/ui/Button"
+import { GradientFill } from "@/components/home/GradientFill"
+import { PrimaryPill } from "@/components/profile/ProfileScreenParts"
+import { pastels, ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { AppliedOfferDiscount, PromoCashbackClaim } from "@/lib/promo-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { colors, fontFamily, spacing } from "@/theme/tokens"
 
 export type PromoCelebrationPayload =
   | { kind: "discount"; discount: AppliedOfferDiscount }
@@ -29,12 +31,12 @@ type Props = {
 
 const CONFETTI_COLORS = [
   colors.primary,
-  "#BDBDBD",
-  colors.sand,
-  "#D4D4D4",
-  "#FFD166",
-  "#06D6A0",
-  "#4ECDC4",
+  "#ffe1d6",
+  "#e6dcff",
+  "#d3f0e2",
+  "#fbdbe8",
+  "#fdeec2",
+  "#d9ebfb",
   "#FFFFFF",
 ]
 
@@ -214,33 +216,26 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
           ]}
         >
           <View style={styles.badge}>
-            <Icon name="sparkles" size={28} color={colors.primary} />
+            <GradientFill colors={pastels.mint.gradient} angle={150} />
+            <Icon name="sparkles" size={30} color={pastels.mint.ink} />
           </View>
 
-          <Text variant="label" color={colors.primary} style={styles.kicker}>
-            Congratulations
-          </Text>
-          <Text variant="title" style={styles.headline}>
-            {headline}
-          </Text>
-          <Text muted style={styles.title}>
-            {title}
-          </Text>
+          <Text style={[ui.sectionLabel, styles.kicker]}>Congratulations</Text>
+          <Text style={styles.headline}>{headline}</Text>
+          <Text style={styles.title}>{title}</Text>
 
           <View style={styles.offerBox}>
             <View style={styles.offerRow}>
-              <Icon name="pricetag" size={18} color={colors.primary} />
-              <Text variant="bodyStrong" style={styles.offerCode}>
-                {code}
-              </Text>
+              <Icon name="pricetag-outline" size={16} color="#17633e" />
+              <Text style={styles.offerCode}>{code}</Text>
             </View>
             <Text style={styles.detail}>{detail}</Text>
-            <Text variant="caption" muted style={styles.subdetail}>
-              {subdetail}
-            </Text>
+            <Text style={styles.subdetail}>{subdetail}</Text>
           </View>
 
-          <Button label="Awesome" onPress={onClose} style={styles.cta} />
+          <View style={styles.cta}>
+            <PrimaryPill label="Awesome" onPress={onClose} />
+          </View>
         </Animated.View>
       </View>
     </Modal>
@@ -262,58 +257,76 @@ const styles = StyleSheet.create({
     top: 0,
   },
   card: {
-    backgroundColor: colors.bg,
-    borderRadius: radii.xl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xxl,
-    paddingBottom: spacing.xl,
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 28,
+    paddingBottom: 22,
     alignItems: "center",
     zIndex: 2,
   },
   badge: {
-    width: 64,
-    height: 64,
-    borderRadius: radii.pill,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F1F1F1",
-    marginBottom: spacing.lg,
+    marginBottom: 16,
   },
   kicker: {
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   headline: {
     textAlign: "center",
+    fontFamily: fontFamily.bold,
     fontSize: 24,
+    lineHeight: 30,
+    color: "#111111",
   },
   title: {
     textAlign: "center",
-    marginTop: spacing.sm,
+    marginTop: 6,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#595959",
   },
   offerBox: {
     width: "100%",
-    marginTop: spacing.xl,
-    marginBottom: spacing.xl,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    gap: spacing.sm,
+    marginTop: 20,
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#9fd3b3",
+    backgroundColor: "#e6f5ec",
+    gap: 4,
   },
   offerRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: 6,
   },
   offerCode: {
-    letterSpacing: 0.6,
+    fontFamily: fontFamily.bold,
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: 1,
+    color: "#17633e",
   },
   detail: {
-    color: colors.text,
+    fontFamily: fontFamily.medium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#111111",
   },
   subdetail: {
-    marginTop: 2,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: "#595959",
   },
   cta: {
     width: "100%",

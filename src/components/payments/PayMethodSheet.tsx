@@ -9,7 +9,8 @@ import { SkeletonBone } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import type { Bank, UpiApp } from "@/lib/advance-payment"
 import type { PaySelection, SavedPayMethod } from "@/lib/pay-method-memory"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { ui } from "@/components/salon-page/theme"
+import { fontFamily, radii, spacing } from "@/theme/tokens"
 
 type Props = {
   visible: boolean
@@ -74,8 +75,8 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
           }}
           style={styles.backRow}
         >
-          <Icon name="chevron-back" size={18} color={colors.text} />
-          <Text variant="bodyStrong">Back to payment options</Text>
+          <Icon name="chevron-back" size={18} color="#111111" />
+          <Text style={styles.backText}>Back to payment options</Text>
         </Pressable>
         {shownBanks.map((bank) => (
           <Option
@@ -87,7 +88,7 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
           />
         ))}
         {shownBanks.length === 0 ? (
-          <Text variant="caption" muted style={styles.empty}>
+          <Text style={[styles.sub, styles.empty]}>
             No bank found.
           </Text>
         ) : null}
@@ -111,12 +112,12 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
         </View>
       ) : (
         <>
-          <Text variant="label" muted style={styles.sectionTitle}>
+          <Text style={[ui.sectionLabel, styles.sectionTitle]}>
             UPI apps
           </Text>
           <View style={styles.card} accessibilityRole="radiogroup">
             {upiApps.length === 0 ? (
-              <Text variant="caption" muted style={styles.empty}>
+              <Text style={[styles.sub, styles.empty]}>
                 No UPI apps found on this phone. You can pay by net banking or card.
               </Text>
             ) : null}
@@ -134,7 +135,7 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
 
           {banks.length > 0 ? (
             <>
-              <Text variant="label" muted style={styles.sectionTitle}>
+              <Text style={[ui.sectionLabel, styles.sectionTitle]}>
                 Net banking
               </Text>
               <View style={styles.card} accessibilityRole="radiogroup">
@@ -166,7 +167,7 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
             </>
           ) : null}
 
-          <Text variant="label" muted style={styles.sectionTitle}>
+          <Text style={[ui.sectionLabel, styles.sectionTitle]}>
             Credit or debit card
           </Text>
           <View style={styles.card}>
@@ -179,7 +180,7 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
             />
           </View>
 
-          <Text variant="caption" muted style={styles.secure}>
+          <Text style={[styles.sub, styles.secure]}>
             Secure payment by Razorpay
           </Text>
         </>
@@ -189,12 +190,12 @@ export function PayMethodSheet({ visible, loading, upiApps, banks, selected, las
 }
 
 const styles = StyleSheet.create({
-  sectionTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  sectionTitle: { marginTop: 20, marginBottom: 10, paddingHorizontal: 4 },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
     overflow: "hidden",
   },
   skeletonRow: {
@@ -202,9 +203,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     minHeight: 60,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
   },
   empty: { padding: spacing.md },
+  sub: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: "#595959" },
   backRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 },
+  backText: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: "#111111" },
   secure: { textAlign: "center", marginTop: spacing.lg },
 })

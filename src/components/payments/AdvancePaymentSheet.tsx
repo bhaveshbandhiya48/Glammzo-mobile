@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { AppState, Image, Linking, Pressable, StyleSheet, View } from "react-native"
 
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { Button } from "@/components/ui/Button"
+import { OutlinePill, PrimaryPill } from "@/components/profile/ProfileScreenParts"
+import { ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
 import { SkeletonBone } from "@/components/ui/Skeleton"
@@ -22,7 +23,13 @@ import {
 } from "@/lib/advance-payment"
 import { formatRupees } from "@/lib/service-pricing"
 import { getConsumerProfile } from "@/lib/user"
-import { colors, radii, spacing, status as statusColors } from "@/theme/tokens"
+import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
+
+const INK = "#111111"
+const SECONDARY = "#595959"
+const BORDER = "#e3e3e3"
+const RED = "#c0392b"
+const PEACH_INK = "#8a3524"
 
 /** The banks most clients look for, shown first. */
 export const POPULAR_BANKS = ["HDFC", "SBIN", "ICIC", "UTIB", "KKBK"]
@@ -64,17 +71,17 @@ export function Option({
     >
       <View style={styles.optionIcon}>{leading}</View>
       <View style={styles.optionText}>
-        <Text variant="bodyStrong" numberOfLines={1}>
+        <Text style={styles.optionTitle} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="caption" muted numberOfLines={2}>
+          <Text style={styles.optionSub} numberOfLines={2}>
             {subtitle}
           </Text>
         ) : null}
       </View>
       {chevron ? (
-        <Icon name="chevron-forward" size={18} color={colors.textMuted} />
+        <Icon name="chevron-forward" size={18} color={SECONDARY} />
       ) : (
         <View style={[styles.radio, selected && styles.radioOn]}>
           {selected ? <View style={styles.radioDot} /> : null}
@@ -321,13 +328,13 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
         onClose={() => undefined}
       >
         <View style={styles.leave}>
-          <Text muted>
+          <Text style={styles.leaveText}>
             Your booking isn&apos;t confirmed yet.
             {left != null && left > 0 ? ` We'll hold your slot for ${formatLeft(left)}, ` : " We'll hold your slot for a few minutes, "}
             and you can finish paying from Home.
           </Text>
-          <Button label="Keep paying" onPress={() => setConfirmingLeave(false)} />
-          <Button label="Leave" variant="secondary" onPress={() => onClose(true)} />
+          <PrimaryPill label="Keep paying" onPress={() => setConfirmingLeave(false)} />
+          <OutlinePill label="Leave" onPress={() => onClose(true)} />
         </View>
       </BottomSheet>
     )
@@ -354,8 +361,8 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
           }}
           style={styles.backRow}
         >
-          <Icon name="chevron-back" size={18} color={colors.text} />
-          <Text variant="bodyStrong">Back to payment options</Text>
+          <Icon name="chevron-back" size={18} color={INK} />
+          <Text style={styles.optionTitle}>Back to payment options</Text>
         </Pressable>
         {shownBanks.map((bank) => (
           <Option
@@ -371,7 +378,7 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
           />
         ))}
         {shownBanks.length === 0 ? (
-          <Text variant="caption" muted style={styles.empty}>
+          <Text style={[styles.optionSub, styles.empty]}>
             No bank found.
           </Text>
         ) : null}
@@ -391,16 +398,16 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
         showFooter ? (
           <View style={styles.footer}>
             {notice ? (
-              <Text variant="caption" style={styles.notice} accessibilityLiveRegion="polite">
+              <Text style={styles.notice} accessibilityLiveRegion="polite">
                 {notice}
               </Text>
             ) : null}
             {error ? (
-              <Text variant="caption" color={statusColors.dangerFg} accessibilityLiveRegion="polite">
+              <Text style={styles.error} accessibilityLiveRegion="polite">
                 {error}
               </Text>
             ) : null}
-            <Button
+            <PrimaryPill
               label={selectedLabel ? `Pay ${amount} with ${selectedLabel}` : `Pay ${amount}`}
               loading={paying}
               disabled={!ready || !selection || expired}
@@ -414,44 +421,41 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
         <View style={styles.summaryCopy}>
           {amount ? <Text style={styles.amount}>{amount}</Text> : <SkeletonBone width={96} height={32} />}
           {label ? (
-            <Text variant="caption" muted numberOfLines={2}>
+            <Text style={styles.optionSub} numberOfLines={2}>
               {label}
             </Text>
           ) : null}
         </View>
         {left != null ? (
           <View style={[styles.hold, expired && styles.holdExpired]} accessibilityLiveRegion="none">
-            <Icon name="time-outline" size={14} color={expired ? statusColors.dangerFg : statusColors.warnFg} />
-            <Text variant="caption" color={expired ? statusColors.dangerFg : statusColors.warnFg}>
-              {expired ? "Time ended" : formatLeft(left)}
+            <Icon name="time-outline" size={13} color={expired ? RED : PEACH_INK} />
+            <Text style={[styles.holdText, expired && styles.holdTextExpired]}>
+              {expired ? "Time ended" : `Slot held for ${formatLeft(left)}`}
             </Text>
           </View>
         ) : null}
       </View>
 
       {expired ? (
-        <Text variant="caption" color={statusColors.dangerFg} style={styles.sectionTitle}>
+        <Text style={[styles.error, styles.sectionTitle]}>
           This time is no longer held. Please book again.
         </Text>
       ) : null}
 
       {loadError ? (
         <View style={styles.failed}>
-          <Text variant="bodyStrong">{/held|paid/i.test(loadError) ? loadError : "We couldn't start the payment"}</Text>
+          <Text style={styles.failedTitle}>{/held|paid/i.test(loadError) ? loadError : "We couldn't start the payment"}</Text>
           {/held|paid/i.test(loadError) ? null : (
-            <Text variant="caption" muted>
-              {loadError}
-            </Text>
+            <Text style={styles.optionSub}>{loadError}</Text>
           )}
-          <Button
+          <OutlinePill
             label="Close"
-            variant="secondary"
             onPress={() => (alreadyPaid ? onPaid(amountRupees ?? 0) : onClose(token != null))}
           />
         </View>
       ) : !ready || (showInApp && !optionsReady) ? (
         <>
-          <Text variant="label" muted style={styles.sectionTitle}>
+          <Text style={[ui.sectionLabel, styles.sectionTitle]}>
             Loading payment options
           </Text>
           <OptionsSkeleton />
@@ -460,12 +464,12 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
         <>
           {showInApp ? (
             <>
-              <Text variant="label" muted style={styles.sectionTitle}>
+              <Text style={[ui.sectionLabel, styles.sectionTitle]}>
                 Pay with UPI
               </Text>
               <View style={styles.card} accessibilityRole="radiogroup">
                 {upiApps.length === 0 ? (
-                  <Text variant="caption" muted style={styles.empty}>
+                  <Text style={[styles.optionSub, styles.empty]}>
                     No UPI apps found on this phone. You can pay by net banking or card.
                   </Text>
                 ) : null}
@@ -482,7 +486,7 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
 
               {banks.length > 0 ? (
                 <>
-                  <Text variant="label" muted style={styles.sectionTitle}>
+                  <Text style={[ui.sectionLabel, styles.sectionTitle]}>
                     Net banking
                   </Text>
                   <View style={styles.card} accessibilityRole="radiogroup">
@@ -515,7 +519,7 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
             </>
           ) : null}
 
-          <Text variant="label" muted style={styles.sectionTitle}>
+          <Text style={[ui.sectionLabel, styles.sectionTitle]}>
             {showInApp ? "Credit or debit card" : "Pay securely"}
           </Text>
           <View style={styles.card}>
@@ -528,7 +532,7 @@ export function AdvancePaymentSheet({ visible, token: givenToken, reserve, summa
             />
           </View>
 
-          <Text variant="caption" muted style={styles.secure}>
+          <Text style={[styles.optionSub, styles.secure]}>
             Secure payment by Razorpay
           </Text>
         </>
@@ -543,70 +547,85 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.md,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#fff1ec",
   },
   summaryCopy: { flex: 1, minWidth: 0, gap: 2 },
-  amount: { fontSize: 32, lineHeight: 40, fontFamily: "Geist_700Bold", color: colors.text },
+  amount: { fontSize: 30, lineHeight: 38, fontFamily: fontFamily.bold, color: INK },
   hold: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: statusColors.warnBg,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
+    gap: 5,
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  holdExpired: { backgroundColor: statusColors.dangerBg },
-  sectionTitle: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  holdExpired: { backgroundColor: "#fdecea" },
+  holdText: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 16, color: PEACH_INK },
+  holdTextExpired: { color: RED },
+  sectionTitle: { marginTop: 20, marginBottom: 10, paddingHorizontal: 4 },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
     overflow: "hidden",
   },
   empty: { padding: spacing.md },
-  failed: { marginTop: spacing.lg, gap: spacing.sm },
+  failed: { marginTop: spacing.lg, gap: 10 },
+  failedTitle: { fontFamily: fontFamily.semibold, fontSize: 16, lineHeight: 21, color: INK },
   option: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: 12,
     minHeight: 60,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
-  leave: { gap: spacing.md, paddingBottom: spacing.sm },
+  optionTitle: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: INK },
+  optionSub: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: SECONDARY },
+  leave: { gap: 12, paddingBottom: spacing.sm },
+  leaveText: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 21, color: SECONDARY },
   backRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, minHeight: 44 },
-  pressed: { backgroundColor: colors.muted },
+  pressed: { backgroundColor: "#f7f7f7" },
   optionIcon: {
     width: 40,
     height: 40,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+    backgroundColor: "#fafafa",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  optionText: { flex: 1, minWidth: 0 },
+  optionText: { flex: 1, minWidth: 0, gap: 1 },
   logo: { width: 28, height: 28, resizeMode: "contain" },
   radio: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 2,
-    borderColor: colors.inputBorder,
+    borderColor: "#c4c4c4",
     alignItems: "center",
     justifyContent: "center",
   },
-  radioOn: { borderColor: colors.primary },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
+  radioOn: { borderColor: INK },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: INK },
   secure: { textAlign: "center", marginTop: spacing.lg },
-  footer: { gap: spacing.sm },
+  footer: { gap: 8 },
+  error: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: RED },
   notice: {
-    backgroundColor: statusColors.infoBg,
-    color: statusColors.infoFg,
-    borderRadius: radii.md,
-    padding: spacing.sm,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: PEACH_INK,
+    backgroundColor: "#fff1ec",
+    borderRadius: 12,
+    padding: 10,
   },
 })

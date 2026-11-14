@@ -24,8 +24,12 @@ import { artistCategoryLabel, type ArtistCardData } from "@/lib/artists-api"
 import { hasOpeningHours, salonAudienceBadge, salonTopServicesLabel } from "@/lib/home-salon-info"
 import { fontFamily } from "@/theme/tokens"
 
-const CARD_WIDTH = 280
+// ~2.3 cards visible on a 390pt-wide screen.
+const CARD_WIDTH = 156
 const CARD_GAP = 12
+const PHOTO_RADIUS = 16
+const TEXT_BLOCK_HEIGHT = 48
+const ROW_HEIGHT = CARD_WIDTH + TEXT_BLOCK_HEIGHT
 const SNAP = CARD_WIDTH + CARD_GAP
 const MAX_DOTS = 5
 
@@ -115,7 +119,7 @@ function EmptyCard({ kind, failed }: { kind: DiscoveryKind; failed: boolean }) {
   return (
     <View style={styles.emptyPad}>
       <View style={styles.empty} accessible accessibilityLabel={`${empty.title}. ${subtitle}`}>
-        <GradientFill colors={empty.colors} angle={150} radius={20} />
+        <GradientFill colors={empty.colors} angle={150} radius={PHOTO_RADIUS} />
         <View style={styles.emptyIcon}>
           <Icon name={icon} size={22} color="#111111" />
         </View>
@@ -135,12 +139,12 @@ function SkeletonRow() {
       contentContainerStyle={styles.row}
       accessibilityLabel="Loading artists"
     >
-      {[0, 1].map((i) => (
+      {[0, 1, 2].map((i) => (
         <View key={i} style={styles.card}>
           <View style={[styles.imageWrap, styles.skeleton]} />
           <View style={styles.textBlock}>
-            <View style={[styles.skeletonLine, { width: 180, marginTop: 4 }]} />
-            <View style={[styles.skeletonLine, { width: 120, marginTop: 10 }]} />
+            <View style={[styles.skeletonLine, { width: 116, marginTop: 4 }]} />
+            <View style={[styles.skeletonLine, { width: 84, marginTop: 9 }]} />
           </View>
         </View>
       ))}
@@ -266,7 +270,9 @@ function TopCard({ model }: { model: CardModel }) {
         <PhotoOrFallback uri={model.image} name={model.name} />
         {model.badge ? (
           <View style={[styles.pill, styles.badge]}>
-            <Text style={styles.badgeText}>{model.badge}</Text>
+            <Text style={styles.badgeText} numberOfLines={1}>
+              {model.badge}
+            </Text>
           </View>
         ) : null}
         <Pressable
@@ -278,7 +284,7 @@ function TopCard({ model }: { model: CardModel }) {
         >
           <Icon
             name={model.saved ? "heart" : "heart-outline"}
-            size={18}
+            size={16}
             color={model.saved ? "#e5484d" : "#111111"}
           />
         </Pressable>
@@ -297,7 +303,7 @@ function TopCard({ model }: { model: CardModel }) {
           </Text>
           {model.rating != null ? (
             <View style={styles.rating}>
-              <Icon name="star" size={11} color="#17633e" />
+              <Icon name="star" size={10} color="#17633e" />
               <Text style={styles.ratingText}>{model.rating.toFixed(1)}</Text>
             </View>
           ) : (
@@ -368,44 +374,47 @@ const styles = StyleSheet.create({
   imageWrap: {
     width: CARD_WIDTH,
     aspectRatio: 1,
-    borderRadius: 20,
+    borderRadius: PHOTO_RADIUS,
     overflow: "hidden",
     backgroundColor: "#f2f2f2",
   },
   pill: {
     position: "absolute",
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    height: 22,
+    paddingHorizontal: 8,
     borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   badge: {
-    top: 10,
-    left: 10,
+    top: 8,
+    left: 8,
+    // Leave room for the heart on the right.
+    maxWidth: CARD_WIDTH - 8 - 8 - 30 - 6,
     backgroundColor: "#ffffff",
   },
   badgeText: {
+    flexShrink: 1,
     fontFamily: fontFamily.semibold,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     color: "#111111",
   },
   heart: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
   open: {
-    left: 10,
-    bottom: 10,
+    left: 8,
+    bottom: 8,
     backgroundColor: "rgba(17,17,17,0.82)",
   },
   openDot: {
@@ -416,41 +425,41 @@ const styles = StyleSheet.create({
   },
   openText: {
     fontFamily: fontFamily.semibold,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     color: "#ffffff",
   },
   textBlock: {
-    height: 56,
-    paddingTop: 10,
+    height: TEXT_BLOCK_HEIGHT,
+    paddingTop: 8,
     paddingHorizontal: 2,
   },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   name: {
     flex: 1,
     minWidth: 0,
     fontFamily: fontFamily.semibold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+    lineHeight: 19,
     color: "#111111",
   },
   rating: {
-    height: 22,
+    height: 20,
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
+    gap: 2,
     backgroundColor: "#e6f5ec",
     borderRadius: 999,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
   },
   ratingText: {
     fontFamily: fontFamily.semibold,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 11,
+    lineHeight: 14,
     color: "#17633e",
   },
   ratingNew: {
@@ -460,18 +469,19 @@ const styles = StyleSheet.create({
     color: "#595959",
   },
   meta: {
-    marginTop: 4,
+    marginTop: 3,
     fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 12,
+    lineHeight: 16,
     color: "#595959",
   },
   emptyPad: {
     paddingHorizontal: 20,
   },
+  // Same height as a row of cards so the section doesn't jump between chips.
   empty: {
-    height: 160,
-    borderRadius: 20,
+    height: ROW_HEIGHT,
+    borderRadius: PHOTO_RADIUS,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

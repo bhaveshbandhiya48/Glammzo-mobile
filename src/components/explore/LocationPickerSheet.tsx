@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Easing,
   Keyboard,
   Modal,
   PanResponder,
@@ -93,11 +94,12 @@ export function LocationPickerSheet({
     if (!visible) {
       setSearchFocused(false)
       setKeyboardHeight(0)
-      closingRef.current = false
       scrollOffsetRef.current = 0
-      dragY.setValue(0)
       return
     }
+    // Reopened (possibly while the previous close was still sliding out): start clean.
+    closingRef.current = false
+    dragY.setValue(0)
 
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
     const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide"
@@ -115,15 +117,29 @@ export function LocationPickerSheet({
     }
   }, [dragY, visible])
 
-  function handleClose() {
-    if (closingRef.current) return
-    closingRef.current = true
+  // Reset the drag offset only after the modal is fully gone, so a swiped-away sheet
+  // never jumps back to its open position on the way out.
+  useEffect(() => {
+    if (sheetAnim.mounted) return
+    dragY.setValue(0)
+    closingRef.current = false
+  }, [dragY, sheetAnim.mounted])
+
+  function finishClose() {
     Keyboard.dismiss()
     setSearchFocused(false)
     onClose()
   }
 
+  /** Close (X), backdrop tap and back button: the hook's slide-down + fade. */
+  function handleClose() {
+    if (closingRef.current) return
+    closingRef.current = true
+    finishClose()
+  }
+
   function snapBack() {
+    if (closingRef.current) return
     Animated.spring(dragY, {
       toValue: 0,
       bounciness: 0,
@@ -131,16 +147,35 @@ export function LocationPickerSheet({
     }).start()
   }
 
-  function dismissWithDrag(currentY: number) {
-    Animated.timing(dragY, {
-      toValue: Math.max(currentY, WINDOW_HEIGHT * 0.35),
-      duration: 160,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (finished) {
-        dragY.setValue(0)
-        handleClose()
-      }
+  /**
+   * One continuous motion: carry the sheet from where the finger let go all the way off
+   * screen while the backdrop fades, then close. The hook is told to skip its own exit
+   * slide, and dragY is only reset once the modal has unmounted — resetting it earlier
+   * snapped the sheet back open for a frame and made it look like it reopened.
+   */
+  function dismissWithDrag(currentY: number, velocityY: number) {
+    if (closingRef.current) return
+    // Lock out further drags, snap-backs and taps while it slides away.
+    closingRef.current = true
+    dragY.stopAnimation()
+    const remaining = Math.max(0, WINDOW_HEIGHT - currentY)
+    const speed = Math.max(velocityY, 1.2) // px per ms
+    const duration = Math.min(260, Math.max(140, remaining / speed))
+    Animated.parallel([
+      Animated.timing(dragY, {
+        toValue: WINDOW_HEIGHT,
+        duration,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+      Animated.timing(sheetAnim.backdropOpacity, {
+        toValue: 0,
+        duration,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      sheetAnim.markDragDismissed()
+      finishClose()
     })
   }
 
@@ -149,9 +184,10 @@ export function LocationPickerSheet({
   const handlePanResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !keyboardOpen,
+        onStartShouldSetPanResponder: () => !keyboardOpen && !closingRef.current,
         onMoveShouldSetPanResponder: (_event, gesture) =>
           !keyboardOpen &&
+          !closingRef.current &&
           gesture.dy > 4 &&
           Math.abs(gesture.dy) > Math.abs(gesture.dx),
         onPanResponderTerminationRequest: () => false,
@@ -160,7 +196,7 @@ export function LocationPickerSheet({
         },
         onPanResponderRelease: (_event, gesture) => {
           if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
-            dismissWithDrag(gesture.dy)
+            dismissWithDrag(gesture.dy, gesture.vy)
             return
           }
           snapBack()
@@ -194,7 +230,7 @@ export function LocationPickerSheet({
         },
         onPanResponderRelease: (_event, gesture) => {
           if (gesture.dy > DISMISS_DISTANCE || gesture.vy > DISMISS_VELOCITY) {
-            dismissWithDrag(gesture.dy)
+            dismissWithDrag(gesture.dy, gesture.vy)
             return
           }
           snapBack()

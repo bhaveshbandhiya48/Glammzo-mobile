@@ -62,8 +62,8 @@ const config = {
       monochromeImage: "./assets/android-icon-monochrome.png",
     },
     package: "com.glammzo.mobile",
-    // https://(www.)glammzo.com/a/<artist> and /salons/<id> open this app when it is installed.
-    // pathPrefix includes the slash so /about and /api stay in the browser.
+    // https://(www.)glammzo.com/a/<artist>, /salons/<id> and /book/<salonId> open this app when it is installed.
+    // pathPrefix includes the slash so /about, /api and /book-demo stay in the browser.
     intentFilters: [
       {
         action: "VIEW",
@@ -82,6 +82,11 @@ const config = {
           },
           {
             scheme: "https",
+            host: "glammzo.com",
+            pathPrefix: "/book/",
+          },
+          {
+            scheme: "https",
             host: "www.glammzo.com",
             pathPrefix: "/a/",
           },
@@ -89,6 +94,11 @@ const config = {
             scheme: "https",
             host: "www.glammzo.com",
             pathPrefix: "/salons/",
+          },
+          {
+            scheme: "https",
+            host: "www.glammzo.com",
+            pathPrefix: "/book/",
           },
         ],
       },

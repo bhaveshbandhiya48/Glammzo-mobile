@@ -4,6 +4,9 @@
  *   https://glammzo.com/a/<slug>/book?services=…     → /artist/book/<slug>?serviceIds=…
  *   https://glammzo.com/a/<slug>?book=1&services=…   → /artist/book/<slug>?serviceIds=…
  *   https://glammzo.com/salons/<id>                  → /salon/<id>
+ *   https://glammzo.com/book/<salonId>?services=…    → /book/<salonId>?serviceIds=…
+ *     (also `serviceId`; `package` → `packageId`; promo, qty, opts kept; `error` dropped)
+ *   https://glammzo.com/book/confirmation?id=…       → /book/confirmation?bookingId=…
  * www.glammzo.com works the same way.
  */
 export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
@@ -25,6 +28,7 @@ export function websiteLinkPath(incoming: string): string | null {
   const segment = encodeURIComponent(decodeURIComponent(parts[1]))
 
   if (parts[0] === "salons") return `/salon/${segment}${url.search}`
+  if (parts[0] === "book") return salonBookingPath(parts[1], url.searchParams)
   if (parts[0] !== "a") return null
 
   // The website's booking param is `services`; the app's booking screen reads `serviceIds`.
@@ -40,4 +44,24 @@ export function websiteLinkPath(incoming: string): string | null {
     return `/artist/book/${segment}${query ? `?${query}` : ""}`
   }
   return `/artist/${segment}${url.search}`
+}
+
+/** Website `/book/<salonId>` (and its confirmation page) → the app's salon booking screens. */
+function salonBookingPath(rawSegment: string, search: URLSearchParams): string {
+  const salonId = decodeURIComponent(rawSegment)
+  if (salonId === "confirmation") {
+    const id = search.get("id")?.trim()
+    return id ? `/book/confirmation?bookingId=${encodeURIComponent(id)}` : "/bookings"
+  }
+  const params = new URLSearchParams(search)
+  const services = (params.get("services") || params.get("serviceId") || "").trim()
+  params.delete("services")
+  params.delete("serviceId")
+  params.delete("error")
+  if (services) params.set("serviceIds", services)
+  const packageId = params.get("package")?.trim()
+  params.delete("package")
+  if (packageId) params.set("packageId", packageId)
+  const query = params.toString()
+  return `/book/${encodeURIComponent(salonId)}${query ? `?${query}` : ""}`
 }

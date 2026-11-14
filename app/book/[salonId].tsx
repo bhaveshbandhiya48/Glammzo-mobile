@@ -72,6 +72,7 @@ import {
 import { getSalonByIdLive } from "@/lib/salons-api"
 import {
   cartServicesSubtotal,
+  defaultPriceOptionId,
   formatRupees,
   serviceCartCaption,
   serviceLineAmount,
@@ -99,13 +100,64 @@ function formatDayChip(dateKey: string) {
   })
 }
 
+function firstParam(value: string | string[] | undefined) {
+  const first = Array.isArray(value) ? value[0] : value
+  return first?.trim() ? first.trim() : undefined
+}
+
+/** `a,b,c` → ids. */
+function parseIdList(raw: string | undefined) {
+  return (raw ?? "").split(",").map((id) => id.trim()).filter(Boolean)
+}
+
+/** `id:3,id2:x` (website `qty` / `opts` format) → { id: "3", id2: "x" }. */
+function parseIdValuePairs(raw: string | undefined) {
+  const next: Record<string, string> = {}
+  for (const part of parseIdList(raw)) {
+    const colon = part.lastIndexOf(":")
+    if (colon <= 0) continue
+    const id = part.slice(0, colon).trim()
+    const value = part.slice(colon + 1).trim()
+    if (id && value) next[id] = value
+  }
+  return next
+}
+
+/** This screen's path with its link params, so login comes back to the same booking. */
+function bookingLinkPath(salonId: string, params: Record<string, string | string[] | undefined>) {
+  const query = new URLSearchParams()
+  for (const key of ["staffId", "serviceIds", "packageId", "promo", "qty", "opts"]) {
+    const value = firstParam(params[key])
+    if (value) query.set(key, value)
+  }
+  const qs = query.toString()
+  return `/book/${encodeURIComponent(salonId)}${qs ? `?${qs}` : ""}`
+}
+
 const NO_STAFF_MESSAGE =
   "This category has no staff assigned, so date and time can’t be selected. Choose another service or contact the salon."
 
 export default function BookingScreen() {
   const router = useRouter()
   // `staffId` comes from Book again: keep the same stylist when they still do these services.
-  const { salonId, staffId: staffParam } = useLocalSearchParams<{ salonId: string; staffId?: string }>()
+  // `serviceIds`, `packageId`, `promo`, `qty` and `opts` come from website booking links
+  // (glammzo.com/book/<salonId>?services=…), mapped in app/+native-intent.ts.
+  const params = useLocalSearchParams<{
+    salonId: string
+    staffId?: string
+    serviceIds?: string
+    packageId?: string
+    promo?: string
+    qty?: string
+    opts?: string
+  }>()
+  const { salonId } = params
+  const staffParam = firstParam(params.staffId)
+  const linkServiceIds = firstParam(params.serviceIds)
+  const linkPackageId = firstParam(params.packageId)
+  const linkPromo = firstParam(params.promo)
+  const linkQty = firstParam(params.qty)
+  const linkOpts = firstParam(params.opts)
   const [salon, setSalon] = useState<Salon | undefined>()
   const [salonLoading, setSalonLoading] = useState(true)
   const cart = useCart()
@@ -168,7 +220,7 @@ export default function BookingScreen() {
       if (!token) {
         router.replace({
           pathname: "/login",
-          params: { next: `/book/${salonId}` },
+          params: { next: bookingLinkPath(salonId, params) },
         })
         return
       }
@@ -258,6 +310,43 @@ export default function BookingScreen() {
   }, [salonId])
 
   const salonCart = salon ? cart.getCart(salon.id) : undefined
+
+  // Website booking link: add the linked services to this salon's bag once. Bags are kept per
+  // salon, so another salon's bag is left alone; services already in this bag are kept as they
+  // are. Unknown ids are ignored; if nothing matches, the usual empty bag shows.
+  const linkSeedKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (!salon || !cart.hydrated) return
+    if (!linkServiceIds && !linkPackageId && !linkPromo) return
+    const key = [salon.id, linkServiceIds, linkPackageId, linkQty, linkOpts, linkPromo].join("|")
+    if (linkSeedKey.current === key) return
+    linkSeedKey.current = key
+
+    const existing = cart.getCart(salon.id)
+    const quantities = parseIdValuePairs(linkQty)
+    const options = parseIdValuePairs(linkOpts)
+    for (const id of parseIdList(linkServiceIds)) {
+      const service = salon.services.find((item) => item.id === id)
+      if (!service) continue
+      if (!existing?.serviceIds.includes(id)) {
+        const linkedOption = options[id]
+        const optionValid = service.priceOptions?.some((option) => option.id === linkedOption)
+        cart.toggleService(salon.id, id, {
+          priceOptionId: optionValid ? linkedOption : defaultPriceOptionId(service),
+        })
+      }
+      const quantity = Number(quantities[id])
+      if (Number.isFinite(quantity) && quantity > 1) {
+        cart.setServiceQuantity(salon.id, id, Math.floor(quantity), service.pricingUnit)
+      }
+    }
+    if (linkPackageId && salon.packages.some((item) => item.id === linkPackageId)) {
+      cart.setPackage(salon.id, linkPackageId)
+    }
+    if (linkPromo?.trim()) {
+      setPromoInput((current) => current || linkPromo.trim())
+    }
+  }, [salon, cart, linkServiceIds, linkPackageId, linkQty, linkOpts, linkPromo])
 
   const selectedServices = useMemo(() => {
     if (!salon || !salonCart) return []

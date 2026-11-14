@@ -1,15 +1,29 @@
-import { useLocalSearchParams, useRouter } from "expo-router"
+import { Stack, useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useState } from "react"
-import { StyleSheet, View } from "react-native"
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native"
 
-import { BookingDateSheet } from "@/components/book/BookingDateSheet"
-import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
-import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
-import { Button } from "@/components/ui/Button"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
-import { BookingsListSkeleton } from "@/components/ui/Skeleton"
-import { SuccessScreen } from "@/components/ui/SuccessScreen"
+import {
+  BOOKING_BAR_SPACE,
+  BookingBar,
+  BookingCard,
+  BookingHeader,
+  BookingSectionLabel,
+  BookingSkeleton,
+  DayStrip,
+  FlowSuccess,
+  Hairline,
+  Notice,
+  PlaceRow,
+  SuccessLine,
+  TimeGrid,
+  bk,
+  bookingStyles,
+  displayTime,
+} from "@/components/book/BookingUi"
+import { SEE_ALL_EMPTY_COLORS, SeeAllEmpty } from "@/components/list/SeeAllParts"
+import { Field } from "@/components/profile/ProfileScreenParts"
+import { pastels } from "@/components/salon-page/theme"
+import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Booking } from "@/data/types"
 import { ApiError } from "@/lib/api"
@@ -18,13 +32,13 @@ import {
   type AvailabilityDay,
   type AvailabilitySlot,
 } from "@/lib/availability-api"
-import { formatBookingWhen, isArtistBooking } from "@/lib/booking-display"
+import { formatBookingWhen, isArtistBooking, serviceSummary } from "@/lib/booking-display"
 import { fetchBookingById, rescheduleBooking } from "@/lib/bookings-api"
 import {
   canRescheduleWithNotice,
   getRescheduleBlockedReason,
 } from "@/lib/reschedule-policy"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 function formatDayChip(dateKey: string) {
   const date = new Date(`${dateKey}T12:00:00`)
@@ -48,8 +62,6 @@ export default function RescheduleScreen() {
   const [slotValue, setSlotValue] = useState<string | null>(null)
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotsMessage, setSlotsMessage] = useState<string | null>(null)
-  const [dateSheetOpen, setDateSheetOpen] = useState(false)
-  const [timeSheetOpen, setTimeSheetOpen] = useState(false)
   const [note, setNote] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
@@ -123,208 +135,214 @@ export default function RescheduleScreen() {
     }
   }, [booking, serviceIds, dateOverride])
 
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/bookings")
+  }
+
   if (loading) {
     return (
-      <Screen scroll>
-        <BookingsListSkeleton count={1} />
-      </Screen>
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingSkeleton />
+      </>
     )
   }
 
   if (!booking) {
     return (
-      <Screen>
-        <Text variant="heading">Booking not found</Text>
-        <Button
-          label="Back to bookings"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/bookings")}
+      <View style={bookingStyles.page}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingHeader title="Reschedule" onBack={goBack} />
+        <SeeAllEmpty
+          icon="calendar-clear-outline"
+          colors={SEE_ALL_EMPTY_COLORS.error}
+          title="Booking not found"
+          body="It may have been cancelled or removed."
+          actionLabel="Back to bookings"
+          onAction={() => router.replace("/(tabs)/bookings")}
         />
-      </Screen>
+      </View>
     )
   }
 
   if (!canRescheduleWithNotice(booking.startsAt).allowed) {
     return (
-      <Screen>
-        <Text variant="title">Reschedule unavailable</Text>
-        <Text muted style={styles.gap}>
-          {getRescheduleBlockedReason(booking.startsAt)}
-        </Text>
-        <Button
-          label="Back to bookings"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/bookings")}
+      <View style={bookingStyles.page}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingHeader title="Reschedule" subtitle={booking.salonName} onBack={goBack} />
+        <SeeAllEmpty
+          icon="time-outline"
+          colors={SEE_ALL_EMPTY_COLORS.salons}
+          title="Reschedule unavailable"
+          body={getRescheduleBlockedReason(booking.startsAt) ?? "This booking can't be moved now."}
+          actionLabel="Back to bookings"
+          onAction={() => router.replace("/(tabs)/bookings")}
         />
-      </Screen>
+      </View>
     )
   }
 
   if (done) {
     return (
-      <SuccessScreen
-        title="Reschedule requested"
-        message={`The ${isArtistBooking(booking) ? "artist" : "salon"} will confirm the new time.`}
-        primary={{ label: "View bookings", onPress: () => router.replace("/(tabs)/bookings") }}
-      >
-        <Text variant="bodyStrong" numberOfLines={1}>
-          {booking.salonName}
-        </Text>
-        <View style={styles.doneRow}>
-          <Text variant="caption" muted>
-            Was
+      <>
+        <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
+        <FlowSuccess
+          icon="calendar-outline"
+          pastel={pastels.mint}
+          title="Reschedule requested"
+          message={`The ${isArtistBooking(booking) ? "artist" : "salon"} will confirm the new time.`}
+          primary={{ label: "View bookings", onPress: () => router.replace("/(tabs)/bookings") }}
+        >
+          <Text style={styles.doneName} numberOfLines={1}>
+            {booking.salonName}
           </Text>
-          <Text variant="caption" muted style={styles.doneOld}>
-            {formatBookingWhen(booking)}
-          </Text>
-        </View>
-        <View style={styles.doneRow}>
-          <Text variant="caption" muted>
-            Requested
-          </Text>
-          <Text variant="caption" style={styles.doneNew}>
-            {selectedDate ? formatDayChip(selectedDate) : "—"} · {selectedSlotLabel}
-          </Text>
-        </View>
-      </SuccessScreen>
+          <SuccessLine label="Was" value={formatBookingWhen(booking)} struck />
+          <SuccessLine
+            label="Requested"
+            value={`${selectedDate ? formatDayChip(selectedDate) : "—"} · ${displayTime(selectedSlotLabel)}`}
+          />
+        </FlowSuccess>
+      </>
     )
   }
 
-  const dateOptions = days.map((day) => ({
+  const dayOptions = days.map((day) => ({
     date: day.date,
-    label: formatDayChip(day.date),
     disabled: day.availableCount === 0,
   }))
+  const who = isArtistBooking(booking) ? "artist" : "salon"
+  const services = serviceSummary(booking)
+
+  async function submit() {
+    if (!booking || !selectedDate || !slotValue) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      await rescheduleBooking(booking.id, {
+        date: selectedDate,
+        time: slotValue,
+      })
+      setDone(true)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Reschedule failed")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
-    <Screen scroll>
-      <Text variant="title">Reschedule</Text>
-      <Text muted style={styles.gap}>
-        {booking.salonName} · currently {booking.date} · {booking.time}
-      </Text>
+    <View style={bookingStyles.page}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView style={bookingStyles.page} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <BookingHeader title="Reschedule" subtitle={booking.salonName} onBack={goBack} />
+        <ScrollView
+          style={bookingStyles.page}
+          contentContainerStyle={[bookingStyles.body, { paddingBottom: BOOKING_BAR_SPACE }]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <BookingSectionLabel first>Your booking</BookingSectionLabel>
+          <BookingCard style={styles.summary}>
+            <PlaceRow name={booking.salonName} caption={booking.salonArea || null} meta={services || null} />
+            <Hairline />
+            <View style={styles.currentRow}>
+              <Icon name="calendar-outline" size={16} color={bk.secondary} />
+              <Text style={styles.currentLabel}>Currently</Text>
+              <Text style={styles.currentValue} numberOfLines={1}>
+                {formatBookingWhen(booking)}
+              </Text>
+            </View>
+          </BookingCard>
 
-      <View style={styles.fields}>
-        <BookingSelectTrigger
-          label="New date"
-          icon="calendar-outline"
-          value={selectedDate ? formatDayChip(selectedDate) : ""}
-          placeholder="Select date"
-          disabled={days.length === 0}
-          onPress={() => setDateSheetOpen(true)}
+          <BookingSectionLabel>Pick a new day</BookingSectionLabel>
+          {dayOptions.length > 0 ? (
+            <View style={styles.bleed}>
+              <DayStrip
+                options={dayOptions}
+                value={selectedDate}
+                onSelect={(date) => {
+                  setSlotValue(null)
+                  setDateOverride(date)
+                }}
+              />
+            </View>
+          ) : slotsLoading ? (
+            <View style={styles.dayGhostRow}>
+              {[0, 1, 2, 3, 4].map((index) => (
+                <View key={index} style={styles.dayGhost} />
+              ))}
+            </View>
+          ) : (
+            <Notice tone="grey" icon="calendar-clear-outline">
+              No open days right now. Try again later.
+            </Notice>
+          )}
+
+          <BookingSectionLabel>Pick a new time</BookingSectionLabel>
+          <TimeGrid
+            options={slots.map((slot) => ({ value: slot.value, label: slot.label }))}
+            value={slotValue}
+            onSelect={setSlotValue}
+            loading={slotsLoading}
+            emptyMessage={!selectedDate ? "Pick a day first." : slotsMessage || "No time slots for this day."}
+          />
+
+          <BookingSectionLabel>{`Note for ${who} (optional)`}</BookingSectionLabel>
+          <Field
+            value={note}
+            onChangeText={setNote}
+            placeholder="Reason for change"
+            accessibilityLabel={`Note for ${who}`}
+            multiline
+          />
+
+          <View style={styles.notice}>
+            <Notice icon="information-circle-outline">
+              {`Your current time stays booked until the ${who} confirms the new one.`}
+            </Notice>
+          </View>
+        </ScrollView>
+
+        <BookingBar
+          title={
+            selectedDate && slotValue
+              ? `${formatDayChip(selectedDate)} · ${displayTime(selectedSlotLabel)}`
+              : "Pick a new time"
+          }
+          caption={`Was ${formatBookingWhen(booking)}`}
+          label="Confirm new time"
+          onPress={() => void submit()}
+          disabled={!selectedDate || !slotValue}
+          loading={submitting}
+          error={error}
         />
-        <BookingSelectTrigger
-          label="New time"
-          icon="time-outline"
-          value={
-            slotValue
-              ? slots.find((slot) => slot.value === slotValue)?.label ?? slotValue
-              : ""
-          }
-          placeholder={
-            !selectedDate
-              ? "Pick a date first"
-              : slotsLoading
-                ? "Loading available times…"
-                : slotsMessage
-                  ? slotsMessage
-                  : slots.length === 0
-                    ? "No times available"
-                    : "Select time"
-          }
-          disabled={
-            !selectedDate ||
-            slotsLoading ||
-            Boolean(slotsMessage) ||
-            slots.length === 0
-          }
-          onPress={() => setTimeSheetOpen(true)}
-        />
-      </View>
-
-      <View style={styles.section}>
-        <Input
-          label="Note for salon (optional)"
-          value={note}
-          onChangeText={setNote}
-          placeholder="Reason for change"
-        />
-      </View>
-
-      {error ? (
-        <Text variant="caption" color={colors.primary} style={styles.gap}>
-          {error}
-        </Text>
-      ) : null}
-
-      <Button
-        label="Request reschedule"
-        loading={submitting}
-        disabled={!selectedDate || !slotValue}
-        style={{ marginTop: spacing.xl }}
-        onPress={async () => {
-          if (!selectedDate || !slotValue) return
-          setSubmitting(true)
-          setError(null)
-          try {
-            await rescheduleBooking(booking.id, {
-              date: selectedDate,
-              time: slotValue,
-            })
-            setDone(true)
-          } catch (err) {
-            setError(err instanceof ApiError ? err.message : "Reschedule failed")
-          } finally {
-            setSubmitting(false)
-          }
-        }}
-      />
-
-      <BookingDateSheet
-        visible={dateSheetOpen}
-        options={dateOptions}
-        value={selectedDate}
-        onClose={() => setDateSheetOpen(false)}
-        onSelect={(date) => {
-          setSlotValue(null)
-          setDateOverride(date)
-        }}
-      />
-      <BookingTimeSheet
-        visible={timeSheetOpen}
-        options={slots.map((slot) => ({
-          value: slot.value,
-          label: slot.label,
-        }))}
-        value={slotValue}
-        emptyMessage={slotsMessage || "No time slots for this day."}
-        onClose={() => setTimeSheetOpen(false)}
-        onSelect={setSlotValue}
-        onClear={() => setSlotValue(null)}
-      />
-    </Screen>
+      </KeyboardAvoidingView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  doneRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.md,
+  doneName: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: bk.text,
   },
-  doneOld: {
-    textDecorationLine: "line-through",
+  summary: { gap: 14 },
+  currentRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  currentLabel: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: bk.secondary },
+  currentValue: {
+    flex: 1,
+    textAlign: "right",
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: bk.text,
   },
-  doneNew: {
-    fontFamily: "Geist_600SemiBold",
-  },
-  gap: {
-    marginTop: spacing.sm,
-  },
-  fields: {
-    marginTop: spacing.xxl,
-    gap: spacing.lg,
-  },
-  section: {
-    marginTop: spacing.xxl,
-  },
+  bleed: { marginHorizontal: -16 },
+  dayGhostRow: { flexDirection: "row", gap: 8 },
+  dayGhost: { width: 60, height: 72, borderRadius: 14, backgroundColor: "#f3f3f3" },
+  notice: { marginTop: 20 },
 })

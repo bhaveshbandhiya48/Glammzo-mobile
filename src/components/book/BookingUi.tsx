@@ -1008,3 +1008,137 @@ const styles = StyleSheet.create({
   skelSteps: { height: 4, borderRadius: 2, marginHorizontal: 16, marginTop: 22, marginBottom: 8, backgroundColor: bk.grey },
   skelCard: { marginHorizontal: 16, marginTop: 16, borderRadius: 16, backgroundColor: bk.grey },
 })
+
+/* ------------------------------------------------------------------ */
+/* Success state                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Full-page "done" state for the smaller flows (reschedule, review): peach wash,
+ * pastel icon, title, message, an optional summary card, and a black 52 pill.
+ */
+export function FlowSuccess({
+  icon = "checkmark",
+  pastel,
+  title,
+  message,
+  children,
+  primary,
+  secondary,
+}: {
+  icon?: IconName
+  pastel: Pastel
+  title: string
+  message: string
+  children?: ReactNode
+  primary: { label: string; onPress: () => void }
+  secondary?: { label: string; onPress: () => void }
+}) {
+  const insets = useSafeAreaInsets()
+  return (
+    <View style={styles.page}>
+      <ScrollView
+        contentContainerStyle={[successStyles.scroll, { paddingTop: insets.top + 48, paddingBottom: 24 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={successStyles.wash} pointerEvents="none">
+          <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />
+        </View>
+        <View style={successStyles.badge}>
+          <PastelIcon pastel={pastel} name={icon} size={72} />
+        </View>
+        <Text style={successStyles.title} accessibilityRole="header">
+          {title}
+        </Text>
+        <Text style={successStyles.message}>{message}</Text>
+        {children ? <View style={[styles.card, successStyles.card]}>{children}</View> : null}
+      </ScrollView>
+      <View style={[successStyles.actions, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={primary.onPress}
+          style={({ pressed }) => [successStyles.primary, pressed && ui.pressed]}
+        >
+          <Text style={successStyles.primaryText}>{primary.label}</Text>
+        </Pressable>
+        {secondary ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={secondary.onPress}
+            hitSlop={6}
+            style={({ pressed }) => [successStyles.secondary, pressed && ui.pressed]}
+          >
+            <Text style={successStyles.secondaryText}>{secondary.label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  )
+}
+
+/** Label / value line inside a FlowSuccess card. */
+export function SuccessLine({ label, value, struck }: { label: string; value: string; struck?: boolean }) {
+  return (
+    <View style={successStyles.line}>
+      <Text style={successStyles.lineLabel}>{label}</Text>
+      <Text
+        style={[successStyles.lineValue, struck && successStyles.lineStruck]}
+        numberOfLines={2}
+      >
+        {value}
+      </Text>
+    </View>
+  )
+}
+
+const successStyles = StyleSheet.create({
+  scroll: { paddingHorizontal: 20, alignItems: "center" },
+  wash: { position: "absolute", top: 0, left: 0, right: 0, height: 320 },
+  badge: { borderRadius: 24, overflow: "hidden", marginBottom: 20 },
+  title: {
+    fontFamily: fontFamily.bold,
+    fontSize: 24,
+    lineHeight: 30,
+    letterSpacing: -0.4,
+    color: bk.text,
+    textAlign: "center",
+  },
+  message: {
+    marginTop: 6,
+    fontFamily: fontFamily.regular,
+    fontSize: 15,
+    lineHeight: 21,
+    color: bk.secondary,
+    textAlign: "center",
+    maxWidth: 320,
+  },
+  card: { alignSelf: "stretch", marginTop: 28, gap: 12 },
+  line: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 16 },
+  lineLabel: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: bk.secondary },
+  lineValue: {
+    flex: 1,
+    textAlign: "right",
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: bk.text,
+  },
+  lineStruck: { fontFamily: fontFamily.regular, color: bk.muted, textDecorationLine: "line-through" },
+  actions: { paddingHorizontal: 20, paddingTop: 12, gap: 8, backgroundColor: "#ffffff" },
+  primary: {
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: bk.text,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryText: { fontFamily: fontFamily.semibold, fontSize: 16, lineHeight: 20, color: "#ffffff" },
+  secondary: { height: 44, alignItems: "center", justifyContent: "center" },
+  secondaryText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: bk.text,
+    textDecorationLine: "underline",
+  },
+})

@@ -1,6 +1,10 @@
-import type { ReactNode } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
+  Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -10,8 +14,10 @@ import {
 } from "react-native"
 
 import { GradientFill } from "@/components/home/GradientFill"
+import { ServiceTileIcon } from "@/components/home/ServiceTileIcon"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
+import { getServiceTile, type ServiceTile, type ServiceTileKey } from "@/lib/service-tiles"
 import { fontFamily } from "@/theme/tokens"
 
 /** Login-flow palette (matches the Home header style). */
@@ -92,29 +98,104 @@ export function AuthRoundButton({ icon, onPress, accessibilityLabel, disabled }:
   )
 }
 
-const HERO_CIRCLES: { icon: IconName; bg: string; fg: string; style: ViewStyle }[] = [
-  { icon: "cut-outline", bg: "#FCE3D6", fg: "#9A4A2A", style: { left: 0, top: 18 } },
-  { icon: "brush-outline", bg: "#E8E2FA", fg: "#5B3CC4", style: { left: 62, top: 0, zIndex: 2 } },
-  { icon: "sparkles-outline", bg: "#DDF1E4", fg: "#146C2E", style: { left: 124, top: 18 } },
+const HERO_TILE_KEYS: ServiceTileKey[] = ["haircut", "makeup", "nails", "spa"]
+const HERO_TILES = HERO_TILE_KEYS.map((key) => getServiceTile(key)).filter(
+  (tile): tile is ServiceTile => Boolean(tile),
+)
+const TILE = 68
+const TILE_STEP = 50
+const HERO_HEIGHT = 106
+const HERO_FAN: { rotate: string; top: number }[] = [
+  { rotate: "-10deg", top: 18 },
+  { rotate: "-3deg", top: 6 },
+  { rotate: "4deg", top: 10 },
+  { rotate: "11deg", top: 22 },
 ]
 
-/** Soft decorative visual: three overlapping pastel circles with service icons. */
+/**
+ * Playful fanned stack of the Home service tiles. Rises in once; folds away
+ * while the keyboard is open so the phone field and Continue stay visible.
+ */
 export function AuthHero() {
+  const entrance = useRef(HERO_TILES.map(() => new Animated.Value(0))).current
+  const fold = useRef(new Animated.Value(1)).current
+
+  useEffect(() => {
+    Animated.stagger(
+      80,
+      entrance.map((value) =>
+        Animated.timing(value, {
+          toValue: 1,
+          duration: 380,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ),
+    ).start()
+  }, [entrance])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide"
+    const animate = (toValue: number) =>
+      Animated.timing(fold, {
+        toValue,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start()
+    const show = Keyboard.addListener(showEvent, () => animate(0))
+    const hide = Keyboard.addListener(hideEvent, () => animate(1))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [fold])
+
   return (
-    <View
-      style={styles.hero}
+    <Animated.View
+      style={[
+        styles.heroFold,
+        {
+          height: fold.interpolate({ inputRange: [0, 1], outputRange: [0, HERO_HEIGHT] }),
+          marginBottom: fold.interpolate({ inputRange: [0, 1], outputRange: [4, 24] }),
+          opacity: fold,
+        },
+      ]}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {HERO_CIRCLES.map((circle) => (
-        <View
-          key={circle.icon}
-          style={[styles.heroCircle, { backgroundColor: circle.bg }, circle.style]}
-        >
-          <Icon name={circle.icon} size={30} color={circle.fg} />
-        </View>
-      ))}
-    </View>
+      <View style={[styles.hero, { width: TILE + TILE_STEP * (HERO_TILES.length - 1) }]}>
+        {HERO_TILES.map((tile, index) => {
+          const fan = HERO_FAN[index] ?? HERO_FAN[0]
+          const value = entrance[index]
+          return (
+            <Animated.View
+              key={tile.key}
+              style={[
+                styles.heroTile,
+                {
+                  left: index * TILE_STEP,
+                  top: fan.top,
+                  zIndex: index === 1 || index === 2 ? 2 : 1,
+                  backgroundColor: tile.gradient[1],
+                  opacity: value,
+                  transform: [
+                    {
+                      translateY: value.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }),
+                    },
+                    { rotate: fan.rotate },
+                  ],
+                },
+              ]}
+            >
+              <GradientFill colors={tile.gradient} angle={150} radius={20} />
+              <ServiceTileIcon tile={tile} size={34} />
+            </Animated.View>
+          )
+        })}
+      </View>
+    </Animated.View>
   )
 }
 
@@ -232,22 +313,29 @@ const styles = StyleSheet.create({
   roundPressed: {
     backgroundColor: "#F2F2F2",
   },
-  hero: {
-    width: 196,
-    height: 90,
-    alignSelf: "center",
-    marginTop: 12,
-    marginBottom: 28,
-  },
-  heroCircle: {
-    position: "absolute",
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  heroFold: {
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 3,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  hero: {
+    height: HERO_HEIGHT,
+  },
+  heroTile: {
+    position: "absolute",
+    width: TILE,
+    height: TILE,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
     borderColor: auth.white,
+    shadowColor: "#3b2a24",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   footer: {
     paddingHorizontal: 20,

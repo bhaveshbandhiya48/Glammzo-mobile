@@ -9,8 +9,10 @@ import {
 } from "react-native"
 
 import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
+import { CodeChip } from "@/components/ui/CodeChip"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistOffer, PublicArtistService } from "@/lib/artists-api"
+import { copyCode } from "@/lib/copy-code"
 import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
@@ -120,6 +122,10 @@ export function ArtistOffersStrip({
                 style={[styles.card, { width: cardWidth }]}
                 accessible
                 accessibilityLabel={`${offer.dealLabel} ${offer.title}. ${appliesLabel(offer, services)}${till ? `, ${till}` : ""}. ${how}`}
+                accessibilityActions={offer.code ? [{ name: "copy", label: `Copy code ${offer.code}` }] : undefined}
+                onAccessibilityAction={(event) => {
+                  if (event.nativeEvent.actionName === "copy" && offer.code) copyCode(offer.code)
+                }}
               >
                 <View style={styles.cardTop}>
                   <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={1} style={{ flex: 1 }}>
@@ -136,14 +142,7 @@ export function ArtistOffersStrip({
                   {till ? ` · ${till}` : ""}
                 </Text>
                 {offer.code ? (
-                  <View style={styles.codeChip}>
-                    <Text variant="caption" color={colors.accent}>
-                      Code
-                    </Text>
-                    <Text variant="caption" style={styles.codeText}>
-                      {offer.code}
-                    </Text>
-                  </View>
+                  <CodeChip code={offer.code} label="Code" tone="dark" style={styles.codeChip} />
                 ) : (
                   <Text variant="caption" color={colors.accent}>
                     Applied automatically
@@ -169,14 +168,7 @@ export function ArtistOffersStrip({
                 </Text>
               ) : null}
               {offer.promoCode ? (
-                <View style={styles.codeChip}>
-                  <Text variant="caption" color={colors.accent}>
-                    Code
-                  </Text>
-                  <Text variant="caption" style={styles.codeText}>
-                    {offer.promoCode}
-                  </Text>
-                </View>
+              <CodeChip code={offer.promoCode} label="Code" tone="dark" style={styles.codeChip} />
               ) : (
                 <Text variant="caption" color={colors.accent}>
                   Cashback after your visit
@@ -222,22 +214,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   codeChip: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
     marginTop: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: colors.accent,
-  },
-  codeText: {
-    fontFamily: "Geist_700Bold",
-    letterSpacing: 1,
-    color: colors.primaryFg,
   },
   cardTop: {
     flexDirection: "row",

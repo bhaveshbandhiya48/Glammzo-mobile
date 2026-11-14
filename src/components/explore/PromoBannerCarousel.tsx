@@ -4,8 +4,10 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
+  View,
 } from "react-native"
 
+import { CodeChip } from "@/components/ui/CodeChip"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 export type PromoBannerItem = {
@@ -51,26 +53,33 @@ export function PromoBannerCarousel({ items, onPressItem }: Props) {
       snapToAlignment="start"
       disableIntervalMomentum
     >
-      {banners.map((item) => (
-        <Pressable
-          key={item.id}
-          onPress={() => onPressItem?.(item)}
-          accessibilityRole="button"
-          accessibilityLabel={item.title || "Offer banner"}
-          style={({ pressed }) => [
-            styles.imageCard,
-            { width: cardWidth },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Image
-            source={{ uri: item.imageUrl! }}
-            style={{ width: cardWidth, height: imageHeight }}
-            contentFit="cover"
-            transition={200}
-          />
-        </Pressable>
-      ))}
+      {banners.map((item) => {
+        const code = item.promoCode?.trim()
+        return (
+          // Chip sits beside the banner (not inside it) so its tap copies
+          // without opening the offer, and screen readers can reach it.
+          <View key={item.id} style={{ width: cardWidth }}>
+            <Pressable
+              onPress={() => onPressItem?.(item)}
+              accessibilityRole="button"
+              accessibilityLabel={item.title || "Offer banner"}
+              style={({ pressed }) => [
+                styles.imageCard,
+                { width: cardWidth },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Image
+                source={{ uri: item.imageUrl! }}
+                style={{ width: cardWidth, height: imageHeight }}
+                contentFit="cover"
+                transition={200}
+              />
+            </Pressable>
+            {code ? <CodeChip code={code} tone="white" style={styles.codeChip} /> : null}
+          </View>
+        )
+      })}
     </ScrollView>
   )
 }
@@ -89,5 +98,11 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.92,
+  },
+  codeChip: {
+    position: "absolute",
+    left: spacing.sm,
+    bottom: spacing.sm,
+    maxWidth: "70%",
   },
 })

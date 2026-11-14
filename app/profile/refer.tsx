@@ -1,6 +1,6 @@
 import { Stack, useFocusEffect, useRouter } from "expo-router"
-import { useCallback, useState, type ReactNode } from "react"
-import { Pressable, ScrollView, Share, StyleSheet, View } from "react-native"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { AccessibilityInfo, Pressable, ScrollView, Share, StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { GradientFill } from "@/components/home/GradientFill"
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/Input"
 import { SkeletonBone } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
+import { copyCode } from "@/lib/copy-code"
 import { LEGAL } from "@/lib/legal"
 import { formatRupees } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
@@ -28,6 +29,20 @@ export default function ReferScreen() {
   const [referral, setReferral] = useState<ReferralSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [code, setCode] = useState("")
+  const [copied, setCopied] = useState(false)
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current)
+  }, [])
+
+  function copyReferralCode() {
+    if (!referral?.code || !copyCode(referral.code)) return
+    setCopied(true)
+    AccessibilityInfo.announceForAccessibility(`Code ${referral.code} copied`)
+    if (copiedTimer.current) clearTimeout(copiedTimer.current)
+    copiedTimer.current = setTimeout(() => setCopied(false), 1500)
+  }
   const [claiming, setClaiming] = useState(false)
   const [claimError, setClaimError] = useState<string | null>(null)
 
@@ -147,17 +162,26 @@ export default function ReferScreen() {
       <>
         <Text style={[ui.sectionLabel, styles.sectionLabel]}>Your code</Text>
         <View style={styles.card}>
-          <View
-            style={styles.codeChip}
-            accessible
-            accessibilityLabel={`Your code ${referral.code.split("").join(" ")}`}
-            accessibilityHint="Press and hold to copy"
-          >
-            <Text style={styles.codeText} selectable numberOfLines={1}>
+          <View style={styles.codeChip}>
+            <Text
+              style={styles.codeText}
+              selectable
+              numberOfLines={1}
+              accessibilityLabel={`Your code ${referral.code.split("").join(" ")}`}
+            >
               {referral.code}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Copy code ${referral.code}`}
+              onPress={copyReferralCode}
+              hitSlop={8}
+              style={({ pressed }) => [styles.copyPill, pressed && ui.pressed]}
+            >
+              <Icon name={copied ? "checkmark" : "copy-outline"} size={16} color={sp.text} />
+              <Text style={styles.copyPillText}>{copied ? "Copied" : "Copy"}</Text>
+            </Pressable>
           </View>
-          <Text style={styles.codeHint}>Press and hold the code to copy it.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Share invite"
@@ -390,17 +414,24 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     borderColor: "#6b4e00",
     backgroundColor: "#fffbea",
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
   },
-  codeText: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, letterSpacing: 2, color: sp.text },
-  codeHint: {
-    marginTop: -6,
-    textAlign: "center",
-    fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 16,
-    color: MUTED,
+  codeText: { flexShrink: 1, fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, letterSpacing: 2, color: sp.text },
+  copyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 34,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#6b4e00",
+    backgroundColor: "#ffffff",
   },
+  copyPillText: { fontFamily: fontFamily.semibold, fontSize: 13, lineHeight: 17, color: sp.text },
   sharePill: {
     height: 52,
     borderRadius: 999,

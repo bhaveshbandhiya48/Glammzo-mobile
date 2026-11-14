@@ -11,6 +11,7 @@ import {
 
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
+import { CodeChip } from "@/components/ui/CodeChip"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { SalonOffer } from "@/data/types"
@@ -164,9 +165,7 @@ export function SalonOffersCarousel({
                       : item.offer.subtitle || "Glammzo offer"}
                   </Text>
                   {item.offer.promoCode ? (
-                    <Text variant="caption" color={colors.text} style={styles.code}>
-                      Code: {item.offer.promoCode}
-                    </Text>
+                    <CodeChip code={item.offer.promoCode} label="Code" style={styles.cardChip} />
                   ) : null}
                 </View>
               </>
@@ -192,9 +191,7 @@ export function SalonOffersCarousel({
                     {servicesLine(item.offer)}
                   </Text>
                   {item.offer.code ? (
-                    <Text variant="caption" color={colors.text} numberOfLines={1}>
-                      Code: {item.offer.code}
-                    </Text>
+                    <CodeChip code={item.offer.code} label="Code" style={styles.cardChip} />
                   ) : null}
                   {formatExpiry(item.offer.endsAt) ? (
                     <Text variant="caption" muted numberOfLines={1}>
@@ -254,7 +251,7 @@ export function SalonOffersCarousel({
                   <Text variant="caption" muted>
                     Promo code
                   </Text>
-                  <Text variant="bodyStrong">{activeOffer.offer.promoCode}</Text>
+                  <CodeChip code={activeOffer.offer.promoCode} />
                 </View>
               ) : null}
               {activeOffer.offer.description ? (
@@ -300,7 +297,7 @@ export function SalonOffersCarousel({
                   <Text variant="caption" muted>
                     Promo code
                   </Text>
-                  <Text variant="bodyStrong">{activeOffer.offer.code}</Text>
+                  <CodeChip code={activeOffer.offer.code} />
                 </View>
               ) : null}
               <View style={styles.sheetFacts}>
@@ -402,6 +399,9 @@ const styles = StyleSheet.create({
   },
   code: {
     letterSpacing: 0.8,
+  },
+  cardChip: {
+    marginTop: 4,
   },
   sheetBody: {
     gap: spacing.md,

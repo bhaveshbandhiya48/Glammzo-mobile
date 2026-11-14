@@ -1,8 +1,10 @@
 import { Pressable, StyleSheet, View } from "react-native"
 
+import { bk } from "@/components/book/BookingUi"
+import { ui } from "@/components/salon-page/theme"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Props = {
   label: string
@@ -13,7 +15,7 @@ type Props = {
   onPress: () => void
 }
 
-/** Select-style trigger matching Glammzo-web DatePicker / TimeSlotPicker. */
+/** Select-style field (52 tall, radius 14, #fafafa) that opens a picker sheet. */
 export function BookingSelectTrigger({
   label,
   value,
@@ -26,49 +28,43 @@ export function BookingSelectTrigger({
 
   return (
     <View style={styles.wrap}>
-      <Text variant="caption" muted>
-        {label}
-      </Text>
+      <Text style={styles.label}>{label}</Text>
       <Pressable
         onPress={onPress}
         disabled={disabled}
         accessibilityRole="button"
+        accessibilityLabel={`${label}: ${empty ? placeholder : value}`}
         accessibilityState={{ disabled }}
-        style={[styles.trigger, disabled && styles.triggerDisabled]}
+        style={({ pressed }) => [styles.trigger, disabled && styles.triggerDisabled, pressed && ui.pressed]}
       >
+        <Icon name={icon} size={18} color={empty || disabled ? bk.muted : bk.text} />
         <Text
-          variant="body"
           numberOfLines={1}
-          style={styles.value}
-          color={empty || disabled ? colors.textSubtle : colors.text}
+          style={[styles.value, (empty || disabled) && styles.placeholder]}
         >
           {empty ? placeholder : value}
         </Text>
-        <Icon name={icon} size={18} color={colors.textMuted} />
+        <Icon name="chevron-down" size={16} color={bk.muted} />
       </Pressable>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    gap: spacing.sm,
-  },
+  wrap: { gap: 6 },
+  label: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 17, color: bk.text },
   trigger: {
-    minHeight: 50,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
+    height: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: bk.border,
+    backgroundColor: bk.inputBg,
+    paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: 10,
   },
-  triggerDisabled: {
-    opacity: 0.45,
-  },
-  value: {
-    flex: 1,
-  },
+  triggerDisabled: { opacity: 0.5 },
+  value: { flex: 1, fontFamily: fontFamily.medium, fontSize: 15, lineHeight: 20, color: bk.text },
+  placeholder: { color: bk.muted, fontFamily: fontFamily.regular },
 })

@@ -1,8 +1,10 @@
 import { Pressable, StyleSheet, View } from "react-native"
 
+import { bk } from "@/components/book/BookingUi"
+import { ui } from "@/components/salon-page/theme"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Text } from "@/components/ui/Text"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 export type BookingDateOption = {
   date: string
@@ -18,59 +20,65 @@ type Props = {
   onSelect: (date: string) => void
 }
 
-export function BookingDateSheet({
-  visible,
-  options,
-  value,
-  onClose,
-  onSelect,
-}: Props) {
+function parts(dateKey: string) {
+  const date = new Date(`${dateKey}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return null
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  const diff = Math.round((date.getTime() - today.getTime()) / 86_400_000)
+  return {
+    top: diff === 0 ? "Today" : diff === 1 ? "Tmrw" : date.toLocaleDateString("en-IN", { weekday: "short" }),
+    day: String(date.getDate()),
+    month: date.toLocaleDateString("en-IN", { month: "short" }),
+  }
+}
+
+/** Grid of day tiles: weekday (or Today / Tmrw), date, month. */
+export function BookingDateSheet({ visible, options, value, onClose, onSelect }: Props) {
   return (
-    <BottomSheet visible={visible} title="Select date" onClose={onClose}>
-      <View style={styles.list}>
+    <BottomSheet visible={visible} title="Pick a day" onClose={onClose}>
+      <View style={styles.body}>
         {options.length === 0 ? (
-          <Text muted style={styles.empty}>
-            No dates available for this booking yet.
-          </Text>
+          <Text style={styles.empty}>No dates available for this booking yet.</Text>
         ) : (
-          options.map((option) => {
-            const active = option.date === value && !option.disabled
-            return (
-              <Pressable
-                accessibilityRole="button"
-                key={option.date}
-                disabled={option.disabled}
-                onPress={() => {
-                  if (option.disabled) return
-                  onSelect(option.date)
-                  onClose()
-                }}
-                style={[
-                  styles.row,
-                  active && styles.rowActive,
-                  option.disabled && styles.rowDisabled,
-                ]}
-              >
-                <Text
-                  variant="bodyStrong"
-                  color={
-                    option.disabled
-                      ? colors.textSubtle
-                      : active
-                        ? colors.primary
-                        : colors.text
-                  }
+          <View style={styles.grid} accessibilityRole="radiogroup">
+            {options.map((option) => {
+              const active = option.date === value && !option.disabled
+              const p = parts(option.date)
+              return (
+                <Pressable
+                  key={option.date}
+                  accessibilityRole="radio"
+                  accessibilityLabel={`${option.label}${option.disabled ? ", unavailable" : ""}`}
+                  accessibilityState={{ selected: active, disabled: !!option.disabled }}
+                  disabled={option.disabled}
+                  onPress={() => {
+                    if (option.disabled) return
+                    onSelect(option.date)
+                    onClose()
+                  }}
+                  style={({ pressed }) => [
+                    styles.day,
+                    active && styles.dayActive,
+                    option.disabled && styles.dayDisabled,
+                    pressed && !active && ui.pressed,
+                  ]}
                 >
-                  {option.label}
-                </Text>
-                {option.disabled ? (
-                  <Text variant="caption" muted>
-                    Unavailable
-                  </Text>
-                ) : null}
-              </Pressable>
-            )
-          })
+                  {p ? (
+                    <>
+                      <Text style={[styles.top, active && styles.onDark]}>{p.top}</Text>
+                      <Text style={[styles.num, active && styles.onDark, option.disabled && styles.strike]}>
+                        {p.day}
+                      </Text>
+                      <Text style={[styles.month, active && styles.onDark]}>{p.month}</Text>
+                    </>
+                  ) : (
+                    <Text style={[styles.top, active && styles.onDark]}>{option.label}</Text>
+                  )}
+                </Pressable>
+              )
+            })}
+          </View>
         )}
       </View>
     </BottomSheet>
@@ -78,32 +86,30 @@ export function BookingDateSheet({
 }
 
 const styles = StyleSheet.create({
-  list: {
-    gap: spacing.sm,
-    paddingBottom: spacing.lg,
-  },
+  body: { paddingBottom: 16 },
   empty: {
     textAlign: "center",
-    paddingVertical: spacing.xl,
+    paddingVertical: 28,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: bk.secondary,
   },
-  row: {
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    flexDirection: "row",
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  day: {
+    width: "23.5%",
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: bk.border,
+    backgroundColor: "#ffffff",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
   },
-  rowActive: {
-    borderColor: colors.primary,
-    backgroundColor: `${colors.primary}12`,
-  },
-  rowDisabled: {
-    opacity: 0.45,
-  },
+  dayActive: { backgroundColor: bk.text, borderColor: bk.text },
+  dayDisabled: { backgroundColor: "#f7f7f7", borderColor: "#efefef" },
+  top: { fontFamily: fontFamily.medium, fontSize: 11, lineHeight: 14, color: bk.secondary },
+  num: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, color: bk.text },
+  month: { fontFamily: fontFamily.regular, fontSize: 11, lineHeight: 14, color: bk.secondary },
+  onDark: { color: "#ffffff" },
+  strike: { color: "#b5b5b5", textDecorationLine: "line-through" },
 })

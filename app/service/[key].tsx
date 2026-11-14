@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react"
+import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { AudienceSwitch } from "@/components/home/AudienceSwitch"
-import { ArtistCard } from "@/components/ui/ArtistCard"
-import { Button } from "@/components/ui/Button"
-import { SalonCard } from "@/components/ui/SalonCard"
-import { Screen } from "@/components/ui/Screen"
-import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
+import { ArtistListRow, ArtistListRowSkeleton } from "@/components/home/ArtistListRow"
+import { GradientFill } from "@/components/home/GradientFill"
+import { SalonListRow } from "@/components/home/SalonListRow"
+import { ServiceTileIcon } from "@/components/home/ServiceTileIcon"
+import {
+  SEE_ALL_EMPTY_COLORS,
+  SeeAllChip,
+  SeeAllChipRow,
+  SeeAllEmpty,
+  SeeAllHeader,
+} from "@/components/list/SeeAllParts"
+import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
-import { artistCategoryLabel, fetchArtists, type ArtistCardData } from "@/lib/artists-api"
+import { fetchArtistCategories, fetchArtists, type ArtistCardData } from "@/lib/artists-api"
 import {
   browseModeFor,
   salonsInSelectedLocation,
@@ -24,7 +31,7 @@ import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { getServiceTile, type HomeAudience } from "@/lib/service-tiles"
 import { isGetQuotesEnabled } from "@/lib/get-quotes"
 import { DEFAULT_SAVED_LOCATION, getSavedLocation, type SavedLocation } from "@/lib/user"
-import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Tab = "salons" | "artists"
 
@@ -37,6 +44,7 @@ type ArtistsState =
 export default function ServiceScreen() {
   const router = useRouter()
   const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
   const params = useLocalSearchParams<{ key?: string; audience?: string }>()
   const tile = getServiceTile(typeof params.key === "string" ? params.key : null)
   const [audience, setAudience] = useState<HomeAudience>(
@@ -48,9 +56,23 @@ export default function ServiceScreen() {
   const [loading, setLoading] = useState(true)
   const [artistsState, setArtistsState] = useState<ArtistsState>({ status: "loading" })
 
-  useEffect(() => {
-    navigation.setOptions({ title: tile?.label ?? "Service" })
+  const [labels, setLabels] = useState<Record<string, string>>({})
+
+  // This screen draws its own peach header.
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false, title: tile?.label ?? "Service" })
   }, [navigation, tile?.label])
+
+  useEffect(() => {
+    let active = true
+    void fetchArtistCategories().then((catalog) => {
+      if (!active || !catalog) return
+      setLabels(Object.fromEntries(catalog.categories.map((c) => [c.id, c.label])))
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useFocusEffect(
     useCallback(() => {
@@ -116,156 +138,220 @@ export default function ServiceScreen() {
     return sortExploreSalons(salonsForTile(nearby, tile, audience), "nearest")
   }, [audience, catalog, location, tile])
 
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)")
+  }
+
   if (!tile) {
     return (
-      <Screen scroll>
-        <Text variant="title">Service not found</Text>
-        <Button label="Back to Home" style={{ marginTop: spacing.xl }} onPress={() => router.back()} />
-      </Screen>
+      <View style={styles.root}>
+        <SeeAllHeader title="Service" subtitle="Not found" onBack={goBack} />
+        <SeeAllEmpty
+          icon="help-circle-outline"
+          colors={SEE_ALL_EMPTY_COLORS.error}
+          title="Service not found"
+          body="This service isn't available any more."
+          actionLabel="Back to Home"
+          onAction={goBack}
+        />
+      </View>
     )
   }
 
   const emptyTitle = `No ${tile.label.toLowerCase()} near you yet`
   const artists = artistsState.status === "ready" ? artistsState.artists : []
+  const salonCount = loading ? null : salons.length
+  const artistCount = artistsState.status === "ready" ? artists.length : null
+  const subtitle =
+    tab === "salons"
+      ? salonCount == null
+        ? "Finding salons near you…"
+        : `${salonCount} ${salonCount === 1 ? "salon" : "salons"} near you`
+      : artistCount == null
+        ? artistsState.status === "unavailable"
+          ? "Solo artists"
+          : "Finding artists near you…"
+        : `${artistCount} ${artistCount === 1 ? "artist" : "artists"} near you`
 
   return (
-    <Screen scroll>
-      <View style={styles.toolbar}>
-        <View style={styles.tabs} accessibilityRole="tablist">
-          {(["salons", "artists"] as const).map((id) => {
-            const active = tab === id
-            const count = id === "salons" ? salons.length : artists.length
-            const showCount = id === "salons" ? !loading : artistsState.status === "ready"
-            return (
-              <Pressable
-                key={id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: active }}
-                onPress={() => setTab(id)}
-                style={[styles.tab, active && styles.tabActive]}
-              >
-                <Text style={[styles.tabText, active && styles.tabTextActive]}>
-                  {id === "salons" ? "Salons" : "Artists"}
-                  {showCount ? ` · ${count}` : ""}
-                </Text>
-              </Pressable>
-            )
-          })}
+    <View style={styles.root}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />
+        <View style={styles.headerRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            hitSlop={6}
+            onPress={goBack}
+            style={({ pressed }) => [styles.back, pressed && styles.pressed]}
+          >
+            <Icon name="chevron-back" size={20} color="#111111" />
+          </Pressable>
+          <View style={styles.tileIcon}>
+            <GradientFill colors={tile.gradient} angle={150} radius={14} />
+            <ServiceTileIcon tile={tile} size={26} />
+          </View>
+          <View style={styles.headerText}>
+            <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+              {tile.label}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          </View>
         </View>
-        {tab === "salons" ? <AudienceSwitch value={audience} onChange={setAudience} /> : null}
       </View>
 
-      {tab === "artists" && isGetQuotesEnabled() ? (
-        <Pressable
-          accessibilityRole="link"
-          hitSlop={6}
-          onPress={() =>
-            router.push({ pathname: "/requests/new", params: { category: tile.artistCategory } })
-          }
-          style={styles.quotesLink}
-        >
-          <Text style={styles.quotesLinkText}>Get quotes from artists →</Text>
-        </Pressable>
-      ) : null}
-
-      {tab === "salons" ? (
-        loading && salons.length === 0 ? (
-          <ExploreSalonsSkeleton count={3} />
-        ) : salons.length === 0 ? (
-          <EmptyState title={emptyTitle} body="Try the Artists tab, or change your location on Home." />
-        ) : (
-          <View style={styles.list}>
-            {salons.map((salon) => (
-              <SalonCard
-                key={salon.id}
-                salon={salon}
-                layout="list"
-                onPress={() => router.push({ pathname: "/salon/[id]", params: { id: salon.id } })}
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        stickyHeaderIndices={[0]}
+        showsVerticalScrollIndicator={false}
+      >
+        <SeeAllChipRow>
+          {(["salons", "artists"] as const).map((id) => {
+            const count = id === "salons" ? salonCount : artistCount
+            const label = id === "salons" ? "Salons" : "Artists"
+            return (
+              <SeeAllChip
+                key={id}
+                label={count != null ? `${label} · ${count}` : label}
+                on={tab === id}
+                onPress={() => setTab(id)}
+                a11y={`Show ${label.toLowerCase()}`}
               />
-            ))}
-          </View>
-        )
-      ) : artistsState.status === "loading" ? (
-        <ExploreSalonsSkeleton count={3} />
-      ) : artistsState.status === "unavailable" ? (
-        <EmptyState
-          title="Artists aren't available right now"
-          body="Solo artists will show here soon. Check the Salons tab in the meantime."
-        />
-      ) : artists.length === 0 ? (
-        <EmptyState title={emptyTitle} body="Check back soon, new artists join every week." />
-      ) : (
-        <View style={styles.list}>
-          {artists.map((artist) => (
-            <ArtistCard
-              key={artist.slug}
-              artist={artist}
-              categoryLabel={(id) => artistCategoryLabel(id)}
-              onPress={() => router.push({ pathname: "/artist/[slug]", params: { slug: artist.slug } })}
+            )
+          })}
+          {tab === "salons" ? <View style={styles.chipDivider} /> : null}
+          {tab === "salons"
+            ? (["women", "men"] as const).map((id) => (
+                <SeeAllChip
+                  key={id}
+                  icon={id === audience ? "people" : "people-outline"}
+                  label={id === "women" ? "Women" : "Men"}
+                  on={audience === id}
+                  onPress={() => setAudience(id)}
+                  a11y={`Show services for ${id === "women" ? "Women" : "Men"}`}
+                />
+              ))
+            : null}
+          {tab === "artists" && isGetQuotesEnabled() ? (
+            <SeeAllChip
+              icon="chatbubbles-outline"
+              label="Get quotes"
+              on={false}
+              onPress={() =>
+                router.push({ pathname: "/requests/new", params: { category: tile.artistCategory } })
+              }
+              a11y="Get quotes from artists"
+              trailing="chevron-forward"
             />
-          ))}
-        </View>
-      )}
-    </Screen>
-  )
-}
+          ) : null}
+        </SeeAllChipRow>
 
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <View style={styles.empty}>
-      <Text variant="bodyStrong">{title}</Text>
-      <Text muted>{body}</Text>
+        <View style={styles.body}>
+          {tab === "salons" ? (
+            loading && salons.length === 0 ? (
+              <Skeletons />
+            ) : salons.length === 0 ? (
+              <SeeAllEmpty
+                icon="business-outline"
+                colors={tile.gradient}
+                title={emptyTitle}
+                body="Try the Artists tab, or change your location on Home."
+                actionLabel="Show artists"
+                onAction={() => setTab("artists")}
+              />
+            ) : (
+              salons.map((salon) => (
+                <View key={salon.id} style={styles.pad}>
+                  <SalonListRow salon={salon} featured={salon.isFeatured === true} />
+                </View>
+              ))
+            )
+          ) : artistsState.status === "loading" ? (
+            <Skeletons />
+          ) : artistsState.status === "unavailable" ? (
+            <SeeAllEmpty
+              icon="cloud-offline-outline"
+              colors={SEE_ALL_EMPTY_COLORS.error}
+              title="Artists aren't available right now"
+              body="Solo artists will show here soon. Check the Salons tab in the meantime."
+              actionLabel="Show salons"
+              onAction={() => setTab("salons")}
+            />
+          ) : artists.length === 0 ? (
+            <SeeAllEmpty
+              icon="sparkles-outline"
+              colors={SEE_ALL_EMPTY_COLORS.artists}
+              title={emptyTitle}
+              body="Check back soon, new artists join every week."
+            />
+          ) : (
+            artists.map((artist) => (
+              <View key={artist.slug} style={styles.pad}>
+                <ArtistListRow artist={artist} labels={labels} />
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
     </View>
   )
 }
 
+function Skeletons() {
+  return (
+    <>
+      {[0, 1, 2].map((id) => (
+        <View key={id} style={styles.pad}>
+          <ArtistListRowSkeleton />
+        </View>
+      ))}
+    </>
+  )
+}
+
 const styles = StyleSheet.create({
-  toolbar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  tabs: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  tab: {
-    height: 36,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.muted,
+  root: { flex: 1, backgroundColor: "#ffffff" },
+  pressed: { opacity: 0.7 },
+  header: { paddingHorizontal: 16, paddingBottom: 14 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  back: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
-  tabActive: {
-    backgroundColor: colors.primary,
+  tileIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tabText: {
-    fontFamily: fontFamily.semibold,
+  headerText: { flex: 1, minWidth: 0 },
+  title: {
+    fontFamily: fontFamily.bold,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.4,
+    color: "#111111",
+  },
+  subtitle: {
+    marginTop: 1,
+    fontFamily: fontFamily.regular,
     fontSize: 13,
-    color: colors.text,
+    lineHeight: 18,
+    color: "#595959",
   },
-  tabTextActive: {
-    color: colors.primaryFg,
-  },
-  list: {
-    gap: spacing.lg,
-  },
-  quotesLink: {
-    alignSelf: "flex-start",
-    marginTop: -spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  quotesLinkText: {
-    fontFamily: fontFamily.semibold,
-    fontSize: 13,
-    color: colors.text,
-    textDecorationLine: "underline",
-  },
-  empty: {
-    gap: 6,
-    paddingVertical: spacing.xxl,
-  },
+  chipDivider: { width: 1, height: 20, backgroundColor: "#e3e3e3", marginHorizontal: 2 },
+  body: { paddingTop: 4 },
+  pad: { paddingHorizontal: 20 },
 })

@@ -2,7 +2,7 @@ import DateTimePicker, {
   type DateTimePickerEvent,
 } from "@react-native-community/datetimepicker"
 import { useMemo, useState } from "react"
-import { Platform, Pressable, StyleSheet, View } from "react-native"
+import { Platform, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"
 
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
@@ -16,6 +16,12 @@ type Props = {
   onChange: (value: string) => void
   error?: string | null
   placeholder?: string
+  /** Optional look overrides (defaults keep the original style). */
+  labelStyle?: StyleProp<TextStyle>
+  fieldStyle?: StyleProp<ViewStyle>
+  fieldErrorStyle?: StyleProp<ViewStyle>
+  valueStyle?: StyleProp<TextStyle>
+  errorTextStyle?: StyleProp<TextStyle>
 }
 
 function defaultDobDate() {
@@ -73,6 +79,11 @@ export function DateOfBirthField({
   onChange,
   error,
   placeholder = "Select date of birth",
+  labelStyle,
+  fieldStyle,
+  fieldErrorStyle,
+  valueStyle,
+  errorTextStyle,
 }: Props) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(() => parseDob(value) ?? defaultDobDate())
@@ -116,12 +127,12 @@ export function DateOfBirthField({
   return (
     <View style={styles.wrap}>
       {label ? (
-        <Text variant="label" muted>
+        <Text variant="label" muted style={labelStyle}>
           {label}
         </Text>
       ) : null}
 
-      <View style={[styles.field, showError && styles.fieldError]}>
+      <View style={[styles.field, fieldStyle, showError && styles.fieldError, showError && fieldErrorStyle]}>
         <Pressable
           onPress={openPicker}
           style={({ pressed }) => [styles.fieldHit, pressed && styles.pressed]}
@@ -131,7 +142,7 @@ export function DateOfBirthField({
           <Text
             variant="body"
             color={display ? colors.text : colors.textSubtle}
-            style={styles.fieldText}
+            style={[styles.fieldText, valueStyle]}
             numberOfLines={1}
           >
             {display || placeholder}
@@ -151,7 +162,7 @@ export function DateOfBirthField({
       </View>
 
       {showError ? (
-        <Text variant="caption" color={colors.destructive}>
+        <Text variant="caption" color={colors.destructive} style={errorTextStyle}>
           {error}
         </Text>
       ) : null}

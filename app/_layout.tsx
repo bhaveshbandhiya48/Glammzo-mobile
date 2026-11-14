@@ -129,7 +129,7 @@ function RootNavigator() {
         />
         <Stack.Screen
           name="profile/details"
-          options={profileStackOptions("Profile information")}
+          options={{ title: "Edit profile", headerShown: false }}
         />
         <Stack.Screen
           name="profile/favorites"

@@ -1,23 +1,34 @@
-import { useMemo, type ReactNode } from "react"
+import { useRouter } from "expo-router"
+import { useMemo, useState, type ReactNode } from "react"
 import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 
+import { ArtistListRow, ArtistListRowSkeleton, artistRating } from "@/components/home/ArtistListRow"
+import { GradientFill } from "@/components/home/GradientFill"
 import { SalonListRow } from "@/components/home/SalonListRow"
+import { useNearbyArtists } from "@/components/home/useTopArtists"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
+import type { ArtistCardData } from "@/lib/artists-api"
 import {
   countActiveExploreFilters,
   EXPLORE_SORT_FILTERS,
   sortExploreSalons,
   type ExploreFilterState,
 } from "@/lib/explore-filters"
-import { partitionSalonsByCurrentArea } from "@/lib/explore-location"
+import { NEARBY_RADIUS_KM, partitionSalonsByCurrentArea } from "@/lib/explore-location"
 import { pickFeaturedSectionSalons, pickNearbyAfterFeatured } from "@/lib/featured-nearby"
 import type { SavedLocation } from "@/lib/user"
 import { fontFamily, spacing } from "@/theme/tokens"
 
 const NEAR_LIMIT = 10
 const NEARBY_AREAS_LIMIT = 5
+const ARTIST_LIMIT = 10
+
+export type AllNearMode = "salons" | "artists"
+
+// Last Salons / Artists choice, kept for the app session (in memory only).
+let lastMode: AllNearMode = "salons"
 
 type FilterChipsProps = {
   filters: ExploreFilterState
@@ -120,18 +131,127 @@ function Chip({
   )
 }
 
+type ArtistChipState = {
+  sort: "nearest" | "rating"
+  home: boolean
+  studio: boolean
+  rated: boolean
+}
+
+const DEFAULT_ARTIST_CHIPS: ArtistChipState = {
+  sort: "nearest",
+  home: false,
+  studio: false,
+  rated: false,
+}
+
+function byDistance(a: ArtistCardData, b: ArtistCardData) {
+  return (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
+}
+
+function byRating(a: ArtistCardData, b: ArtistCardData) {
+  return (
+    (artistRating(b) ?? 0) - (artistRating(a) ?? 0) || (b.reviewCount ?? 0) - (a.reviewCount ?? 0) || byDistance(a, b)
+  )
+}
+
+/** On-device filters over Home's nearby artists. */
+function filterArtists(artists: ArtistCardData[], chips: ArtistChipState): ArtistCardData[] {
+  const list = artists.filter(
+    (artist) =>
+      (!chips.home || artist.offersHomeVisits) &&
+      (!chips.studio || artist.hasStudio) &&
+      (!chips.rated || (artistRating(artist) ?? 0) >= 4),
+  )
+  return list.sort(chips.sort === "rating" ? byRating : byDistance)
+}
+
+/** Full-width "Salons | Artists" segmented switch. */
+function ModeSwitch({ mode, onChange }: { mode: AllNearMode; onChange: (mode: AllNearMode) => void }) {
+  return (
+    <View style={styles.switchTrack} accessibilityRole="tablist">
+      {(["salons", "artists"] as const).map((id) => {
+        const on = mode === id
+        return (
+          <Pressable
+            key={id}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: on }}
+            onPress={() => onChange(id)}
+            style={[styles.switchSegment, on && styles.switchSegmentOn]}
+          >
+            <Text style={[styles.switchText, on && styles.switchTextOn]}>{id === "salons" ? "Salons" : "Artists"}</Text>
+          </Pressable>
+        )
+      })}
+    </View>
+  )
+}
+
+function ArtistChips({ chips, onChange }: { chips: ArtistChipState; onChange: (next: ArtistChipState) => void }) {
+  const sortLabel = chips.sort === "nearest" ? "Nearest" : "Top rated"
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      directionalLockEnabled
+      contentContainerStyle={styles.chips}
+    >
+      <Chip
+        icon="swap-vertical-outline"
+        label={`Sort: ${sortLabel}`}
+        on={chips.sort !== "nearest"}
+        onPress={() =>
+          onChange({
+            ...chips,
+            sort: chips.sort === "nearest" ? "rating" : "nearest",
+          })
+        }
+        a11y={`Sort: ${sortLabel}. Tap to switch`}
+      />
+      <Chip label="At home" on={chips.home} onPress={() => onChange({ ...chips, home: !chips.home })} />
+      <Chip label="Studio" on={chips.studio} onPress={() => onChange({ ...chips, studio: !chips.studio })} />
+      <Chip
+        label="4.0+"
+        on={chips.rated}
+        onPress={() => onChange({ ...chips, rated: !chips.rated })}
+        a11y="Rated 4.0 and up"
+      />
+    </ScrollView>
+  )
+}
+
+function ArtistsEmptyCard({ failed }: { failed: boolean }) {
+  const title = "No artists near you yet"
+  const subtitle = failed ? "Couldn't load artists. Pull down to try again." : "We're adding new artists every week."
+  return (
+    <View style={styles.empty} accessible accessibilityLabel={`${title}. ${subtitle}`}>
+      <GradientFill colors={["#f7f2ff", "#e6dcff"]} angle={150} radius={20} />
+      <View style={styles.emptyIcon}>
+        <Icon name="person-outline" size={22} color="#111111" />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptySubtitle}>{subtitle}</Text>
+    </View>
+  )
+}
+
 type Props = FilterChipsProps & {
   /** Location-scoped salons with the current filters applied (not yet sorted). */
   salons: Salon[]
   location: SavedLocation | null
   areaLabel: string | null
-  onOpenMap: () => void
+  /** Opens the map; in Artists mode it should start on artists only. */
+  onOpenMap: (mode: AllNearMode) => void
   onSeeAll: () => void
   /** Shown in place of the list when the filters leave nothing. */
   emptyState?: ReactNode
 }
 
-/** Home "All salons near you": header + Map, filter chips, Featured-first rows, then nearby areas. */
+/**
+ * Home "All near you": header + Map, a Salons / Artists switch, then either the salon chips with
+ * Featured-first rows and nearby areas, or artist chips over Home's nearby artists.
+ */
 export function AllSalonsSection({
   salons,
   location,
@@ -141,6 +261,20 @@ export function AllSalonsSection({
   emptyState,
   ...chipProps
 }: Props) {
+  const router = useRouter()
+  const [mode, setModeState] = useState<AllNearMode>(lastMode)
+  const [artistChips, setArtistChips] = useState<ArtistChipState>(DEFAULT_ARTIST_CHIPS)
+  const nearbyArtists = useNearbyArtists()
+  const shownArtists = useMemo(
+    () => filterArtists(nearbyArtists.artists ?? [], artistChips),
+    [artistChips, nearbyArtists.artists],
+  )
+
+  function setMode(next: AllNearMode) {
+    lastMode = next
+    setModeState(next)
+  }
+
   const sort = chipProps.filters.sort
   const { featured, near, nearbyAreas } = useMemo(() => {
     const featuredSalons = pickFeaturedSectionSalons(salons).salons
@@ -155,14 +289,19 @@ export function AllSalonsSection({
     ...near.map((salon) => ({ salon, featured: false })),
   ].slice(0, NEAR_LIMIT)
   const furtherRows = nearbyAreas.slice(0, NEARBY_AREAS_LIMIT)
-  const subtitle = areaLabel ? `${total} in ${areaLabel} and nearby` : `${total} nearby`
+  const salonSubtitle = areaLabel ? `${total} in ${areaLabel} and nearby` : `${total} nearby`
+  const artistSubtitle =
+    nearbyArtists.status === "ready"
+      ? `${shownArtists.length} ${shownArtists.length === 1 ? "artist" : "artists"} within ${NEARBY_RADIUS_KM} km`
+      : `Artists within ${NEARBY_RADIUS_KM} km`
+  const subtitle = mode === "salons" ? salonSubtitle : artistSubtitle
 
   return (
     <View style={styles.section}>
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text style={styles.title} accessibilityRole="header">
-            All salons near you
+            All near you
           </Text>
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
@@ -170,8 +309,8 @@ export function AllSalonsSection({
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Show salons on a map"
-          onPress={onOpenMap}
+          accessibilityLabel={mode === "salons" ? "Show salons on a map" : "Show artists on a map"}
+          onPress={() => onOpenMap(mode)}
           style={({ pressed }) => [styles.mapPill, pressed && styles.chipPressed]}
         >
           <Icon name="map-outline" size={16} color="#111111" />
@@ -179,37 +318,80 @@ export function AllSalonsSection({
         </Pressable>
       </View>
 
-      <SalonFilterChips {...chipProps} />
+      <View style={styles.switchPad}>
+        <ModeSwitch mode={mode} onChange={setMode} />
+      </View>
 
-      {total === 0 ? (
-        <View style={styles.pad}>{emptyState}</View>
-      ) : (
-        <View style={styles.pad}>
-          {nearRows.map(({ salon, featured: isFeatured }) => (
-            <SalonListRow key={salon.id} salon={salon} featured={isFeatured} />
-          ))}
-
-          {furtherRows.length > 0 ? (
-            <>
-              <View style={styles.divider} accessibilityRole="header">
-                <View style={styles.line} />
-                <Text style={styles.dividerText}>A LITTLE FURTHER · NEARBY AREAS</Text>
-                <View style={styles.line} />
+      {mode === "artists" ? (
+        <>
+          <ArtistChips chips={artistChips} onChange={setArtistChips} />
+          <View style={styles.pad}>
+            {nearbyArtists.status === "loading" ? (
+              <View accessibilityLabel="Loading artists">
+                {[0, 1, 2].map((i) => (
+                  <ArtistListRowSkeleton key={i} />
+                ))}
               </View>
-              {furtherRows.map((salon) => (
-                <SalonListRow key={salon.id} salon={salon} featured={salon.isFeatured === true} />
-              ))}
-            </>
-          ) : null}
+            ) : nearbyArtists.status === "error" || shownArtists.length === 0 ? (
+              <View style={styles.emptyPad}>
+                <ArtistsEmptyCard failed={nearbyArtists.status === "error"} />
+              </View>
+            ) : (
+              <>
+                {shownArtists.slice(0, ARTIST_LIMIT).map((artist) => (
+                  <ArtistListRow key={artist.slug} artist={artist} labels={nearbyArtists.labels} />
+                ))}
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    router.push({
+                      pathname: "/artists",
+                      params: artistChips.home ? { sort: "nearest", where: "home" } : { sort: "nearest" },
+                    })
+                  }
+                  style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
+                >
+                  <Text style={styles.seeAllText}>See all artists</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </>
+      ) : (
+        <>
+          <SalonFilterChips {...chipProps} />
 
-          <Pressable
-            accessibilityRole="button"
-            onPress={onSeeAll}
-            style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
-          >
-            <Text style={styles.seeAllText}>{`See all ${total} salons`}</Text>
-          </Pressable>
-        </View>
+          {total === 0 ? (
+            <View style={styles.pad}>{emptyState}</View>
+          ) : (
+            <View style={styles.pad}>
+              {nearRows.map(({ salon, featured: isFeatured }) => (
+                <SalonListRow key={salon.id} salon={salon} featured={isFeatured} />
+              ))}
+
+              {furtherRows.length > 0 ? (
+                <>
+                  <View style={styles.divider} accessibilityRole="header">
+                    <View style={styles.line} />
+                    <Text style={styles.dividerText}>A LITTLE FURTHER · NEARBY AREAS</Text>
+                    <View style={styles.line} />
+                  </View>
+                  {furtherRows.map((salon) => (
+                    <SalonListRow key={salon.id} salon={salon} featured={salon.isFeatured === true} />
+                  ))}
+                </>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                onPress={onSeeAll}
+                style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
+              >
+                <Text style={styles.seeAllText}>{`See all ${total} salons`}</Text>
+              </Pressable>
+            </View>
+          )}
+        </>
       )}
     </View>
   )
@@ -256,6 +438,75 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: "#595959",
+  },
+  switchPad: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
+  },
+  switchTrack: {
+    flexDirection: "row",
+    backgroundColor: "#f3f1ef",
+    borderRadius: 12,
+    padding: 3,
+  },
+  switchSegment: {
+    flex: 1,
+    height: 36,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switchSegmentOn: {
+    backgroundColor: "#ffffff",
+    shadowColor: "#000000",
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 2,
+  },
+  switchText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: "#4b5563",
+  },
+  switchTextOn: {
+    color: "#111111",
+  },
+  emptyPad: {
+    marginTop: 10,
+  },
+  empty: {
+    height: 160,
+    borderRadius: 20,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#111111",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    marginTop: 4,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+    textAlign: "center",
   },
   mapPill: {
     height: 38,

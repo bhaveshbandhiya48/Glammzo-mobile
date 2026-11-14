@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 
 import {
   fetchArtistCategories,
@@ -18,6 +18,38 @@ export type TopArtistsState = {
   /** Artists with `offersHomeVisits` (who also cover the customer's area when known). */
   homeArtists: ArtistCardData[] | null
   labels: Record<string, string>
+}
+
+export type NearbyArtistsSnapshot = {
+  status: TopArtistsStatus
+  /** Every artist from Home's nearby query (10 km, up to 50), in API order. Null unless ready. */
+  artists: ArtistCardData[] | null
+  labels: Record<string, string>
+}
+
+let snapshot: NearbyArtistsSnapshot = { status: "loading", artists: null, labels: {} }
+const listeners = new Set<() => void>()
+
+function publish(next: NearbyArtistsSnapshot) {
+  snapshot = next
+  for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+const getSnapshot = () => snapshot
+
+/**
+ * The full nearby list behind `useTopArtists`, for other Home sections (All near you).
+ * Reads what Home already fetched; it never starts a request of its own.
+ */
+export function useNearbyArtists(): NearbyArtistsSnapshot {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }
 
 function byRating(a: ArtistCardData, b: ArtistCardData) {
@@ -49,6 +81,7 @@ export function useTopArtists(
       latitude != null && longitude != null && Number.isFinite(latitude) && Number.isFinite(longitude)
     // Retrying after a failure: show the loading skeleton again instead of the error card.
     setState((prev) => (prev.status === "error" ? { ...prev, status: "loading" } : prev))
+    if (snapshot.status === "error") publish({ ...snapshot, status: "loading" })
     void (async () => {
       try {
         const [list, categories] = await Promise.all([
@@ -63,7 +96,9 @@ export function useTopArtists(
         if (controller.signal.aborted) return
         const labels: Record<string, string> = {}
         for (const category of categories?.categories ?? []) labels[category.id] = category.label
-        const sorted = [...(list.artists ?? [])].sort(byRating)
+        const all = list.artists ?? []
+        const sorted = [...all].sort(byRating)
+        publish({ status: "ready", artists: all, labels })
         setState({
           status: "ready",
           artists: sorted.slice(0, LIMIT),
@@ -73,7 +108,9 @@ export function useTopArtists(
           labels,
         })
       } catch {
-        if (!controller.signal.aborted) setState({ status: "error", artists: null, homeArtists: null, labels: {} })
+        if (controller.signal.aborted) return
+        setState({ status: "error", artists: null, homeArtists: null, labels: {} })
+        publish({ status: "error", artists: null, labels: {} })
       }
     })()
     return () => controller.abort()

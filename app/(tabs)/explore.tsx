@@ -15,7 +15,7 @@ import { HomeV4 } from "@/components/home/HomeV4"
 import { AllSalonsSection, OffersLabel, SalonFilterChips } from "@/components/home/AllSalonsSection"
 import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
-import { MapOverlay } from "@/components/explore/MapOverlay"
+import { MapOverlay, type KindFilter as MapKindFilter } from "@/components/explore/MapOverlay"
 import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
 import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
 import { SalonCarousel } from "@/components/explore/SalonCarousel"
@@ -156,6 +156,7 @@ export default function ExploreScreen() {
   const [sortOpen, setSortOpen] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
+  const [mapKind, setMapKind] = useState<MapKindFilter>("all")
   const [mapArtistsRaw, setMapArtistsRaw] = useState<ArtistCardData[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const [activeCartSalonId, setActiveCartSalonId] = useState<string | null>(null)
@@ -972,7 +973,10 @@ export default function ExploreScreen() {
               onOpenFilters={openFilterSheet}
               onOpenSort={() => setSortOpen(true)}
               onClearAll={clearFilters}
-              onOpenMap={() => setMapOpen(true)}
+              onOpenMap={(mode) => {
+                setMapKind(mode === "artists" ? "artist" : "all")
+                setMapOpen(true)
+              }}
               onSeeAll={() => router.push("/salons")}
               emptyState={<LocationEmptyState variant="filters" onClearFilters={clearFilters} />}
             />
@@ -1071,6 +1075,7 @@ export default function ExploreScreen() {
         onSelectArtist={(slug) => {
           router.push({ pathname: "/artist/[slug]", params: { slug } })
         }}
+        initialKind={mapKind}
       />
 
       <LocationPickerSheet

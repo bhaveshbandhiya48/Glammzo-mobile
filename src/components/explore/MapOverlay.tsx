@@ -62,9 +62,11 @@ type Props = {
   onUseCoords: (coords: { latitude: number; longitude: number }) => void
   onSelectSalon: (salonId: string) => void
   onSelectArtist?: (slug: string) => void
+  /** Pin filter the map opens on (e.g. "artist" from Home's Artists list). Default "all". */
+  initialKind?: KindFilter
 }
 
-type KindFilter = "all" | "salon" | "artist"
+export type KindFilter = "all" | "salon" | "artist"
 
 const KIND_FILTERS: { id: KindFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -416,6 +418,7 @@ export function MapOverlay({
   onUseCoords,
   onSelectSalon,
   onSelectArtist,
+  initialKind = "all",
 }: Props) {
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView | null>(null)
@@ -423,7 +426,9 @@ export function MapOverlay({
   const programmaticCameraUntilRef = useRef(0)
   const ignoreScrollUntilRef = useRef(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all")
+  // Null until the customer picks a filter on the map; until then it opens on `initialKind`.
+  const [pickedKind, setKindFilter] = useState<KindFilter | null>(null)
+  const kindFilter = pickedKind ?? initialKind
   const showSalons = kindFilter !== "artist"
   const showArtists = kindFilter !== "salon"
   const [viewRegion, setViewRegion] = useState<Region | null>(null)
@@ -532,7 +537,7 @@ export function MapOverlay({
   useEffect(() => {
     if (!visible) {
       setSelectedId(null)
-      setKindFilter("all")
+      setKindFilter(null)
       setViewRegion(null)
       setLiveUserCoords(null)
       setLocateMessage(null)

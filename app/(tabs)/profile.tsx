@@ -182,13 +182,6 @@ export default function ProfileScreen() {
 
   const help: ProfileRowProps[] = [
     { label: "Help and support", icon: "help-circle-outline", pastel: pastels.teal, onPress: go("/profile/support") },
-    {
-      label: "Notifications",
-      icon: "notifications-outline",
-      pastel: pastels.lavender,
-      hint: "Opens your phone's settings for Glammzo",
-      onPress: () => void Linking.openSettings(),
-    },
   ]
 
   const about: ProfileRowProps[] = [
@@ -310,7 +303,7 @@ export default function ProfileScreen() {
 
         <ProfileGroup title="Account" rows={account} />
         <ProfileGroup title="Money and rewards" rows={money} />
-        <ProfileGroup title="Help and settings" rows={help} />
+        <ProfileGroup title="Help" rows={help} />
         <ProfileGroup title="About" rows={about} />
 
         <Pressable

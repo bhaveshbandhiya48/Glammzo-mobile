@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -8,7 +9,13 @@ import {
   StyleSheet,
   View,
 } from "react-native"
-import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+import {
+  type Href,
+  useFocusEffect,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { HomeV4 } from "@/components/home/HomeV4"
@@ -103,7 +110,12 @@ import {
   markSessionLocationManual,
   subscribeLaunchLocation,
 } from "@/lib/launch-permissions"
-import { fetchGlammzoOfferBanners } from "@/lib/glammzo-offers-api"
+import { registerPushTokenWithServer } from "@/lib/push"
+import {
+  fetchGlammzoOfferBanners,
+  trackOfferClick,
+  trackOfferViews,
+} from "@/lib/glammzo-offers-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 type FilterSectionId =
@@ -333,8 +345,10 @@ export default function ExploreScreen() {
       imageUrl: offer.mobileBannerUrl,
       promoCode: offer.promoCode,
       ctaLabel: offer.ctaLabel || "Book now",
+      href: offer.mobileHref,
     }))
     setOfferBanners(next)
+    trackOfferViews(next.filter((item) => item.imageUrl).map((item) => item.id))
   }, [savedLocation?.city, savedLocation?.area])
 
   useEffect(() => {
@@ -741,6 +755,7 @@ export default function ExploreScreen() {
     setMapArtistsRaw([])
     setHomeRefreshKey((key) => key + 1)
     void loadCatalog(true)
+    void registerPushTokenWithServer().catch(() => undefined)
   }
 
   async function browseCity() {
@@ -756,6 +771,7 @@ export default function ExploreScreen() {
     markSessionLocationManual()
     await setSavedLocation(next)
     setSavedLocationState(next)
+    void registerPushTokenWithServer().catch(() => undefined)
   }
 
   function openLocationSheet() {
@@ -911,10 +927,15 @@ export default function ExploreScreen() {
             <PromoBannerCarousel
               items={offerBanners}
               onPressItem={(item) => {
-                if (item.promoCode) {
-                  // Keep browse context — offer is applied at booking checkout.
+                trackOfferClick(item.id)
+                const href = item.href?.trim()
+                // No tap target: keep browse context; the offer applies at checkout.
+                if (!href) return
+                if (href.startsWith("https://")) {
+                  void Linking.openURL(href)
                   return
                 }
+                router.push(href as Href)
               }}
             />
           ) : null}

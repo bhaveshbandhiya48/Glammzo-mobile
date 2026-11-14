@@ -11,7 +11,7 @@ import {
 import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistOffer, PublicArtistService } from "@/lib/artists-api"
-import type { GlammzoOfferCard } from "@/lib/glammzo-offers-api"
+import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 type Props = {
@@ -164,7 +164,7 @@ export function ArtistOffersStrip({
               </Text>
               {offer.cashbackRupees > 0 ? (
                 <Text variant="caption" color={colors.accent}>
-                  ₹{offer.cashbackRupees} cashback
+                  {offerCashbackText(offer)}
                   {offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}
                 </Text>
               ) : null}

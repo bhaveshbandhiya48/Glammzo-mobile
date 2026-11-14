@@ -5,6 +5,7 @@ import { Platform } from "react-native"
 
 import { apiFetch } from "@/lib/api"
 import { getAccessToken } from "@/lib/session"
+import { getSavedLocation } from "@/lib/user"
 
 const ANDROID_CHANNEL_ID = "glammzo-default"
 
@@ -53,7 +54,13 @@ export async function getExpoPushToken(): Promise<string | null> {
     const { status: existing } = await Notifications.getPermissionsAsync()
     let finalStatus = existing
     if (existing !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync()
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      })
       finalStatus = status
     }
     if (finalStatus !== "granted") return null
@@ -64,8 +71,21 @@ export async function getExpoPushToken(): Promise<string | null> {
       return null
     }
 
-    const token = await Notifications.getExpoPushTokenAsync({ projectId })
-    return token.data
+    // APNs can take a few seconds on a cold launch; retry before giving up.
+    let lastError: unknown = null
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const token = await Notifications.getExpoPushTokenAsync({ projectId })
+        if (token?.data) return token.data
+      } catch (error) {
+        lastError = error
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)))
+        }
+      }
+    }
+    if (lastError) throw lastError
+    return null
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.warn(
@@ -73,7 +93,7 @@ export async function getExpoPushToken(): Promise<string | null> {
       message,
       Platform.OS === "android"
         ? "(Android needs google-services.json + FCM V1 credentials on EAS — see .env.example)"
-        : "",
+        : "(iOS needs notification permission + APNs key on EAS — see .env.example)",
     )
     return null
   }
@@ -87,12 +107,16 @@ export async function registerPushTokenWithServer(): Promise<boolean> {
     const expoPushToken = await getExpoPushToken()
     if (!expoPushToken) return false
 
+    const location = await getSavedLocation().catch(() => null)
+
     await apiFetch("/api/mobile/push/register", {
       method: "POST",
       body: {
         expoPushToken,
         platform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "unknown",
         deviceId: Device.modelName ?? undefined,
+        city: location?.city?.trim() || undefined,
+        state: location?.state?.trim() || undefined,
       },
     })
     return true

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { SalonOffer } from "@/data/types"
-import type { GlammzoOfferCard } from "@/lib/glammzo-offers-api"
+import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { colors, radii, spacing } from "@/theme/tokens"
 
 type DisplayOffer =
@@ -154,7 +154,9 @@ export function SalonOffersCarousel({
                   </Text>
                   <Text variant="caption" muted numberOfLines={2}>
                     {item.offer.cashbackRupees > 0
-                      ? `₹${item.offer.cashbackRupees} wallet cashback after visit${
+                      ? `${offerCashbackText(item.offer)}${
+                          item.offer.benefitType === "instant" ? " at checkout" : " after visit"
+                        }${
                           item.offer.minOrderRupees > 0
                             ? ` (min ₹${item.offer.minOrderRupees})`
                             : ""
@@ -265,7 +267,9 @@ export function SalonOffersCarousel({
                   <View style={styles.factRow}>
                     <Icon name="wallet-outline" size={18} color={colors.primary} />
                     <Text style={{ flex: 1 }}>
-                      ₹{activeOffer.offer.cashbackRupees} cashback after visit
+                      {offerCashbackText(activeOffer.offer)}
+                      {activeOffer.offer.benefitType === "instant" ? " at checkout" : " after visit"}
+                      {activeOffer.offer.autoApply ? " · applied automatically" : ""}
                     </Text>
                   </View>
                 ) : null}

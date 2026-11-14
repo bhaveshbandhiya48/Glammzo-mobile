@@ -196,7 +196,13 @@ async function requestLaunchNotifications() {
     await ensureAndroidChannel()
     const { status: existing } = await Notifications.getPermissionsAsync()
     if (existing !== "granted") {
-      await Notifications.requestPermissionsAsync()
+      await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      })
     }
     // Best-effort token register when already signed in.
     await registerPushTokenWithServer()

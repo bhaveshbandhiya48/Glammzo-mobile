@@ -19,6 +19,8 @@ const REASON_LABELS: Record<string, string> = {
   referral_reward: "Refer a friend reward",
   gift_card: "Gift card received",
   gift_card_expired: "Unused gift card expired",
+  cashback_glammzo_offer_expired: "Unused offer cashback expired",
+  glammzo_offer_reward: "Glammzo reward",
 }
 
 /** Plain words for a wallet ledger reason code. */

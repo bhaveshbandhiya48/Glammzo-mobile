@@ -197,6 +197,10 @@ export type Booking = {
   /** Submitted review details when `hasVerifiedReview` is true. */
   review?: BookingReview
   confirmationDeadline?: string
+  /** Glammzo offer cashback (₹) credited to the wallet after the visit. */
+  glammzoCashbackRupees?: number
+  /** Glammzo offer instant discount (₹) already taken off this booking. */
+  glammzoDiscountRupees?: number
   /** salon (default) or solo artist booking. */
   kind?: "salon" | "artist"
   artistSlug?: string

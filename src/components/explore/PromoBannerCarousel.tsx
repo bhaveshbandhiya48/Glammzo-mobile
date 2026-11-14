@@ -18,6 +18,8 @@ export type PromoBannerItem = {
   imageUrl?: string | null
   ctaLabel?: string | null
   promoCode?: string | null
+  /** Where a tap goes: an app route or an https URL; null = no action. */
+  href?: string | null
 }
 
 type Props = {

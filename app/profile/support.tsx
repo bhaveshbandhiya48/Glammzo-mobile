@@ -1,11 +1,18 @@
 import { useCallback, useState } from "react"
-import { Linking, StyleSheet, View } from "react-native"
+import { Linking, Pressable, StyleSheet, View } from "react-native"
 import { useFocusEffect, useRouter } from "expo-router"
 
-import { Button } from "@/components/ui/Button"
+import { PastelIcon } from "@/components/profile/ProfileParts"
+import {
+  Card,
+  Field,
+  HEADER_TINTS,
+  PrimaryPill,
+  ProfileSubScreen,
+  SectionLabel,
+} from "@/components/profile/ProfileScreenParts"
+import { pastels, sp, ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
 import { loadProfilePreferApi } from "@/lib/profile-api"
@@ -16,7 +23,7 @@ import {
   type SupportTicketFieldErrors,
 } from "@/lib/support-api"
 import { isValidEmail } from "@/lib/user"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 const SUPPORT_EMAIL = "support@glammzo.com"
 const SUPPORT_HOURS = "Monday to Saturday, 9:00 AM – 7:00 PM (IST)"
@@ -102,48 +109,95 @@ export default function HelpSupportScreen() {
     })
   }
 
+
+  async function submit() {
+    const nextErrors = validateForm(form)
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors)
+      setError("Please check the form.")
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const result = await submitSupportTicket(form)
+      setSuccess(result.message)
+      setFieldErrors({})
+    } catch (err) {
+      setFieldErrors(supportFieldErrorsFromApi(err))
+      setError(err instanceof ApiError ? err.message : "Could not submit your ticket. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (success) {
     return (
-      <Screen scroll>
-        <View style={styles.successCard}>
-          <View style={styles.successIcon}>
-            <Icon name="checkmark-circle" size={28} color={colors.success} />
+      <ProfileSubScreen title="Help and support" tint={HEADER_TINTS.help}>
+        <Card style={styles.successCard}>
+          <View style={styles.successIcon} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <Icon name="checkmark" size={30} color="#17633e" />
           </View>
-          <Text variant="heading">Ticket sent</Text>
-          <Text muted style={styles.successCopy}>
-            {success}
+          <Text style={styles.successTitle} accessibilityRole="header">
+            Ticket sent
           </Text>
-          <Button
-            label="Done"
-            onPress={() => {
-              setSuccess(null)
-              setForm((current) => ({
-                ...emptyForm,
-                name: current.name,
-                email: current.email,
-                phone: current.phone,
-              }))
-              router.back()
-            }}
-          />
-        </View>
-      </Screen>
+          <Text style={styles.successCopy}>{success}</Text>
+          <View style={styles.successAction}>
+            <PrimaryPill
+              label="Done"
+              onPress={() => {
+                setSuccess(null)
+                setForm((current) => ({
+                  ...emptyForm,
+                  name: current.name,
+                  email: current.email,
+                  phone: current.phone,
+                }))
+                router.back()
+              }}
+            />
+          </View>
+        </Card>
+      </ProfileSubScreen>
     )
   }
 
   return (
-    <Screen scroll keyboardAvoiding>
-      <Text variant="title">Help & support</Text>
-      <Text muted style={styles.gap}>
-        Include your booking ID from the confirmation so we can assist faster. Our
-        team will reply by email.
-      </Text>
-      <Text variant="caption" muted style={styles.hours}>
-        {SUPPORT_HOURS}
-      </Text>
+    <ProfileSubScreen title="Help and support" subtitle="We reply by email" tint={HEADER_TINTS.help} keyboard>
+      <SectionLabel first>Contact us</SectionLabel>
+      <Card style={styles.contactCard}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel={`Email ${SUPPORT_EMAIL}`}
+          accessibilityHint="Opens your email app"
+          onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+          style={({ pressed }) => [styles.contactRow, pressed && ui.pressed]}
+        >
+          <PastelIcon pastel={pastels.sky} name="mail-outline" />
+          <View style={styles.contactText}>
+            <Text style={styles.contactLabel}>Email us</Text>
+            <Text style={styles.contactValue} numberOfLines={1}>
+              {SUPPORT_EMAIL}
+            </Text>
+          </View>
+          <Icon name="open-outline" size={18} color={sp.secondary} />
+        </Pressable>
+        <View style={styles.contactRow} accessible accessibilityLabel={`Support hours: ${SUPPORT_HOURS}`}>
+          <View style={styles.hairline} />
+          <PastelIcon pastel={pastels.lavender} name="time-outline" />
+          <View style={styles.contactText}>
+            <Text style={styles.contactLabel}>Support hours</Text>
+            <Text style={styles.contactValue}>{SUPPORT_HOURS}</Text>
+          </View>
+        </View>
+      </Card>
 
-      <View style={styles.form}>
-        <Input
+      <SectionLabel>Raise a ticket</SectionLabel>
+      <Card>
+        <Text style={styles.intro}>
+          Include your booking ID from the confirmation so we can help faster. Our team will reply by email.
+        </Text>
+        <Field
           label="Your name"
           value={form.name}
           onChangeText={(value) => update("name", value)}
@@ -151,7 +205,7 @@ export default function HelpSupportScreen() {
           placeholder="Full name"
           error={fieldErrors.name}
         />
-        <Input
+        <Field
           label="Email"
           value={form.email}
           onChangeText={(value) => update("email", value)}
@@ -161,7 +215,7 @@ export default function HelpSupportScreen() {
           placeholder="you@example.com"
           error={fieldErrors.email}
         />
-        <Input
+        <Field
           label="Mobile (optional)"
           value={form.phone}
           onChangeText={(value) => update("phone", value)}
@@ -170,7 +224,7 @@ export default function HelpSupportScreen() {
           placeholder="10-digit mobile"
           error={fieldErrors.phone}
         />
-        <Input
+        <Field
           label="Booking ID"
           value={form.bookingReference}
           onChangeText={(value) => update("bookingReference", value)}
@@ -179,102 +233,65 @@ export default function HelpSupportScreen() {
           hint="Shown on the booking, like the first 8 characters of the ID."
           error={fieldErrors.bookingReference}
         />
-        <Input
+        <Field
           label="Salon name (optional)"
           value={form.salonName}
           onChangeText={(value) => update("salonName", value)}
           placeholder="Where you booked"
           error={fieldErrors.salonName}
         />
-        <Input
+        <Field
           label="How can we help?"
           value={form.message}
           onChangeText={(value) => update("message", value)}
           placeholder="Describe the issue, and include appointment date/time if relevant."
           multiline
-          textAlignVertical="top"
           style={styles.message}
           error={fieldErrors.message}
         />
 
-        {error ? (
-          <Text variant="caption" color={colors.destructive}>
-            {error}
-          </Text>
-        ) : null}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Button
-          label="Submit ticket"
-          loading={submitting}
-          onPress={async () => {
-            const nextErrors = validateForm(form)
-            if (Object.keys(nextErrors).length > 0) {
-              setFieldErrors(nextErrors)
-              setError("Please check the form.")
-              return
-            }
-            setSubmitting(true)
-            setError(null)
-            try {
-              const result = await submitSupportTicket(form)
-              setSuccess(result.message)
-              setFieldErrors({})
-            } catch (err) {
-              setFieldErrors(supportFieldErrorsFromApi(err))
-              setError(
-                err instanceof ApiError
-                  ? err.message
-                  : "Could not submit your ticket. Please try again.",
-              )
-            } finally {
-              setSubmitting(false)
-            }
-          }}
-        />
-
-        <Button
-          label={`Email ${SUPPORT_EMAIL}`}
-          variant="secondary"
-          onPress={() => void Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
-        />
-      </View>
-    </Screen>
+        <PrimaryPill label="Submit ticket" loading={submitting} onPress={() => void submit()} />
+      </Card>
+    </ProfileSubScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  gap: {
-    marginTop: spacing.sm,
+  contactCard: { padding: 0, gap: 0, overflow: "hidden" },
+  contactRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64, paddingHorizontal: 14, paddingVertical: 12 },
+  hairline: {
+    position: "absolute",
+    top: 0,
+    left: 62,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: sp.border,
   },
-  hours: {
-    marginTop: spacing.md,
-  },
-  form: {
-    marginTop: spacing.xxxl,
-    gap: spacing.lg,
-  },
-  message: {
-    minHeight: 140,
-    paddingTop: spacing.md,
-  },
-  successCard: {
-    marginTop: spacing.xl,
-    padding: spacing.xl,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    gap: spacing.md,
-  },
+  contactText: { flex: 1, minWidth: 0, gap: 1 },
+  contactLabel: { fontFamily: fontFamily.medium, fontSize: 15, lineHeight: 20, color: sp.text },
+  contactValue: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: sp.secondary },
+  intro: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: sp.secondary },
+  message: { minHeight: 140 },
+  error: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#c0392b" },
+  successCard: { marginTop: 12, alignItems: "center", paddingVertical: 28, gap: 10 },
   successIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: radii.pill,
-    backgroundColor: "#ECFDF5",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#e6f5ec",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 4,
   },
+  successTitle: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, color: sp.text },
   successCopy: {
-    marginBottom: spacing.sm,
+    textAlign: "center",
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.secondary,
   },
+  successAction: { alignSelf: "stretch", marginTop: 8 },
 })

@@ -9,7 +9,10 @@ import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 
 const LIMIT = 10
 
+export type TopArtistsStatus = "loading" | "ready" | "error"
+
 export type TopArtistsState = {
+  status: TopArtistsStatus
   /** Null while loading or when the artists API is unavailable. */
   artists: ArtistCardData[] | null
   /** Artists with `offersHomeVisits` (who also cover the customer's area when known). */
@@ -33,12 +36,19 @@ export function useTopArtists(
   longitude: number | undefined,
   refreshKey: number,
 ): TopArtistsState {
-  const [state, setState] = useState<TopArtistsState>({ artists: null, homeArtists: null, labels: {} })
+  const [state, setState] = useState<TopArtistsState>({
+    status: "loading",
+    artists: null,
+    homeArtists: null,
+    labels: {},
+  })
 
   useEffect(() => {
     const controller = new AbortController()
     const hasPin =
       latitude != null && longitude != null && Number.isFinite(latitude) && Number.isFinite(longitude)
+    // Retrying after a failure: show the loading skeleton again instead of the error card.
+    setState((prev) => (prev.status === "error" ? { ...prev, status: "loading" } : prev))
     void (async () => {
       try {
         const [list, categories] = await Promise.all([
@@ -55,6 +65,7 @@ export function useTopArtists(
         for (const category of categories?.categories ?? []) labels[category.id] = category.label
         const sorted = [...(list.artists ?? [])].sort(byRating)
         setState({
+          status: "ready",
           artists: sorted.slice(0, LIMIT),
           homeArtists: sorted
             .filter((artist) => artist.offersHomeVisits && artist.coversYourArea !== false)
@@ -62,7 +73,7 @@ export function useTopArtists(
           labels,
         })
       } catch {
-        if (!controller.signal.aborted) setState({ artists: null, homeArtists: null, labels: {} })
+        if (!controller.signal.aborted) setState({ status: "error", artists: null, homeArtists: null, labels: {} })
       }
     })()
     return () => controller.abort()

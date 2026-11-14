@@ -127,6 +127,7 @@ export function HomeV4({
             salons={topRated}
             artists={topArtists.artists}
             homeArtists={topArtists.homeArtists}
+            artistsStatus={topArtists.status}
             artistLabels={topArtists.labels}
             onSeeAll={seeAllTopRated}
           />

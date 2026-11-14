@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router"
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import {
   Pressable,
   ScrollView,
@@ -9,9 +9,11 @@ import {
   type NativeSyntheticEvent,
 } from "react-native"
 
+import { GradientFill } from "@/components/home/GradientFill"
 import { formatKm } from "@/components/home/HomeNextBookingCard"
 import { PhotoOrFallback } from "@/components/home/PhotoFallback"
 import { SectionLabel } from "@/components/home/ServiceTiles"
+import type { TopArtistsStatus } from "@/components/home/useTopArtists"
 import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
@@ -35,73 +37,112 @@ const CHIPS: Array<{ id: DiscoveryKind; label: string; icon: IconName }> = [
   { id: "home", label: "At home", icon: "home-outline" },
 ]
 
+const EMPTY: Record<DiscoveryKind, { colors: [string, string]; title: string }> = {
+  salons: { colors: ["#fff4ef", "#ffe1d6"], title: "No rated salons near you yet" },
+  artists: { colors: ["#f7f2ff", "#e6dcff"], title: "No artists near you yet" },
+  home: { colors: ["#f1f8fe", "#d9ebfb"], title: "No home-visit artists near you yet" },
+}
+
 type Props = {
   salons: Salon[]
-  /** Null when the artists API is unavailable: the Artists and At home chips are hidden. */
+  /** Null while loading or when the artists API is unavailable (see `artistsStatus`). */
   artists: ArtistCardData[] | null
   /** Artists who offer home visits (`offersHomeVisits`). */
   homeArtists: ArtistCardData[] | null
+  artistsStatus: TopArtistsStatus
   artistLabels: Record<string, string>
   onSeeAll: (kind: DiscoveryKind) => void
 }
 
 /** "TOP RATED NEAR YOU": Salons / Artists / At home chips over horizontal cards with page dots. */
-export function TopRatedRow({ salons, artists, homeArtists, artistLabels, onSeeAll }: Props) {
-  const available = useMemo(
-    () =>
-      CHIPS.filter((chip) => {
-        if (chip.id === "salons") return salons.length > 0
-        if (chip.id === "artists") return (artists?.length ?? 0) > 0
-        return (homeArtists?.length ?? 0) > 0
-      }),
-    [salons.length, artists, homeArtists],
-  )
-  const [kind, setKind] = useState<DiscoveryKind>("salons")
-  const active = available.some((chip) => chip.id === kind) ? kind : available[0]?.id
+export function TopRatedRow({ salons, artists, homeArtists, artistsStatus, artistLabels, onSeeAll }: Props) {
+  const [active, setActive] = useState<DiscoveryKind>("salons")
 
-  if (!active) return null
-
-  const count =
-    active === "salons" ? salons.length : active === "artists" ? artists?.length ?? 0 : homeArtists?.length ?? 0
+  const artistList = active === "artists" ? artists : active === "home" ? homeArtists : null
+  const count = active === "salons" ? salons.length : artistList?.length ?? 0
+  const loading = active !== "salons" && artistsStatus === "loading"
+  const failed = active !== "salons" && artistsStatus === "error"
 
   return (
     <View style={styles.section}>
       <View style={styles.labelPad}>
         <SectionLabel title="Top rated near you" onSeeAll={() => onSeeAll(active)} />
       </View>
-      {available.length > 1 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chips}
-          accessibilityRole="tablist"
-        >
-          {available.map((chip) => {
-            const on = chip.id === active
-            return (
-              <Pressable
-                key={chip.id}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: on }}
-                accessibilityLabel={`Top rated ${chip.label.toLowerCase()}`}
-                onPress={() => setKind(chip.id)}
-                style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && !on && styles.chipPressed]}
-              >
-                <Icon name={chip.icon} size={15} color={on ? "#ffffff" : "#111111"} />
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{chip.label}</Text>
-              </Pressable>
-            )
-          })}
-        </ScrollView>
-      ) : null}
-      <Carousel key={active} count={count}>
-        {active === "salons"
-          ? salons.map((salon) => <SalonCard key={salon.id} salon={salon} />)
-          : (active === "artists" ? artists : homeArtists)?.map((artist) => (
-              <ArtistTopCard key={artist.slug} artist={artist} labels={artistLabels} />
-            ))}
-      </Carousel>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+        accessibilityRole="tablist"
+      >
+        {CHIPS.map((chip) => {
+          const on = chip.id === active
+          return (
+            <Pressable
+              key={chip.id}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={`Top rated ${chip.label.toLowerCase()}`}
+              onPress={() => setActive(chip.id)}
+              style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && !on && styles.chipPressed]}
+            >
+              <Icon name={chip.icon} size={15} color={on ? "#ffffff" : "#111111"} />
+              <Text style={[styles.chipText, on && styles.chipTextOn]}>{chip.label}</Text>
+            </Pressable>
+          )
+        })}
+      </ScrollView>
+      {loading ? (
+        <SkeletonRow />
+      ) : count === 0 ? (
+        <EmptyCard kind={active} failed={failed} />
+      ) : (
+        <Carousel key={active} count={count}>
+          {active === "salons"
+            ? salons.map((salon) => <SalonCard key={salon.id} salon={salon} />)
+            : artistList?.map((artist) => (
+                <ArtistTopCard key={artist.slug} artist={artist} labels={artistLabels} />
+              ))}
+        </Carousel>
+      )}
     </View>
+  )
+}
+
+function EmptyCard({ kind, failed }: { kind: DiscoveryKind; failed: boolean }) {
+  const empty = EMPTY[kind]
+  const icon = CHIPS.find((chip) => chip.id === kind)?.icon ?? "sparkles-outline"
+  const subtitle = failed ? "Couldn't load artists. Pull down to try again." : "We're adding new artists every week."
+  return (
+    <View style={styles.emptyPad}>
+      <View style={styles.empty} accessible accessibilityLabel={`${empty.title}. ${subtitle}`}>
+        <GradientFill colors={empty.colors} angle={150} radius={20} />
+        <View style={styles.emptyIcon}>
+          <Icon name={icon} size={22} color="#111111" />
+        </View>
+        <Text style={styles.emptyTitle}>{empty.title}</Text>
+        <Text style={styles.emptySubtitle}>{subtitle}</Text>
+      </View>
+    </View>
+  )
+}
+
+function SkeletonRow() {
+  return (
+    <ScrollView
+      horizontal
+      scrollEnabled={false}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.row}
+      accessibilityLabel="Loading artists"
+    >
+      {[0, 1].map((i) => (
+        <View key={i} style={styles.card}>
+          <View style={[styles.imageWrap, styles.skeleton]} />
+          <View style={[styles.skeletonLine, { width: 180, marginTop: 12 }]} />
+          <View style={[styles.skeletonLine, { width: 120, marginTop: 8 }]} />
+        </View>
+      ))}
+    </ScrollView>
   )
 }
 
@@ -400,6 +441,49 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: "#595959",
+  },
+  emptyPad: {
+    paddingHorizontal: 20,
+  },
+  empty: {
+    height: 160,
+    borderRadius: 20,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  emptyIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#111111",
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    marginTop: 4,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+    textAlign: "center",
+  },
+  skeleton: {
+    backgroundColor: "#efefef",
+  },
+  skeletonLine: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#efefef",
   },
   dots: {
     marginTop: 14,

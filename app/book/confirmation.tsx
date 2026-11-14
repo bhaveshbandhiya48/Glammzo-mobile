@@ -1,11 +1,14 @@
 import { Image } from "expo-image"
 import { Stack, useLocalSearchParams, usePreventRemove, useRouter, type Href } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Animated, Easing, Linking, Pressable, StyleSheet, View } from "react-native"
+import { Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { Button } from "@/components/ui/Button"
-import { Icon } from "@/components/ui/Icon"
-import { Screen } from "@/components/ui/Screen"
+import { GradientFill } from "@/components/home/GradientFill"
+import { PastelIcon, type Pastel } from "@/components/profile/ProfileParts"
+import { PrimaryPill, StatusPill } from "@/components/profile/ProfileScreenParts"
+import { pastels, ui } from "@/components/salon-page/theme"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Booking, BookingStatus, Salon } from "@/data/types"
 import {
@@ -13,13 +16,16 @@ import {
   formatBookingDate,
   formatDuration,
   getBookingStatusLabel,
-  statusBadgeColors,
 } from "@/lib/booking-display"
 import { fetchBookingById } from "@/lib/bookings-api"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import { googleCalendarUrl, openDirections, visitStart } from "@/lib/visit-links"
 import { formatRupees } from "@/lib/service-pricing"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { colors, fontFamily } from "@/theme/tokens"
+
+const INK = "#111111"
+const SECONDARY = "#595959"
+const BORDER = "#e3e3e3"
 
 const PENDING_STEPS_SALON = [
   "The salon will review your booking.",
@@ -35,11 +41,11 @@ const PENDING_STEPS_ARTIST = [
 
 const CONFETTI = [
   { left: "14%", delay: 0, color: colors.primary, size: 6 },
-  { left: "28%", delay: 80, color: "#BDBDBD", size: 5 },
-  { left: "42%", delay: 40, color: colors.sand, size: 7 },
+  { left: "28%", delay: 80, color: "#ffc9b5", size: 6 },
+  { left: "42%", delay: 40, color: "#a9dfc4", size: 7 },
   { left: "56%", delay: 120, color: colors.primary, size: 5 },
-  { left: "70%", delay: 60, color: "#D4D4D4", size: 6 },
-  { left: "84%", delay: 100, color: "#BDBDBD", size: 5 },
+  { left: "70%", delay: 60, color: "#d3c4ff", size: 6 },
+  { left: "84%", delay: 100, color: "#f9c6db", size: 5 },
 ] as const
 
 function firstParam(value: string | string[] | undefined) {
@@ -180,18 +186,10 @@ function PassRow({
 }) {
   return (
     <View style={[styles.passRow, last && styles.passRowLast]}>
-      <Text variant="label" muted style={styles.passLabel}>
-        {label}
-      </Text>
+      <Text style={styles.passLabel}>{label}</Text>
       <View style={styles.passValueCol}>
-        <Text variant="bodyStrong" style={styles.passValue}>
-          {value}
-        </Text>
-        {subvalue ? (
-          <Text variant="caption" muted style={styles.passSub}>
-            {subvalue}
-          </Text>
-        ) : null}
+        <Text style={[styles.passValue, last && styles.passValueTotal]}>{value}</Text>
+        {subvalue ? <Text style={styles.passSub}>{subvalue}</Text> : null}
       </View>
     </View>
   )
@@ -199,6 +197,7 @@ function PassRow({
 
 export default function BookingConfirmationScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const allowLeaveRef = useRef(false)
   const [guardBack, setGuardBack] = useState(true)
   const disablePreventionRef = useRef<() => void>(() => {})
@@ -339,7 +338,6 @@ export default function BookingConfirmationScreen() {
     () => confirmationCopy(status, isArtist),
     [status, isArtist],
   )
-  const badge = statusBadgeColors(status)
   const isPending = status === "pending"
   const isNegative =
     status === "declined" || status === "expired" || status === "cancelled" || status === "payment_failed"
@@ -372,113 +370,104 @@ export default function BookingConfirmationScreen() {
         : "Pay at salon"
 
   return (
-    <Screen scroll contentStyle={styles.screen}>
+    <View style={styles.page}>
       <Stack.Screen
         options={{
-          title: headerTitle,
-          headerBackVisible: false,
+          headerShown: false,
           gestureEnabled: true,
-          headerLeft: () => (
+        }}
+      />
+      <ScrollView
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />
+          <View style={styles.headerRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Go to home"
               hitSlop={10}
               onPress={() => leaveTo("/(tabs)/explore")}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+              style={({ pressed }) => [styles.headerBtn, pressed && ui.pressed]}
             >
-              <Icon name="chevron-back" size={24} color={colors.text} />
+              <Icon name="chevron-back" size={20} color={INK} />
             </Pressable>
-          ),
-          headerRight: () => (
+            <Text style={styles.headerTitle} accessibilityRole="header" numberOfLines={1}>
+              {headerTitle}
+            </Text>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close"
               hitSlop={10}
               onPress={() => leaveTo("/(tabs)/explore")}
-              style={({ pressed }) => [styles.headerBtn, pressed && styles.headerBtnPressed]}
+              style={({ pressed }) => [styles.headerBtn, pressed && ui.pressed]}
             >
-              <Icon name="close" size={22} color={colors.text} />
+              <Icon name="close" size={20} color={INK} />
             </Pressable>
-          ),
-        }}
-      />
-      {(isSuccess || isPending) && <SuccessConfetti />}
-
-      <View style={styles.hero}>
-        <Animated.View
-          style={[
-            styles.iconWrap,
-            isPending && styles.iconWrapPending,
-            isSuccess && styles.iconWrapSuccess,
-            isNegative && styles.iconWrapNegative,
-            { opacity: iconOpacity, transform: [{ scale: iconScale }] },
-          ]}
-        >
-          <Icon
-            name={isNegative ? "close-circle" : "checkmark-circle"}
-            size={40}
-            color={
-              isPending ? "#B45309" : isNegative ? "#C2410C" : colors.success
-            }
-          />
-        </Animated.View>
-
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: badge.bg, borderColor: badge.border },
-          ]}
-        >
-          <View style={[styles.statusDot, { backgroundColor: badge.dot }]} />
-          <Text variant="caption" style={{ color: badge.text }}>
-            {getBookingStatusLabel(status)}
-          </Text>
-        </View>
-
-        <Text variant="title" style={styles.heroTitle}>
-          {copy.title}
-        </Text>
-        <Text muted style={styles.heroDescription}>
-          {copy.description}
-        </Text>
-      </View>
-
-      <View style={styles.pass}>
-        <View style={styles.passBody}>
-          <View style={styles.providerRow}>
-            {thumbUri ? (
-              <Image
-                source={{ uri: thumbUri }}
-                style={styles.providerThumb}
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View style={[styles.providerThumb, styles.providerThumbFallback]}>
-                <Icon
-                  name={isArtist ? "sparkles-outline" : "storefront-outline"}
-                  size={22}
-                  color={colors.primary}
-                />
-              </View>
-            )}
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <View style={styles.kindRow}>
-                <Text variant="caption" color={colors.primary}>
-                  {isArtist ? "Solo artist" : "Salon"}
-                </Text>
-              </View>
-              <Text variant="heading" numberOfLines={2}>
-                {titleName}
-              </Text>
-              <Text muted numberOfLines={2}>
-                {[areaLine || salon?.area, visitType].filter(Boolean).join(" · ") ||
-                  "—"}
-              </Text>
-            </View>
           </View>
 
-          <View style={styles.passDetails}>
+          {(isSuccess || isPending) && <SuccessConfetti />}
+
+          <View style={styles.hero}>
+            <Animated.View
+              style={[styles.iconWrap, { opacity: iconOpacity, transform: [{ scale: iconScale }] }]}
+            >
+              <GradientFill
+                colors={isNegative ? ["#fff1ec", "#fdd9cc"] : isPending ? pastels.gold.gradient : pastels.mint.gradient}
+                angle={150}
+              />
+              <Icon
+                name={isNegative ? "close" : isPending ? "hourglass-outline" : "checkmark"}
+                size={isPending ? 38 : 46}
+                color={isNegative ? "#8a3524" : isPending ? pastels.gold.ink : pastels.mint.ink}
+              />
+            </Animated.View>
+
+            <View style={styles.statusPill}>
+              <StatusPill
+                tone={isNegative ? "red" : isPending ? "peach" : "green"}
+                label={getBookingStatusLabel(status)}
+              />
+            </View>
+
+            <Text style={styles.heroTitle}>{copy.title}</Text>
+            <Text style={styles.heroDescription}>{copy.description}</Text>
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          <View style={styles.card}>
+            <View style={styles.providerRow}>
+              {thumbUri ? (
+                <Image
+                  source={{ uri: thumbUri }}
+                  style={styles.providerThumb}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={[styles.providerThumb, styles.providerThumbFallback]}>
+                  <Icon
+                    name={isArtist ? "sparkles-outline" : "storefront-outline"}
+                    size={22}
+                    color={SECONDARY}
+                  />
+                </View>
+              )}
+              <View style={styles.providerCopy}>
+                <Text style={styles.kind}>{isArtist ? "Solo artist" : "Salon"}</Text>
+                <Text style={styles.providerName} numberOfLines={2}>
+                  {titleName}
+                </Text>
+                <Text style={styles.providerArea} numberOfLines={2}>
+                  {[areaLine || salon?.area, visitType].filter(Boolean).join(" · ") ||
+                    "—"}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.passDetails}>
             <PassRow label="Date" value={dateLabel || "Date TBD"} />
             <PassRow
               label="Time"
@@ -501,155 +490,164 @@ export default function BookingConfirmationScreen() {
               subvalue={payLabel}
               last
             />
+            </View>
+
+            {bookingReference ? (
+              <View style={styles.refRow}>
+                <Text style={styles.refLabel}>Booking ID</Text>
+                <View style={styles.refChip}>
+                  <Text style={styles.refText}>#{bookingReference}</Text>
+                </View>
+              </View>
+            ) : null}
           </View>
 
-          {bookingReference ? (
-            <View style={styles.refRow}>
-              <Text variant="caption" muted>
-                Booking ID
-              </Text>
-              <View style={styles.refChip}>
-                <Text variant="caption">#{bookingReference}</Text>
-              </View>
-            </View>
-          ) : null}
-        </View>
-      </View>
-
-      {(isPending || isSuccess) && (
-        <View style={styles.nextCard}>
-          <Text variant="label" muted style={styles.nextTitle}>
-            {copy.panelTitle}
-          </Text>
-          {isPending && firstParam(params.payToken) ? (
-            <View style={{ gap: 6, marginBottom: 12 }}>
-              <Text variant="caption" muted>
-                Your booking is confirmed once the advance is paid. The time is held for 15 minutes.
-              </Text>
-              <Button
-                label="Pay advance"
-                onPress={() => {
-                  allowLeave()
-                  router.replace({
-                    pathname: "/pay/advance/[token]",
-                    params: { token: firstParam(params.payToken)!, next: JSON.stringify(params) },
-                  } as Href)
-                }}
-              />
-            </View>
-          ) : null}
-          {isPending ? (
-            <View style={styles.steps}>
-              {pendingSteps.map((step, index) => (
-                <View key={step} style={styles.stepRow}>
-                  <View style={styles.stepIndex}>
-                    <Text variant="caption" color={colors.primary}>
-                      {index + 1}
+          {(isPending || isSuccess) && (
+            <View style={[styles.card, styles.cardGap]}>
+              <Text style={ui.sectionLabel}>{copy.panelTitle}</Text>
+              {isPending && firstParam(params.payToken) ? (
+                <View style={styles.payBlock}>
+                  <View style={styles.holdNote}>
+                    <Icon name="time-outline" size={16} color="#8a3524" />
+                    <Text style={styles.holdText}>
+                      Your booking is confirmed once the advance is paid. The time is held for 15 minutes.
                     </Text>
                   </View>
-                  <Text style={styles.stepText}>{step}</Text>
+                  <PrimaryPill
+                    label="Pay advance"
+                    onPress={() => {
+                      allowLeave()
+                      router.replace({
+                        pathname: "/pay/advance/[token]",
+                        params: { token: firstParam(params.payToken)!, next: JSON.stringify(params) },
+                      } as Href)
+                    }}
+                  />
                 </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.tips}>
-              <View style={styles.tipRow}>
-                <Icon name="notifications-outline" size={18} color={colors.primary} />
-                <Text style={styles.tipText}>
-                  SMS reminders 24h and 2h before your visit.
-                </Text>
-              </View>
-              <View style={styles.tipRow}>
-                <Icon name="calendar-outline" size={18} color={colors.primary} />
-                <Text style={styles.tipText}>
-                  Find this appointment anytime under My bookings.
-                </Text>
-              </View>
-              {!isArtist ? (
-                <View style={styles.tipRow}>
-                  <Icon name="card-outline" size={18} color={colors.primary} />
-                  <Text style={styles.tipText}>
-                    Pay at the salon after your service.
-                  </Text>
+              ) : null}
+              {isPending ? (
+                <View style={styles.steps}>
+                  {pendingSteps.map((step, index) => (
+                    <View key={step} style={styles.stepRow}>
+                      <View style={styles.stepIndex}>
+                        <Text style={styles.stepIndexText}>{index + 1}</Text>
+                      </View>
+                      <Text style={styles.stepText}>{step}</Text>
+                    </View>
+                  ))}
                 </View>
               ) : (
-                <View style={styles.tipRow}>
-                  <Icon name="cash-outline" size={18} color={colors.primary} />
-                  <Text style={styles.tipText}>
-                    Pay the artist directly for this visit.
-                  </Text>
+                <View style={styles.tips}>
+                  <TipRow pastel={pastels.lavender} icon="notifications-outline">
+                    SMS reminders 24h and 2h before your visit.
+                  </TipRow>
+                  <TipRow pastel={pastels.sky} icon="calendar-outline">
+                    Find this appointment anytime under My bookings.
+                  </TipRow>
+                  {!isArtist ? (
+                    <TipRow pastel={pastels.mint} icon="card-outline">
+                      Pay at the salon after your service.
+                    </TipRow>
+                  ) : (
+                    <TipRow pastel={pastels.mint} icon="cash-outline">
+                      Pay the artist directly for this visit.
+                    </TipRow>
+                  )}
                 </View>
               )}
             </View>
           )}
+
+          {isNegative ? (
+            <View style={styles.negativeCard}>
+              <Text style={styles.negativeTitle}>Book another time</Text>
+              <Text style={styles.negativeText}>
+                Browse again and pick a new slot that works for you.
+              </Text>
+            </View>
+          ) : null}
+
+          {!isNegative && (isPending || isSuccess) ? (
+            <VisitLinks
+              title={`${servicesLine || "Appointment"} at ${providerName || salon?.name || "Glammzo"}`}
+              place={providerName || salon?.name || ""}
+              address={salon?.address || areaLine}
+              latitude={salon?.latitude}
+              longitude={salon?.longitude}
+              start={visitStart(bookingDate, bookingTime, booking?.startsAt)}
+              durationMin={booking?.durationMin ?? 60}
+              homeVisit={/home/i.test(visitType)}
+            />
+          ) : null}
+
+          <View style={styles.actions}>
+            {isNegative ? (
+              <>
+                <PrimaryPill
+                  label="Book again"
+                  onPress={() => {
+                    allowLeave()
+                    if (salonId) {
+                      router.replace(
+                        isArtist
+                          ? { pathname: "/artist/[slug]", params: { slug: salonId } }
+                          : { pathname: "/salon/[id]", params: { id: salonId } },
+                      )
+                      return
+                    }
+                    leaveTo("/(tabs)/explore")
+                  }}
+                />
+                <OutlineBig label="Go to home" onPress={() => leaveTo("/(tabs)/explore")} />
+              </>
+            ) : (
+              <>
+                {/* Flipkart-style: View order first, then continue shopping. */}
+                <PrimaryPill
+                  label="View my bookings"
+                  onPress={() => leaveTo("/(tabs)/bookings")}
+                />
+                <OutlineBig label="Continue browsing" onPress={() => leaveTo("/(tabs)/explore")} />
+              </>
+            )}
+            <Text style={styles.footerHint}>{copy.footerHint}</Text>
+          </View>
         </View>
-      )}
+      </ScrollView>
+    </View>
+  )
+}
 
-      {isNegative ? (
-        <View style={styles.negativeCard}>
-          <Text variant="bodyStrong">Book another time</Text>
-          <Text muted style={{ marginTop: spacing.xs }}>
-            Browse again and pick a new slot that works for you.
-          </Text>
-        </View>
-      ) : null}
+function TipRow({ pastel, icon, children }: { pastel: Pastel; icon: IconName; children: string }) {
+  return (
+    <View style={styles.tipRow}>
+      <PastelIcon pastel={pastel} name={icon} size={32} />
+      <Text style={styles.tipText}>{children}</Text>
+    </View>
+  )
+}
 
-      {!isNegative && (isPending || isSuccess) ? (
-        <VisitLinks
-          title={`${servicesLine || "Appointment"} at ${providerName || salon?.name || "Glammzo"}`}
-          place={providerName || salon?.name || ""}
-          address={salon?.address || areaLine}
-          latitude={salon?.latitude}
-          longitude={salon?.longitude}
-          start={visitStart(bookingDate, bookingTime, booking?.startsAt)}
-          durationMin={booking?.durationMin ?? 60}
-          homeVisit={/home/i.test(visitType)}
-        />
-      ) : null}
-
-      <View style={styles.actions}>
-        {isNegative ? (
-          <>
-            <Button
-              label="Book again"
-              onPress={() => {
-                allowLeave()
-                if (salonId) {
-                  router.replace(
-                    isArtist
-                      ? { pathname: "/artist/[slug]", params: { slug: salonId } }
-                      : { pathname: "/salon/[id]", params: { id: salonId } },
-                  )
-                  return
-                }
-                leaveTo("/(tabs)/explore")
-              }}
-            />
-            <Button
-              label="Go to home"
-              variant="secondary"
-              onPress={() => leaveTo("/(tabs)/explore")}
-            />
-          </>
-        ) : (
-          <>
-            {/* Flipkart-style: View order first, then continue shopping. */}
-            <Button
-              label="View my bookings"
-              onPress={() => leaveTo("/(tabs)/bookings")}
-            />
-            <Button
-              label="Continue browsing"
-              variant="secondary"
-              onPress={() => leaveTo("/(tabs)/explore")}
-            />
-          </>
-        )}
-        <Text variant="caption" muted style={styles.footerHint}>
-          {copy.footerHint}
-        </Text>
-      </View>
-    </Screen>
+/** 52-tall outline pill, the secondary action under the black pill. */
+function OutlineBig({
+  label,
+  onPress,
+  icon,
+  style,
+}: {
+  label: string
+  onPress: () => void
+  icon?: IconName
+  style?: object
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.outline, style, pressed && ui.pressed]}
+    >
+      {icon ? <Icon name={icon} size={16} color={INK} /> : null}
+      <Text style={styles.outlineText}>{label}</Text>
+    </Pressable>
   )
 }
 
@@ -668,9 +666,9 @@ function VisitLinks(props: {
   return (
     <View style={styles.linkRow}>
       {props.start ? (
-        <Button
+        <OutlineBig
           label="Add to calendar"
-          variant="secondary"
+          icon="calendar-outline"
           style={styles.linkBtn}
           onPress={() =>
             void Linking.openURL(
@@ -686,9 +684,9 @@ function VisitLinks(props: {
         />
       ) : null}
       {!props.homeVisit && location ? (
-        <Button
+        <OutlineBig
           label="Directions"
-          variant="secondary"
+          icon="navigate-outline"
           style={styles.linkBtn}
           onPress={() =>
             openDirections({
@@ -704,236 +702,192 @@ function VisitLinks(props: {
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: "#ffffff" },
+  scroll: { flexGrow: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 8 },
+  headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   headerBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
-  headerBtnPressed: {
-    opacity: 0.5,
-  },
-  linkRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  linkBtn: {
+  headerTitle: {
     flex: 1,
-  },
-  screen: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xxxl,
+    textAlign: "center",
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    lineHeight: 24,
+    color: INK,
   },
   confettiLayer: {
     ...StyleSheet.absoluteFill,
+    top: 60,
     height: 180,
     zIndex: 2,
   },
   confettiDot: {
     position: "absolute",
     top: 8,
-    borderRadius: radii.pill,
+    borderRadius: 999,
   },
   hero: {
     alignItems: "center",
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: 12,
+    paddingTop: 20,
+    paddingBottom: 12,
   },
   iconWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: radii.pill,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
+    borderWidth: 4,
+    borderColor: "#ffffff",
   },
-  iconWrapPending: {
-    backgroundColor: "#FFFBEB",
-    borderColor: "#FCD34D",
-  },
-  iconWrapSuccess: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#6EE7B7",
-  },
-  iconWrapNegative: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FDBA74",
-  },
-  statusBadge: {
-    marginTop: spacing.lg,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: radii.pill,
-  },
+  statusPill: { marginTop: 14 },
   heroTitle: {
-    marginTop: spacing.lg,
+    marginTop: 10,
     textAlign: "center",
+    fontFamily: fontFamily.bold,
+    fontSize: 26,
+    lineHeight: 32,
+    color: INK,
   },
   heroDescription: {
-    marginTop: spacing.sm,
+    marginTop: 6,
     textAlign: "center",
     maxWidth: 320,
+    fontFamily: fontFamily.regular,
+    fontSize: 15,
     lineHeight: 22,
+    color: SECONDARY,
   },
-  pass: {
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    overflow: "hidden",
+  body: { paddingHorizontal: 16, paddingTop: 8 },
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#ffffff",
+    padding: 16,
+    gap: 14,
   },
-  passBody: {
-    padding: spacing.xl,
-    gap: spacing.lg,
+  cardGap: { marginTop: 16 },
+  providerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  providerThumb: { width: 56, height: 56, borderRadius: 14, backgroundColor: "#f3f3f3" },
+  providerThumbFallback: { alignItems: "center", justifyContent: "center" },
+  providerCopy: { flex: 1, minWidth: 0, gap: 2 },
+  kind: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    color: "#8a3524",
   },
-  providerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  providerThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  providerThumbFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F1F1F1",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#D4D4D4",
-  },
-  kindRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
+  providerName: { fontFamily: fontFamily.bold, fontSize: 17, lineHeight: 22, color: INK },
+  providerArea: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: SECONDARY },
   passDetails: {
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderRadius: 14,
+    backgroundColor: "#fafafa",
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
     overflow: "hidden",
   },
   passRow: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
-  passRowLast: {
-    borderBottomWidth: 0,
-  },
+  passRowLast: { borderBottomWidth: 0, backgroundColor: "#ffffff" },
   passLabel: {
     width: 72,
     marginTop: 2,
-    fontSize: 10,
-  },
-  passValueCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  passValue: {
-    textAlign: "left",
-  },
-  passSub: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
     lineHeight: 18,
+    color: SECONDARY,
   },
-  refRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  passValueCol: { flex: 1, minWidth: 0, gap: 2 },
+  passValue: { fontFamily: fontFamily.semibold, fontSize: 14, lineHeight: 20, color: INK },
+  passValueTotal: { fontFamily: fontFamily.bold, fontSize: 16, lineHeight: 21 },
+  passSub: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: SECONDARY },
+  refRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  refLabel: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: SECONDARY },
   refChip: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderRadius: 999,
+    backgroundColor: "#f2f2f2",
   },
-  nextCard: {
-    marginTop: spacing.xl,
-    padding: spacing.xl,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    gap: spacing.md,
-  },
-  nextTitle: {
-    textAlign: "left",
-  },
-  steps: {
-    gap: spacing.sm,
-  },
-  stepRow: {
+  refText: { fontFamily: fontFamily.semibold, fontSize: 13, lineHeight: 18, color: INK, letterSpacing: 0.5 },
+  payBlock: { gap: 10 },
+  holdNote: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#fff1ec",
   },
+  holdText: { flex: 1, fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#8a3524" },
+  steps: { gap: 12 },
+  stepRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   stepIndex: {
-    width: 24,
-    height: 24,
-    borderRadius: radii.sm,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    backgroundColor: INK,
   },
-  stepText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.text,
-  },
-  tips: {
-    gap: spacing.md,
-  },
-  tipRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-  },
-  tipText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.text,
-  },
+  stepIndexText: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 16, color: "#ffffff" },
+  stepText: { flex: 1, fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: INK, marginTop: 3 },
+  tips: { gap: 12 },
+  tipRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  tipText: { flex: 1, fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 20, color: INK },
   negativeCard: {
-    marginTop: spacing.xl,
-    padding: spacing.xl,
-    borderRadius: radii.xl,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#FED7AA",
-    backgroundColor: "#FFF7ED",
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "#fff1ec",
+    gap: 4,
   },
-  actions: {
-    marginTop: spacing.xxl,
-    gap: spacing.md,
+  negativeTitle: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: INK },
+  negativeText: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: SECONDARY },
+  linkRow: { flexDirection: "row", gap: 10, marginTop: 16 },
+  linkBtn: { flex: 1 },
+  outline: {
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: INK,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
+  outlineText: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: INK },
+  actions: { marginTop: 24, gap: 12 },
   footerHint: {
     textAlign: "center",
-    marginTop: spacing.xs,
-    paddingHorizontal: spacing.md,
+    marginTop: 2,
+    paddingHorizontal: 12,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: SECONDARY,
   },
 })

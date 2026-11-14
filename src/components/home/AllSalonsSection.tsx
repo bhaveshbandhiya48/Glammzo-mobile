@@ -188,7 +188,16 @@ function ModeSwitch({ mode, onChange }: { mode: AllNearMode; onChange: (mode: Al
   )
 }
 
-function ArtistChips({ chips, onChange }: { chips: ArtistChipState; onChange: (next: ArtistChipState) => void }) {
+function ArtistChips({
+  chips,
+  onChange,
+  canSortByDistance,
+}: {
+  chips: ArtistChipState
+  onChange: (next: ArtistChipState) => void
+  /** False when the list has no distances (location off); the sort chip is hidden then. */
+  canSortByDistance: boolean
+}) {
   const sortLabel = chips.sort === "nearest" ? "Nearest" : "Top rated"
   return (
     <ScrollView
@@ -197,18 +206,20 @@ function ArtistChips({ chips, onChange }: { chips: ArtistChipState; onChange: (n
       directionalLockEnabled
       contentContainerStyle={styles.chips}
     >
-      <Chip
-        icon="swap-vertical-outline"
-        label={`Sort: ${sortLabel}`}
-        on={chips.sort !== "nearest"}
-        onPress={() =>
-          onChange({
-            ...chips,
-            sort: chips.sort === "nearest" ? "rating" : "nearest",
-          })
-        }
-        a11y={`Sort: ${sortLabel}. Tap to switch`}
-      />
+      {canSortByDistance ? (
+        <Chip
+          icon="swap-vertical-outline"
+          label={`Sort: ${sortLabel}`}
+          on={chips.sort !== "nearest"}
+          onPress={() =>
+            onChange({
+              ...chips,
+              sort: chips.sort === "nearest" ? "rating" : "nearest",
+            })
+          }
+          a11y={`Sort: ${sortLabel}. Tap to switch`}
+        />
+      ) : null}
       <Chip label="At home" on={chips.home} onPress={() => onChange({ ...chips, home: !chips.home })} />
       <Chip label="Studio" on={chips.studio} onPress={() => onChange({ ...chips, studio: !chips.studio })} />
       <Chip
@@ -265,9 +276,15 @@ export function AllSalonsSection({
   const [mode, setModeState] = useState<AllNearMode>(lastMode)
   const [artistChips, setArtistChips] = useState<ArtistChipState>(DEFAULT_ARTIST_CHIPS)
   const nearbyArtists = useNearbyArtists()
+  // With location off, Home falls back to the recommended query, which has no distances.
+  const hasDistances = (nearbyArtists.artists ?? []).some((artist) => artist.distanceKm != null)
   const shownArtists = useMemo(
-    () => filterArtists(nearbyArtists.artists ?? [], artistChips),
-    [artistChips, nearbyArtists.artists],
+    () =>
+      filterArtists(
+        nearbyArtists.artists ?? [],
+        hasDistances ? artistChips : { ...artistChips, sort: "rating" },
+      ),
+    [artistChips, hasDistances, nearbyArtists.artists],
   )
 
   function setMode(next: AllNearMode) {
@@ -290,10 +307,19 @@ export function AllSalonsSection({
   ].slice(0, NEAR_LIMIT)
   const furtherRows = nearbyAreas.slice(0, NEARBY_AREAS_LIMIT)
   const salonSubtitle = areaLabel ? `${total} in ${areaLabel} and nearby` : `${total} nearby`
+  const artistCount = shownArtists.length
+  const artistNoun = artistCount === 1 ? "artist" : "artists"
+  const city = location?.city?.trim()
+  // An empty list can't show distances, so fall back to whether there is a pin.
+  const hasPin = Number.isFinite(location?.latitude) && Number.isFinite(location?.longitude)
   const artistSubtitle =
-    nearbyArtists.status === "ready"
-      ? `${shownArtists.length} ${shownArtists.length === 1 ? "artist" : "artists"} within ${NEARBY_RADIUS_KM} km`
-      : `Artists within ${NEARBY_RADIUS_KM} km`
+    nearbyArtists.status !== "ready"
+      ? `Artists within ${NEARBY_RADIUS_KM} km`
+      : hasDistances || (artistCount === 0 && hasPin)
+        ? `${artistCount} ${artistNoun} within ${NEARBY_RADIUS_KM} km`
+        : city
+          ? `${artistCount} ${artistNoun} in ${city}`
+          : `${artistCount} recommended ${artistNoun}`
   const subtitle = mode === "salons" ? salonSubtitle : artistSubtitle
 
   return (
@@ -324,7 +350,7 @@ export function AllSalonsSection({
 
       {mode === "artists" ? (
         <>
-          <ArtistChips chips={artistChips} onChange={setArtistChips} />
+          <ArtistChips chips={artistChips} onChange={setArtistChips} canSortByDistance={hasDistances} />
           <View style={styles.pad}>
             {nearbyArtists.status === "loading" ? (
               <View accessibilityLabel="Loading artists">
@@ -387,7 +413,7 @@ export function AllSalonsSection({
                 onPress={onSeeAll}
                 style={({ pressed }) => [styles.seeAll, pressed && styles.chipPressed]}
               >
-                <Text style={styles.seeAllText}>{`See all ${total} salons`}</Text>
+                <Text style={styles.seeAllText}>{`See all ${total} ${total === 1 ? "salon" : "salons"}`}</Text>
               </Pressable>
             </View>
           )}

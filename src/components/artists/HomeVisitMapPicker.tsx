@@ -11,14 +11,16 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
-import { Button } from "@/components/ui/Button"
+import { PastelIcon } from "@/components/profile/ProfileParts"
+import { PrimaryPill } from "@/components/profile/ProfileScreenParts"
+import { pastels } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import {
   getDeviceCoordinates,
   resolvePlaceFromCoordinates,
 } from "@/lib/device-location"
-import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { colors, fontFamily, shadows } from "@/theme/tokens"
 
 type MapViewRef = import("react-native-maps").default
 type Region = {
@@ -205,7 +207,7 @@ export function HomeVisitMapPicker({
     if (!Maps) {
       return (
         <View style={[boxStyle, styles.mapFallback]}>
-          <Text muted>Maps aren’t available on web.</Text>
+          <Text style={styles.help}>Maps aren’t available on web.</Text>
         </View>
       )
     }
@@ -240,7 +242,7 @@ export function HomeVisitMapPicker({
 
         {!hasPin && mode === "inline" ? (
           <View style={[styles.mapHint, styles.peNone]}>
-            <Text variant="caption" color={colors.primaryFg} style={styles.mapHintText}>
+            <Text style={styles.mapHintText}>
               Move the map to place the pin on your exact spot.
             </Text>
           </View>
@@ -266,9 +268,9 @@ export function HomeVisitMapPicker({
             ]}
           >
             {busy ? (
-              <ActivityIndicator size="small" color={colors.primary} />
+              <ActivityIndicator size="small" color="#111111" />
             ) : (
-              <Icon name="locate" size={20} color={colors.primary} />
+              <Icon name="locate" size={20} color="#111111" />
             )}
           </Pressable>
           {mode === "inline" ? (
@@ -299,9 +301,8 @@ export function HomeVisitMapPicker({
 
   return (
     <View style={styles.wrap}>
-      <Text variant="caption" muted>
-        Drag the map so the pin sits on your entrance. The artist uses this for
-        directions.
+      <Text style={styles.help}>
+        Drag the map so the pin sits on your entrance. The artist uses this for directions.
       </Text>
 
       {mapElement(mapRef, styles.mapBox, "inline")}
@@ -309,35 +310,35 @@ export function HomeVisitMapPicker({
       <Pressable
         onPress={() => void useCurrent()}
         disabled={busy}
-        style={({ pressed }) => [styles.locateRow, pressed && { opacity: 0.9 }]}
+        style={({ pressed }) => [styles.locateRow, pressed && styles.locatePressed]}
         accessibilityRole="button"
+        accessibilityState={{ busy, disabled: busy }}
       >
         {busy ? (
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color="#111111" />
         ) : (
-          <Icon name="locate" size={18} color={colors.primary} />
+          <Icon name="locate" size={16} color="#111111" />
         )}
-        <Text variant="bodyStrong" color={colors.primary}>
-          Use my current location
-        </Text>
+        <Text style={styles.locateText}>Use my current location</Text>
       </Pressable>
 
-      {hasPin ? (
-        <Text variant="caption" muted numberOfLines={2}>
-          Pin set
-          {address?.trim() ? ` · ${address.trim()}` : ` · ${latitude!.toFixed(4)}, ${longitude!.toFixed(4)}`}
-        </Text>
-      ) : (
-        <Text variant="caption" color={colors.destructive}>
-          Add a map pin to continue with a home visit.
-        </Text>
-      )}
+      <View style={[styles.status, !hasPin && styles.statusMissing]}>
+        <PastelIcon
+          pastel={hasPin ? pastels.mint : pastels.peach}
+          name={hasPin ? "location" : "location-outline"}
+          size={32}
+        />
+        <View style={styles.statusCopy}>
+          <Text style={styles.statusTitle}>{hasPin ? "Pin set" : "No pin yet"}</Text>
+          <Text style={[styles.statusText, !hasPin && styles.statusTextMissing]} numberOfLines={2}>
+            {hasPin
+              ? address?.trim() || `${latitude!.toFixed(4)}, ${longitude!.toFixed(4)}`
+              : "Add a map pin to continue with a home visit."}
+          </Text>
+        </View>
+      </View>
 
-      {notice ? (
-        <Text variant="caption" color={colors.destructive}>
-          {notice}
-        </Text>
-      ) : null}
+      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Modal
         visible={fullscreen}
@@ -348,11 +349,7 @@ export function HomeVisitMapPicker({
         <SafeAreaView style={styles.fullSafe} edges={["top", "left", "right", "bottom"]}>
           {mapElement(fullMapRef, styles.fullMap, "full")}
           <View style={styles.fullFooter}>
-            <Button
-              label="Done"
-              onPress={() => setFullscreen(false)}
-              disabled={!hasPin}
-            />
+            <PrimaryPill label="Done" onPress={() => setFullscreen(false)} disabled={!hasPin} />
           </View>
         </SafeAreaView>
       </Modal>
@@ -361,12 +358,20 @@ export function HomeVisitMapPicker({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.md },
+  wrap: { gap: 12 },
+  help: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+  },
   mapBox: {
     height: 240,
-    borderRadius: radii.lg,
+    borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: colors.muted,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#f3f3f3",
   },
   mapFallback: {
     alignItems: "center",
@@ -381,8 +386,12 @@ const styles = StyleSheet.create({
   },
   mapHintText: {
     textAlign: "center",
-    backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: radii.pill,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#ffffff",
+    backgroundColor: "rgba(17,17,17,0.78)",
+    borderRadius: 999,
     overflow: "hidden",
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -479,16 +488,63 @@ const styles = StyleSheet.create({
   locateRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: 6,
     alignSelf: "flex-start",
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
   },
-  fullSafe: { flex: 1, backgroundColor: colors.bg },
-  fullMap: { flex: 1, backgroundColor: colors.muted },
+  locatePressed: { backgroundColor: "#f6f6f6" },
+  locateText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    lineHeight: 17,
+    color: "#111111",
+  },
+  status: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
+  },
+  statusMissing: {
+    borderColor: "#f5d0c5",
+    backgroundColor: "#fff8f5",
+  },
+  statusCopy: { flex: 1, minWidth: 0, gap: 1 },
+  statusTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 19,
+    color: "#111111",
+  },
+  statusText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+  },
+  statusTextMissing: { color: "#8a3524" },
+  notice: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#c0392b",
+  },
+  fullSafe: { flex: 1, backgroundColor: "#ffffff" },
+  fullMap: { flex: 1, backgroundColor: "#f3f3f3" },
   fullFooter: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    backgroundColor: colors.card,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    backgroundColor: "#ffffff",
   },
 })

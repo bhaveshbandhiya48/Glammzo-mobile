@@ -1,11 +1,11 @@
 import { StyleSheet, View } from "react-native"
 
-import { Icon } from "@/components/ui/Icon"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Booking } from "@/data/types"
 import { formatBookingWhen, isArtistBooking } from "@/lib/booking-display"
 import { formatRupees } from "@/lib/service-pricing"
-import { colors, status as tint, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type StepState = "done" | "current" | "todo" | "stopped"
 type Step = { key: string; title: string; detail?: string; state: StepState }
@@ -96,11 +96,16 @@ export function bookingSteps(booking: Booking): Step[] {
   return steps
 }
 
-const DOT: Record<StepState, { bg: string; fg: string; icon?: string }> = {
-  done: { bg: colors.primary, fg: colors.primaryFg, icon: "checkmark" },
-  current: { bg: colors.surface, fg: colors.primary },
-  todo: { bg: colors.surface, fg: colors.textSubtle },
-  stopped: { bg: tint.dangerBg, fg: tint.dangerFg, icon: "close" },
+const INK = "#111111"
+const SECONDARY = "#595959"
+const MUTED = "#8a8a8a"
+const RED = "#c0392b"
+
+const DOT: Record<StepState, { bg: string; border: string; fg: string; icon?: IconName }> = {
+  done: { bg: INK, border: INK, fg: "#ffffff", icon: "checkmark" },
+  current: { bg: "#ffffff", border: INK, fg: INK },
+  todo: { bg: "#ffffff", border: "#d4d4d4", fg: MUTED },
+  stopped: { bg: "#fdecea", border: "#fdecea", fg: RED, icon: "close" },
 }
 
 /** Connected vertical timeline: the line runs through every step with no gaps. */
@@ -120,12 +125,7 @@ export function BookingTimeline({ booking }: { booking: Booking }) {
             accessibilityLabel={`${step.title}${step.detail ? `, ${step.detail}` : ""}${step.state === "current" ? ", current step" : step.state === "done" ? ", done" : ""}`}
           >
             <View style={styles.rail}>
-              <View
-                style={[
-                  styles.dot,
-                  { backgroundColor: dot.bg, borderColor: step.state === "todo" ? colors.inputBorder : dot.fg },
-                ]}
-              >
+              <View style={[styles.dot, { backgroundColor: dot.bg, borderColor: dot.border }]}>
                 {dot.icon ? <Icon name={dot.icon} size={12} color={dot.fg} /> : null}
                 {step.state === "current" ? <View style={styles.currentInner} /> : null}
               </View>
@@ -133,16 +133,15 @@ export function BookingTimeline({ booking }: { booking: Booking }) {
             </View>
             <View style={[styles.copy, !last && styles.copyGap]}>
               <Text
-                variant="bodyStrong"
-                color={step.state === "todo" ? colors.textMuted : step.state === "stopped" ? tint.dangerFg : colors.text}
+                style={[
+                  styles.title,
+                  step.state === "todo" && styles.titleTodo,
+                  step.state === "stopped" && styles.titleStopped,
+                ]}
               >
                 {step.title}
               </Text>
-              {step.detail ? (
-                <Text variant="caption" muted>
-                  {step.detail}
-                </Text>
-              ) : null}
+              {step.detail ? <Text style={styles.detail}>{step.detail}</Text> : null}
             </View>
           </View>
         )
@@ -155,11 +154,11 @@ const DOT_SIZE = 22
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingVertical: spacing.xs,
+    paddingVertical: 4,
   },
   row: {
     flexDirection: "row",
-    gap: spacing.md,
+    gap: 12,
   },
   rail: {
     width: DOT_SIZE,
@@ -177,15 +176,15 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.primary,
+    backgroundColor: INK,
   },
   line: {
     flex: 1,
     width: 2,
-    backgroundColor: colors.border,
+    backgroundColor: "#ececec",
   },
   lineDone: {
-    backgroundColor: colors.primary,
+    backgroundColor: INK,
   },
   copy: {
     flex: 1,
@@ -193,6 +192,26 @@ const styles = StyleSheet.create({
     paddingTop: 1,
   },
   copyGap: {
-    paddingBottom: spacing.lg,
+    paddingBottom: 16,
+  },
+  title: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: INK,
+  },
+  titleTodo: {
+    fontFamily: fontFamily.medium,
+    color: MUTED,
+  },
+  titleStopped: {
+    color: RED,
+  },
+  detail: {
+    marginTop: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: SECONDARY,
   },
 })

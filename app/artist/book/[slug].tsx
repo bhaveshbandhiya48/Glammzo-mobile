@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native"
 
-import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
+import { ArtistServiceRow } from "@/components/artist-page/ArtistServiceRow"
 import { HomeVisitMapPicker } from "@/components/artists/HomeVisitMapPicker"
 import {
   bk,
@@ -880,7 +880,6 @@ export default function ArtistBookScreen() {
                       service={s}
                       selected={selectedIds.includes(s.id)}
                       isLast={index === list.length - 1}
-                      pricingLocation="studio"
                       onOpenDetail={() => setDetailService(s)}
                       onToggle={() => toggleService(s)}
                     />
@@ -1439,6 +1438,7 @@ const styles = StyleSheet.create({
     borderColor: bk.border,
     backgroundColor: "#ffffff",
     overflow: "hidden",
+    paddingHorizontal: 14,
   },
   whereChoices: { flexDirection: "row", gap: 10 },
   whereCard: {

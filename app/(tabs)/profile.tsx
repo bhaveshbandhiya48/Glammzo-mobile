@@ -281,9 +281,16 @@ export default function ProfileScreen() {
             style={({ pressed }) => [styles.refer, pressed && ui.pressed]}
           >
             <View style={styles.referText}>
-              <Text style={styles.referTitle}>
-                {rewardText ? `Give ${rewardText}, get ${rewardText}` : "Invite friends"}
-              </Text>
+              <View style={styles.referCopy}>
+                <Text style={styles.referTitle}>
+                  {rewardText ? `Refer a friend, get ${rewardText}` : "Refer a friend"}
+                </Text>
+                <Text style={styles.referSubtitle}>
+                  {rewardText
+                    ? `Share your code. You get ${rewardText} after their first completed visit. They get ${rewardText} too.`
+                    : "Share your code. You both get wallet credit after their first completed visit."}
+                </Text>
+              </View>
               <View style={styles.codeChip}>
                 <Text style={styles.codeText} selectable>
                   {referralCode}
@@ -372,6 +379,8 @@ const styles = StyleSheet.create({
   },
   referText: { flex: 1, minWidth: 0, gap: 10, alignItems: "flex-start" },
   referTitle: { fontFamily: fontFamily.bold, fontSize: 16, lineHeight: 21, color: "#6b4e00" },
+  referCopy: { gap: 2 },
+  referSubtitle: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#6b4e00" },
   codeChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,

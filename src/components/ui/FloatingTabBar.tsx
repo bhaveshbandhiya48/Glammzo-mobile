@@ -1,3 +1,4 @@
+import { useRoute } from "expo-router"
 import type { BottomTabBarProps } from "expo-router/build/layouts/Tabs"
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react"
 import {
@@ -53,16 +54,23 @@ const SWITCH_DISTANCE = 28
 /** Near the top the full bar always shows. */
 const TOP_ZONE = 40
 
-// Collapsed state shared between the bar and the screen that scrolls.
-let collapsed = false
+// Collapsed state per tab (route key), shared between the bar and the screens that scroll.
+// The bar shows the focused tab's state, so switching tabs brings back that tab's own bar
+// (full when it is at the top). Tabs that never scroll the bar have no entry: full.
+const collapsedByRoute = new Map<string, boolean>()
 /** No new switch until the running full↔mini animation has finished. */
 let lockedUntil = 0
 const listeners = new Set<() => void>()
 
-/** Shrink (true) or restore (false) the floating tab bar. */
-export function setTabBarCollapsed(next: boolean) {
-  if (collapsed === next) return
-  collapsed = next
+function isRouteCollapsed(routeKey: string | undefined) {
+  return routeKey ? collapsedByRoute.get(routeKey) === true : false
+}
+
+/** Shrink (true) or restore (false) the floating tab bar for one tab. */
+function setTabBarCollapsed(routeKey: string, next: boolean) {
+  if (isRouteCollapsed(routeKey) === next) return
+  if (next) collapsedByRoute.set(routeKey, true)
+  else collapsedByRoute.delete(routeKey)
   lockedUntil = Date.now() + MORPH_MS
   for (const listener of listeners) listener()
 }
@@ -74,8 +82,12 @@ function subscribeCollapsed(listener: () => void) {
   }
 }
 
-function useTabBarCollapsed() {
-  return useSyncExternalStore(subscribeCollapsed, () => collapsed, () => false)
+function useTabBarCollapsed(routeKey: string | undefined) {
+  return useSyncExternalStore(
+    subscribeCollapsed,
+    () => isRouteCollapsed(routeKey),
+    () => false,
+  )
 }
 
 /**
@@ -85,10 +97,11 @@ function useTabBarCollapsed() {
  * bar near the top. Nothing here re-renders the screen: state changes only when the mode does.
  */
 export function useCollapseTabBarOnScroll() {
+  const routeKey = useRoute().key
   const lastY = useRef(0)
   const travel = useRef(0)
-  // Leaving the screen always restores the full bar.
-  useEffect(() => () => setTabBarCollapsed(false), [])
+  // A tab screen that unmounts forgets its state (its next mount starts at the top).
+  useEffect(() => () => setTabBarCollapsed(routeKey, false), [routeKey])
   return useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent
     const maxY = Math.max(0, contentSize.height - layoutMeasurement.height)
@@ -97,7 +110,7 @@ export function useCollapseTabBarOnScroll() {
       // Includes the pull-to-refresh / top bounce (negative offsets).
       lastY.current = Math.max(y, 0)
       travel.current = 0
-      setTabBarCollapsed(false)
+      setTabBarCollapsed(routeKey, false)
       return
     }
     if (y > maxY) {
@@ -112,14 +125,15 @@ export function useCollapseTabBarOnScroll() {
     // Count distance in one direction; turning around starts the count again.
     travel.current = Math.sign(dy) === Math.sign(travel.current) ? travel.current + dy : dy
     if (Date.now() < lockedUntil) return
+    const collapsed = isRouteCollapsed(routeKey)
     if (travel.current >= SWITCH_DISTANCE && !collapsed) {
       travel.current = 0
-      setTabBarCollapsed(true)
+      setTabBarCollapsed(routeKey, true)
     } else if (travel.current <= -SWITCH_DISTANCE && collapsed) {
       travel.current = 0
-      setTabBarCollapsed(false)
+      setTabBarCollapsed(routeKey, false)
     }
-  }, [])
+  }, [routeKey])
 }
 
 /**
@@ -147,7 +161,7 @@ export function useFloatingTabBarSpace() {
 /**
  * Bottom navigation as a separate rounded bar floating above the screen edge.
  * Each tab shows its icon above a label; the selected one sits on a soft peach pill.
- * While Home scrolls down it shrinks to a centred, icons-only mini bar.
+ * While a tab (Home, Bookings, Profile) scrolls down it shrinks to a centred, icons-only mini bar.
  *
  * The outer frame never changes size. The full bar and the mini bar are two fixed layers
  * that cross-fade and scale on the native driver, so the switch never triggers layout
@@ -156,9 +170,11 @@ export function useFloatingTabBarSpace() {
 export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: BottomTabBarProps) {
   const insets = useSafeAreaInsets()
   const { width: screenWidth } = useWindowDimensions()
-  const isCollapsed = useTabBarCollapsed()
+  // A screen can hide the bar, like Home does while its map is open.
+  const focusedKey = state.routes[state.index]?.key
+  const isCollapsed = useTabBarCollapsed(focusedKey)
   const upcomingCount = useUpcomingBookingsCount()
-  const progress = useRef(new Animated.Value(collapsed ? 1 : 0)).current
+  const progress = useRef(new Animated.Value(isCollapsed ? 1 : 0)).current
   useEffect(() => {
     const animation = Animated.timing(progress, {
       toValue: isCollapsed ? 1 : 0,
@@ -169,15 +185,13 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
     animation.start()
     return () => animation.stop()
   }, [isCollapsed, progress])
-  // Switching tab shows the full bar again.
+  // Switching tab: no full↔mini switch from scrolling until the bar has settled on that tab's state.
   useEffect(() => {
-    setTabBarCollapsed(false)
+    lockedUntil = Date.now() + MORPH_MS
   }, [state.index])
   const fullWidth = Math.max(MINI_WIDTH, screenWidth - BAR_MARGIN * 2)
   // "index" only redirects to Home; it has no tab.
   const routes = state.routes.filter((route) => route.name !== "index")
-  // A screen can hide the bar, like Home does while its map is open.
-  const focusedKey = state.routes[state.index]?.key
   const focusedOptions = focusedKey ? descriptors[focusedKey]?.options : undefined
   if (StyleSheet.flatten(focusedOptions?.tabBarStyle)?.display === "none") return null
 
@@ -255,7 +269,9 @@ export function FloatingTabBar({ state, descriptors, emitter, navigateToTab }: B
           {/* While mini, a tap on the bar outside the icons brings back the full bar. */}
           <Pressable
             accessibilityLabel="Show full menu"
-            onPress={() => setTabBarCollapsed(false)}
+            onPress={() => {
+              if (focusedKey) setTabBarCollapsed(focusedKey, false)
+            }}
             style={StyleSheet.absoluteFill}
           />
           {renderTabs(true)}

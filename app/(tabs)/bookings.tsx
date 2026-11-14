@@ -17,7 +17,7 @@ import { bookingSortMs, groupByMonth, groupUpcoming } from "@/components/booking
 import { WaitlistStrip } from "@/components/bookings/WaitlistStrip"
 import { GradientFill } from "@/components/home/GradientFill"
 import { sp, ui } from "@/components/salon-page/theme"
-import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
+import { useCollapseTabBarOnScroll, useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Text } from "@/components/ui/Text"
 import type { Booking, BookingStatus } from "@/data/types"
@@ -64,6 +64,7 @@ function SectionLabel({ children }: { children: string }) {
 export default function BookingsScreen() {
   const insets = useSafeAreaInsets()
   const tabBarSpace = useFloatingTabBarSpace()
+  const onTabBarScroll = useCollapseTabBarOnScroll()
   const cart = useCart()
   const router = useRouter()
   const [authed, setAuthed] = useState(false)
@@ -328,6 +329,8 @@ export default function BookingsScreen() {
         style={page.page}
         contentContainerStyle={{ paddingBottom: tabBarSpace + 16 }}
         showsVerticalScrollIndicator={false}
+        onScroll={onTabBarScroll}
+        scrollEventThrottle={16}
       >
         {header}
         <View style={page.body}>
@@ -353,6 +356,8 @@ export default function BookingsScreen() {
         style={page.page}
         contentContainerStyle={{ paddingBottom: tabBarSpace + 16 }}
         showsVerticalScrollIndicator={false}
+        onScroll={onTabBarScroll}
+        scrollEventThrottle={16}
       >
         {header}
 

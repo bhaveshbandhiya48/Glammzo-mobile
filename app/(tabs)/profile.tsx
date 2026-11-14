@@ -8,7 +8,7 @@ import { GradientFill } from "@/components/home/GradientFill"
 import { pastelForName } from "@/components/home/PhotoFallback"
 import { ProfileGroup, StatTile, type ProfileRowProps } from "@/components/profile/ProfileParts"
 import { pastels, sp, ui } from "@/components/salon-page/theme"
-import { useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
+import { useCollapseTabBarOnScroll, useFloatingTabBarSpace } from "@/components/ui/FloatingTabBar"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
@@ -38,6 +38,7 @@ function formatPhone(raw: string) {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets()
   const tabBarSpace = useFloatingTabBarSpace()
+  const onTabBarScroll = useCollapseTabBarOnScroll()
   const router = useRouter()
   const quotesOn = isGetQuotesEnabled()
   const favorites = useFavorites()
@@ -200,6 +201,8 @@ export default function ProfileScreen() {
       style={styles.page}
       contentContainerStyle={{ paddingBottom: tabBarSpace + 16 }}
       showsVerticalScrollIndicator={false}
+      onScroll={onTabBarScroll}
+      scrollEventThrottle={16}
     >
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />

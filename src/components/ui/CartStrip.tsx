@@ -3,6 +3,7 @@ import { useRef, useState } from "react"
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,7 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFloatingTabBarTop } from "@/components/ui/FloatingTabBar"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 export type CartStripEntry = {
   salonId: string
@@ -52,62 +53,54 @@ function StripCard({
       <View style={styles.bar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`View bag for ${entry.salonName}, ${entry.itemCount} ${itemWord}`}
-          onPress={entry.onPress}
-          style={({ pressed }) => [styles.main, pressed && styles.pressed]}
-        >
-          <View style={styles.left}>
-            {thumbs.length > 0 ? (
-              <View style={styles.thumbs}>
-                {thumbs.map((uri, index) => (
-                  <Image
-                    key={`${entry.salonId}-${uri}-${index}`}
-                    source={{ uri }}
-                    style={[
-                      styles.thumb,
-                      {
-                        marginLeft: index === 0 ? 0 : -10,
-                        zIndex: thumbs.length - index,
-                      },
-                    ]}
-                    contentFit="cover"
-                  />
-                ))}
-              </View>
-            ) : (
-              <View style={styles.countBadge}>
-                <Text variant="caption" color={colors.primaryFg}>
-                  {entry.itemCount}
-                </Text>
-              </View>
-            )}
-            <View style={styles.copy}>
-              <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={1}>
-                {entry.salonName}
-              </Text>
-              <Text variant="caption" color="rgba(255,255,255,0.72)" numberOfLines={1}>
-                {entry.totalLabel} · {entry.itemCount} {itemWord}
-                {entry.previewLabel ? ` · ${entry.previewLabel}` : ""}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.cta}>
-            <Text variant="bodyStrong" color={colors.primary}>
-              {ctaLabel}
-            </Text>
-            <Icon name="chevron-forward" size={18} color={colors.primary} />
-          </View>
-        </Pressable>
-
-        <Pressable
-          accessibilityRole="button"
           accessibilityLabel={`Clear bag for ${entry.salonName}`}
           hitSlop={8}
           onPress={entry.onClear}
           style={({ pressed }) => [styles.clearBtn, pressed && styles.pressed]}
         >
-          <Icon name="close" size={18} color={colors.primaryFg} />
+          <Icon name="close" size={16} color="#ffffff" />
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${ctaLabel} for ${entry.salonName}, ${entry.itemCount} ${itemWord}, ${entry.totalLabel}`}
+          onPress={entry.onPress}
+          style={({ pressed }) => [styles.main, pressed && styles.pressed]}
+        >
+          {thumbs.length > 0 ? (
+            <View style={styles.thumbs}>
+              {thumbs.map((uri, index) => (
+                <Image
+                  key={`${entry.salonId}-${uri}-${index}`}
+                  source={{ uri }}
+                  style={[
+                    styles.thumb,
+                    {
+                      marginLeft: index === 0 ? 0 : -10,
+                      zIndex: thumbs.length - index,
+                    },
+                  ]}
+                  contentFit="cover"
+                />
+              ))}
+            </View>
+          ) : null}
+          <View style={styles.copy}>
+            <Text style={styles.total} numberOfLines={1}>
+              {entry.totalLabel}
+              <Text style={styles.name}>{` · ${entry.salonName}`}</Text>
+            </Text>
+            <Text style={styles.sub} numberOfLines={1}>
+              {entry.itemCount} {itemWord}
+              {entry.previewLabel ? ` · ${entry.previewLabel}` : ""}
+            </Text>
+          </View>
+
+          <View style={styles.cta}>
+            <Text style={styles.ctaText} numberOfLines={1}>
+              {ctaLabel} →
+            </Text>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -120,8 +113,8 @@ export function CartStrip({ entries, bottomOffset = 0, aboveTabBar = false }: Pr
   const { width: windowWidth } = useWindowDimensions()
   const [page, setPage] = useState(0)
   const sliderRef = useRef<ScrollViewInstance>(null)
-  const sidePad = spacing.lg
-  const gap = spacing.sm
+  const sidePad = 14
+  const gap = 8
   const slideWidth =
     entries.length > 1 ? windowWidth - sidePad * 2 - 28 : windowWidth - sidePad * 2
 
@@ -138,7 +131,7 @@ export function CartStrip({ entries, bottomOffset = 0, aboveTabBar = false }: Pr
       style={[
         styles.wrap,
         {
-          paddingBottom: aboveTabBar ? tabBarTop + spacing.sm : Math.max(insets.bottom, spacing.md) + bottomOffset,
+          paddingBottom: aboveTabBar ? tabBarTop + 8 : Math.max(insets.bottom, 12) + bottomOffset,
         },
       ]}
     >
@@ -185,88 +178,97 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingHorizontal: 14,
+    paddingTop: 8,
   },
   slide: {},
   bar: {
-    minHeight: 64,
+    height: 64,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    borderRadius: radii.xl,
-    backgroundColor: colors.hero,
-    shadowColor: "#000",
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    gap: 10,
+    paddingLeft: 10,
+    paddingRight: 8,
+    borderRadius: 22,
+    backgroundColor: "#111111",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.25,
+        shadowRadius: 18,
+        shadowOffset: { width: 0, height: 10 },
+      },
+      default: { elevation: 10 },
+    }),
   },
   main: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
+    gap: 10,
     minWidth: 0,
   },
   pressed: {
     opacity: 0.88,
-  },
-  left: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minWidth: 0,
   },
   thumbs: {
     flexDirection: "row",
     alignItems: "center",
   },
   thumb: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.sm,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     borderWidth: 2,
-    borderColor: "#1C1C1C",
-    backgroundColor: colors.muted,
-  },
-  countBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.sm,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
+    borderColor: "#111111",
+    backgroundColor: "#2b2b2b",
   },
   copy: {
     flex: 1,
     gap: 2,
     minWidth: 0,
   },
+  total: {
+    fontFamily: fontFamily.bold,
+    fontSize: 15,
+    lineHeight: 19,
+    color: "#ffffff",
+  },
+  name: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: "#d4d4d4",
+  },
+  sub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#d4d4d4",
+  },
   cta: {
-    flexDirection: "row",
+    height: 48,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    backgroundColor: "#ffffff",
     alignItems: "center",
-    gap: 2,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
+    justifyContent: "center",
+  },
+  ctaText: {
+    fontFamily: fontFamily.bold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: "#111111",
   },
   clearBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.pill,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.14)",
   },
   dots: {
-    marginTop: spacing.sm,
+    marginTop: 8,
     flexDirection: "row",
     justifyContent: "center",
     gap: 6,
@@ -274,11 +276,11 @@ const styles = StyleSheet.create({
   dot: {
     width: 6,
     height: 6,
-    borderRadius: radii.pill,
+    borderRadius: 3,
     backgroundColor: "rgba(0,0,0,0.2)",
   },
   dotActive: {
-    backgroundColor: colors.primary,
-    width: 14,
+    backgroundColor: "#111111",
+    width: 16,
   },
 })

@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useSheetAnimation } from "@/components/ui/useSheetAnimation"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily, radii, spacing } from "@/theme/tokens"
 
 type Props = {
   visible: boolean
@@ -61,7 +61,7 @@ function CloseButton({ onPress }: { onPress: () => void }) {
       accessibilityLabel="Close"
       style={styles.closeBtn}
     >
-      <Icon name="close" size={22} color={colors.text} />
+      <Icon name="close" size={18} color="#111111" />
     </Pressable>
   )
 }
@@ -325,7 +325,7 @@ export function BottomSheet({
               renderHeader(finishClose)
             ) : !searchMode ? (
               <View style={styles.header}>
-                <Text variant="heading" style={styles.title}>
+                <Text style={styles.title} accessibilityRole="header" numberOfLines={2}>
                   {title}
                 </Text>
                 {dismissible ? <CloseButton onPress={finishClose} /> : null}
@@ -384,12 +384,12 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: colors.overlay,
+    backgroundColor: "rgba(17, 17, 17, 0.32)",
   },
   sheet: {
-    backgroundColor: colors.bg,
-    borderTopLeftRadius: radii.xl,
-    borderTopRightRadius: radii.xl,
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
   },
@@ -404,9 +404,9 @@ const styles = StyleSheet.create({
   },
   handle: {
     width: 40,
-    height: 4,
+    height: 5,
     borderRadius: radii.pill,
-    backgroundColor: colors.sand,
+    backgroundColor: "#e3e3e3",
   },
   header: {
     flexDirection: "row",
@@ -417,6 +417,11 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+    color: "#111111",
   },
   stickyHeader: {
     marginBottom: spacing.md,
@@ -431,12 +436,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.muted,
+    backgroundColor: "#f3f3f3",
   },
   body: {
     flexGrow: 0,
@@ -455,7 +460,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
   },
 })

@@ -44,6 +44,8 @@ type Props = {
   dismissible?: boolean
   /** Ask first: closing gestures call this and the sheet stays open until the parent closes it. */
   confirmClose?: () => void
+  /** Replaces the default title row (still inside the draggable chrome). Gets the sheet's close handler. */
+  renderHeader?: (close: () => void) => ReactNode
 }
 
 const WINDOW_HEIGHT = Dimensions.get("window").height
@@ -78,6 +80,7 @@ export function BottomSheet({
   scroll = true,
   compact = false,
   contentKey,
+  renderHeader,
 }: Props) {
   const insets = useSafeAreaInsets()
   const [keyboardHeight, setKeyboardHeight] = useState(0)
@@ -318,7 +321,9 @@ export function BottomSheet({
               <View style={styles.handle} />
             </View>
 
-            {!searchMode ? (
+            {!searchMode && renderHeader ? (
+              renderHeader(finishClose)
+            ) : !searchMode ? (
               <View style={styles.header}>
                 <Text variant="heading" style={styles.title}>
                   {title}

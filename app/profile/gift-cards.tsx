@@ -2,21 +2,33 @@ import { useFocusEffect, useRouter } from "expo-router"
 import { useCallback, useState } from "react"
 import { Linking, Pressable, StyleSheet, View } from "react-native"
 
-import { Button } from "@/components/ui/Button"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
-import { ProfileBlockSkeleton } from "@/components/ui/Skeleton"
+import { GradientFill } from "@/components/home/GradientFill"
+import {
+  Card,
+  Field,
+  HEADER_TINTS,
+  MUTED,
+  PrimaryPill,
+  ProfileSubScreen,
+  SectionLabel,
+  StatusPill,
+  type PillTone,
+} from "@/components/profile/ProfileScreenParts"
+import { PACKAGE_PASTELS, pastels, sp, ui } from "@/components/salon-page/theme"
+import { Icon } from "@/components/ui/Icon"
+import { SkeletonBone } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
 import { CRM_URL } from "@/lib/config"
 import { formatRupees } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
 import { createGiftCard, fetchGiftCards, type GiftCardSummary } from "@/lib/wallet-api"
-import { colors, radii, spacing, status as tint } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 const AMOUNTS = [500, 1000, 2000, 5000]
 const MIN = 500
 const MAX = 10000
+const GREY_CARD = ["#f6f6f6", "#e9e9e9"]
 
 function payUrl(token: string) {
   return `${CRM_URL}/pay/gift/${encodeURIComponent(token)}`
@@ -26,11 +38,11 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
 }
 
-const STATUS: Record<GiftCardSummary["status"], { label: string; fg: string; bg: string }> = {
-  pending_payment: { label: "Not paid yet", fg: tint.warnFg, bg: tint.warnBg },
-  active: { label: "Active", fg: tint.successFg, bg: tint.successBg },
-  used: { label: "Used", fg: colors.textMuted, bg: colors.muted },
-  expired: { label: "Expired", fg: colors.textMuted, bg: colors.muted },
+const STATUS: Record<GiftCardSummary["status"], { label: string; tone: PillTone }> = {
+  pending_payment: { label: "Not paid yet", tone: "peach" },
+  active: { label: "Active", tone: "green" },
+  used: { label: "Used", tone: "grey" },
+  expired: { label: "Expired", tone: "grey" },
 }
 
 export default function GiftCardsScreen() {
@@ -93,32 +105,83 @@ export default function GiftCardsScreen() {
     }
   }
 
+  const hero = (
+    <View style={styles.hero}>
+      <GradientFill colors={pastels.lavender.gradient} angle={150} />
+      <View style={styles.heroText}>
+        <Text style={styles.heroTitle}>Give a beauty treat</Text>
+        <Text style={styles.heroSubtitle}>
+          It goes straight into their Glammzo wallet. They can use it at any salon or artist for 12 months.
+        </Text>
+      </View>
+      <View style={styles.heroIcon} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Icon name="gift-outline" size={30} color={pastels.lavender.ink} />
+      </View>
+    </View>
+  )
+
   if (loading) {
     return (
-      <Screen scroll>
-        <ProfileBlockSkeleton />
-      </Screen>
+      <ProfileSubScreen title="Gift cards" tint={HEADER_TINTS.giftCards}>
+        <View style={styles.skeleton} accessibilityLabel="Loading gift cards">
+          <SkeletonBone height={110} radius={16} />
+          <SkeletonBone width={110} height={12} style={{ marginTop: 12 }} />
+          <SkeletonBone height={360} radius={16} />
+        </View>
+      </ProfileSubScreen>
     )
   }
 
   return (
-    <Screen scroll keyboardAvoiding contentStyle={styles.screen}>
-      <View style={styles.hero}>
-        <Text variant="label" color={colors.accent}>
-          Gift cards
-        </Text>
-        <Text variant="title" color={colors.primaryFg}>
-          Give a beauty treat
-        </Text>
-        <Text variant="caption" color={colors.accent}>
-          It goes straight into their Glammzo wallet. They can use it at any salon or artist for 12 months.
-        </Text>
-      </View>
+    <ProfileSubScreen title="Gift cards" tint={HEADER_TINTS.giftCards} hero={hero} keyboard>
+      {cards.length > 0 ? (
+        <>
+          <SectionLabel first>Your gift cards</SectionLabel>
+          <View style={styles.cards}>
+            {cards.map((card, index) => {
+              const status = STATUS[card.status]
+              const faded = card.status === "used" || card.status === "expired"
+              const pastel = PACKAGE_PASTELS[index % PACKAGE_PASTELS.length]!
+              const who = card.direction === "sent" ? `To ${card.otherName || `+91 ${card.otherPhone}`}` : "Received"
+              const detail =
+                card.status === "active" && card.expiresAt
+                  ? `${formatRupees(card.remainingRupees)} left · valid until ${formatDate(card.expiresAt)}`
+                  : formatDate(card.createdAt)
+              return (
+                <View key={card.id} style={styles.giftCard}>
+                  <GradientFill colors={faded ? GREY_CARD : pastel.gradient} angle={150} />
+                  <View style={styles.giftTop}>
+                    <Text style={styles.giftWho} numberOfLines={1}>
+                      {who}
+                    </Text>
+                    <StatusPill tone={status.tone} label={status.label} />
+                  </View>
+                  <Text style={styles.giftAmount}>{formatRupees(card.amountRupees)}</Text>
+                  <View style={styles.giftBottom}>
+                    <Text style={styles.giftDetail} numberOfLines={2}>
+                      {detail}
+                    </Text>
+                    {card.status === "pending_payment" && card.token ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Pay ${formatRupees(card.amountRupees)} for this gift card`}
+                        onPress={() => void Linking.openURL(payUrl(card.token!))}
+                        style={({ pressed }) => [ui.blackPill, styles.payPill, pressed && ui.pressed]}
+                      >
+                        <Text style={ui.blackPillText}>Pay</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+        </>
+      ) : null}
 
-      <View style={styles.card}>
-        <Text variant="label" muted>
-          Amount
-        </Text>
+      <SectionLabel first={cards.length === 0}>Send a gift card</SectionLabel>
+      <Card>
+        <Text style={styles.fieldLabel}>Amount</Text>
         <View style={styles.amounts}>
           {AMOUNTS.map((value) => {
             const active = !custom.trim() && amount === value
@@ -127,20 +190,18 @@ export default function GiftCardsScreen() {
                 key={value}
                 accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                style={[styles.amount, active && styles.amountActive]}
+                style={({ pressed }) => [ui.chip, styles.amount, active && ui.chipActive, pressed && ui.pressed]}
                 onPress={() => {
                   setAmount(value)
                   setCustom("")
                 }}
               >
-                <Text variant="bodyStrong" color={active ? colors.primaryFg : colors.text}>
-                  {formatRupees(value)}
-                </Text>
+                <Text style={[ui.chipText, active && ui.chipTextActive]}>{formatRupees(value)}</Text>
               </Pressable>
             )
           })}
         </View>
-        <Input
+        <Field
           label="Or another amount (optional)"
           value={custom}
           onChangeText={setCustom}
@@ -148,7 +209,7 @@ export default function GiftCardsScreen() {
           placeholder="e.g. 1500"
           error={custom.trim() && !amountOk ? `Choose from ${formatRupees(MIN)} to ${formatRupees(MAX)}.` : null}
         />
-        <Input
+        <Field
           label="Their mobile number"
           value={phone}
           onChangeText={setPhone}
@@ -158,8 +219,8 @@ export default function GiftCardsScreen() {
           hint="The money goes to the Glammzo wallet on this number."
           error={phone.trim() && digits.length >= 10 && !phoneOk ? "Enter a valid 10-digit mobile number." : null}
         />
-        <Input label="Their name (optional)" value={name} onChangeText={setName} placeholder="e.g. Priya" maxLength={60} />
-        <Input
+        <Field label="Their name (optional)" value={name} onChangeText={setName} placeholder="e.g. Priya" maxLength={60} />
+        <Field
           label="Message (optional)"
           value={message}
           onChangeText={setMessage}
@@ -167,113 +228,47 @@ export default function GiftCardsScreen() {
           maxLength={200}
           multiline
         />
-        {error ? (
-          <Text variant="caption" color={colors.destructive}>
-            {error}
-          </Text>
-        ) : null}
-        <Button
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <PrimaryPill
           label={amountOk ? `Pay ${formatRupees(chosen)}` : "Pay"}
           loading={busy}
           disabled={!amountOk || !phoneOk}
           onPress={() => void buy()}
         />
-        <Text variant="caption" muted>
-          You&apos;ll pay on Glammzo&apos;s secure page (UPI, card or net banking). Gift cards can&apos;t be refunded once paid.
+        <Text style={styles.note}>
+          You&apos;ll pay on Glammzo&apos;s secure page (UPI, card or net banking). Gift cards can&apos;t be refunded once
+          paid.
         </Text>
-      </View>
-
-      {cards.length > 0 ? (
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Your gift cards
-          </Text>
-          {cards.map((card) => {
-            const tone = STATUS[card.status]
-            const who = card.direction === "sent" ? `To ${card.otherName || `+91 ${card.otherPhone}`}` : "Received"
-            return (
-              <View key={card.id} style={styles.row}>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="bodyStrong">
-                    {formatRupees(card.amountRupees)} · {who}
-                  </Text>
-                  <Text variant="caption" muted>
-                    {card.status === "active" && card.expiresAt
-                      ? `${formatRupees(card.remainingRupees)} left · valid until ${formatDate(card.expiresAt)}`
-                      : formatDate(card.createdAt)}
-                  </Text>
-                </View>
-                {card.status === "pending_payment" && card.token ? (
-                  <Button label="Pay" variant="secondary" style={styles.payBtn} onPress={() => void Linking.openURL(payUrl(card.token!))} />
-                ) : (
-                  <View style={[styles.badge, { backgroundColor: tone.bg }]}>
-                    <Text variant="caption" color={tone.fg}>
-                      {tone.label}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )
-          })}
-        </View>
-      ) : null}
-    </Screen>
+      </Card>
+    </ProfileSubScreen>
   )
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    gap: spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-  hero: {
-    backgroundColor: colors.hero,
-    borderRadius: radii.xl,
-    padding: spacing.xl,
-    gap: spacing.sm,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.md,
-  },
-  amounts: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  amount: {
-    flexGrow: 1,
-    minWidth: "22%",
-    minHeight: 48,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
+  skeleton: { gap: 12 },
+  hero: { borderRadius: 16, overflow: "hidden", padding: 18, flexDirection: "row", alignItems: "center", gap: 14 },
+  heroText: { flex: 1, minWidth: 0, gap: 4 },
+  heroTitle: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, color: sp.text },
+  heroSubtitle: { fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: pastels.lavender.ink },
+  heroIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
-  amountActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  badge: {
-    borderRadius: radii.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  payBtn: {
-    minHeight: 40,
-    paddingHorizontal: spacing.lg,
-  },
+  cards: { gap: 12 },
+  giftCard: { borderRadius: 16, overflow: "hidden", padding: 16, gap: 6 },
+  giftTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  giftWho: { flex: 1, fontFamily: fontFamily.semibold, fontSize: 14, lineHeight: 18, color: sp.text },
+  giftAmount: { fontFamily: fontFamily.bold, fontSize: 28, lineHeight: 34, color: sp.text },
+  giftBottom: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  giftDetail: { flex: 1, fontFamily: fontFamily.regular, fontSize: 13, lineHeight: 18, color: sp.secondary },
+  payPill: { paddingHorizontal: 18 },
+  fieldLabel: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 17, color: sp.text, marginBottom: -6 },
+  amounts: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  amount: { height: 36, flexGrow: 1, minWidth: "22%" },
+  error: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#c0392b" },
+  note: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: MUTED },
 })

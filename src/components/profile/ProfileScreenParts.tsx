@@ -2,6 +2,8 @@ import { Stack, useRouter } from "expo-router"
 import { useState, type ReactElement, type ReactNode } from "react"
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -59,13 +61,16 @@ export function ProfileSubScreen({
   }
 
   return (
-    <View style={styles.page}>
+    <KeyboardAvoidingView
+      style={styles.page}
+      behavior={keyboard && Platform.OS === "ios" ? "padding" : undefined}
+      enabled={!!keyboard}
+    >
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={keyboard ? "interactive" : "none"}
-        automaticallyAdjustKeyboardInsets={keyboard}
         showsVerticalScrollIndicator={false}
         refreshControl={refreshControl}
       >
@@ -96,7 +101,7 @@ export function ProfileSubScreen({
         </View>
         <View style={styles.body}>{children}</View>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   )
 }
 

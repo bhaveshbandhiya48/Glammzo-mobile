@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ActivityIndicator, AppState, Linking, Pressable, StyleSheet, View } from "react-native"
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { BankIcon, FALLBACK_EMAIL, formatLeft, UpiIcon } from "@/components/payments/AdvancePaymentSheet"
@@ -29,7 +29,7 @@ import {
 } from "@/lib/pay-method-memory"
 import { formatRupees } from "@/lib/service-pricing"
 import { getConsumerProfile } from "@/lib/user"
-import { colors, radii, spacing, status as statusColors } from "@/theme/tokens"
+import { colors, fontFamily } from "@/theme/tokens"
 
 type Props = {
   amountRupees: number
@@ -192,20 +192,24 @@ export function OneTapPayBar({ amountRupees, reserve, onPaid, disabledReason, er
 
   return (
     <>
-      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
+      <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {left != null && !expired ? (
+          <View style={styles.hold} accessibilityLiveRegion="polite">
+            <Icon name="time-outline" size={13} color={PEACH_INK} />
+            <Text style={styles.holdText}>Slot held for {formatLeft(left)}</Text>
+          </View>
+        ) : null}
         {notice ? (
-          <Text variant="caption" style={styles.notice} accessibilityLiveRegion="polite">
+          <Text style={styles.notice} accessibilityLiveRegion="polite">
             {notice}
           </Text>
         ) : null}
         {message ? (
-          <Text variant="caption" color={statusColors.dangerFg} accessibilityLiveRegion="polite">
+          <Text style={styles.error} accessibilityLiveRegion="polite">
             {message}
           </Text>
         ) : disabledReason ? (
-          <Text variant="caption" muted>
-            {disabledReason}
-          </Text>
+          <Text style={styles.reason}>{disabledReason}</Text>
         ) : null}
 
         <View style={styles.row}>
@@ -252,17 +256,15 @@ export function OneTapPayBar({ amountRupees, reserve, onPaid, disabledReason, er
             ) : (
               <View>
                 <Text style={styles.payAmount}>{formatRupees(amountRupees)}</Text>
-                <Text style={styles.paySub}>
-                  {left != null && !expired ? `SLOT HELD ${formatLeft(left)}` : "ADVANCE"}
-                </Text>
+                <Text style={styles.paySub}>ADVANCE</Text>
               </View>
             )}
             {paying || !optionsReady ? (
-              <ActivityIndicator color={colors.primaryFg} />
+              <ActivityIndicator color="#ffffff" />
             ) : (
               <View style={styles.payCta}>
                 <Text style={styles.payText}>{showMethod && !selection ? formatRupees(amountRupees) : "Pay"}</Text>
-                <Icon name="chevron-forward" size={16} color={colors.primaryFg} />
+                <Icon name="chevron-forward" size={16} color="#ffffff" />
               </View>
             )}
           </Pressable>
@@ -296,59 +298,92 @@ export function OneTapPayBar({ amountRupees, reserve, onPaid, disabledReason, er
   )
 }
 
+const PEACH_INK = "#8a3524"
+
 const styles = StyleSheet.create({
   bar: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    backgroundColor: colors.card,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: "#ffffff",
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        shadowOffset: { width: 0, height: -2 },
+      },
+      default: { elevation: 12 },
+    }),
   },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing.md },
-  method: { flex: 1, minWidth: 0, minHeight: 52, justifyContent: "center", borderRadius: radii.md },
-  methodLabel: { fontSize: 11, lineHeight: 14, letterSpacing: 0.6, fontFamily: "Geist_600SemiBold", color: colors.textMuted },
-  methodRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  hold: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#fff1ec",
+  },
+  holdText: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 16, color: PEACH_INK },
+  error: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#c0392b" },
+  reason: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: "#595959" },
+  row: { flexDirection: "row", alignItems: "center", gap: 12 },
+  method: { flex: 1, minWidth: 0, minHeight: 52, justifyContent: "center" },
+  methodLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1.5,
+    fontFamily: fontFamily.semibold,
+    color: "#4b5563",
+  },
+  methodRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
   methodIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
   },
-  methodName: { flexShrink: 1 },
+  methodName: { flexShrink: 1, fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: "#111111" },
   pressed: { opacity: 0.6 },
   pay: {
     flexBasis: 176,
     flexGrow: 0,
-    minHeight: 56,
-    borderRadius: radii.md,
-    backgroundColor: colors.primary,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: "#111111",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
+    paddingHorizontal: 20,
+    gap: 8,
   },
   payWide: { flexGrow: 1, flexBasis: "auto" },
-  payDisabled: { opacity: 0.45 },
-  payPressed: { backgroundColor: colors.primaryPressed },
-  payAmount: { fontSize: 16, lineHeight: 20, fontFamily: "Geist_700Bold", color: colors.primaryFg },
-  paySub: { fontSize: 10, lineHeight: 13, letterSpacing: 0.6, color: "rgba(255,255,255,0.75)" },
+  payDisabled: { backgroundColor: "#d4d4d4" },
+  payPressed: { backgroundColor: "#2b2b2b" },
+  payAmount: { fontSize: 16, lineHeight: 20, fontFamily: fontFamily.bold, color: "#ffffff" },
+  paySub: { fontSize: 10, lineHeight: 13, letterSpacing: 0.8, fontFamily: fontFamily.medium, color: "rgba(255,255,255,0.75)" },
   payCta: { flexDirection: "row", alignItems: "center", gap: 2 },
-  payText: { fontSize: 16, lineHeight: 20, fontFamily: "Geist_600SemiBold", color: colors.primaryFg },
+  payText: { fontSize: 16, lineHeight: 20, fontFamily: fontFamily.semibold, color: "#ffffff" },
   notice: {
-    backgroundColor: statusColors.infoBg,
-    color: statusColors.infoFg,
-    borderRadius: radii.md,
-    padding: spacing.sm,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: PEACH_INK,
+    backgroundColor: "#fff1ec",
+    borderRadius: 12,
+    padding: 10,
   },
 })

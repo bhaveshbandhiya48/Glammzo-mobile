@@ -94,6 +94,9 @@ function RootNavigator() {
         <Stack.Screen name="salons/index" options={{ title: "Salons" }} />
         <Stack.Screen name="artist/[slug]" options={{ headerShown: false }} />
         <Stack.Screen name="artist/book/[slug]" options={{ title: "Booking" }} />
+        <Stack.Screen name="requests/index" options={{ headerShown: false }} />
+        <Stack.Screen name="requests/new" options={{ headerShown: false }} />
+        <Stack.Screen name="requests/[id]" options={{ headerShown: false }} />
         <Stack.Screen
           name="pay/advance/[token]"
           options={{ headerShown: false, presentation: "transparentModal", animation: "none" }}

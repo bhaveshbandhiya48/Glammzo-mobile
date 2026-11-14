@@ -17,6 +17,7 @@ import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
 import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { OneTapPayBar } from "@/components/payments/OneTapPayBar"
+import { sp } from "@/components/salon-page/theme"
 import { Button } from "@/components/ui/Button"
 import { Icon } from "@/components/ui/Icon"
 import { Input } from "@/components/ui/Input"
@@ -35,6 +36,7 @@ import {
 } from "@/lib/artists-api"
 import { useCart } from "@/context/CartContext"
 import { ApiError } from "@/lib/api"
+import { createAdvanceOrder } from "@/lib/advance-payment"
 import { artistCartId } from "@/lib/artist-cart"
 import { fetchMe } from "@/lib/auth-api"
 import {
@@ -97,12 +99,24 @@ export default function ArtistBookScreen() {
     serviceId: serviceIdParam,
     serviceIds: serviceIdsParam,
     promo: promoParam,
+    leadResponseId: leadResponseParam,
+    quoteRupees: quoteRupeesParam,
+    leadCategory: leadCategoryParam,
   } = useLocalSearchParams<{
     slug?: string
     serviceId?: string
     serviceIds?: string
     promo?: string
+    /** Accepted Get quotes response: book at the artist's quoted price. */
+    leadResponseId?: string
+    quoteRupees?: string
+    leadCategory?: string
   }>()
+  const leadResponseId = typeof leadResponseParam === "string" ? leadResponseParam.trim() : ""
+  const quotedRupees = Math.round(Number(quoteRupeesParam) || 0)
+  const leadCategory = typeof leadCategoryParam === "string" ? leadCategoryParam.trim() : ""
+  /** Quote booking: the price is the artist's quote; services only set the duration. */
+  const quoteMode = Boolean(leadResponseId) && quotedRupees > 0
   const safeSlug = (slug ?? "").trim().toLowerCase()
   const cart = useCart()
   const initialPromo =
@@ -136,6 +150,9 @@ export default function ArtistBookScreen() {
   /** Services in the held booking, dropped from the artist's cart once it is paid. */
   const paidServiceIds = useRef<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  /** Quote booking held on the server while its advance is paid; amounts come from the server. */
+  const [heldQuote, setHeldQuote] = useState<{ token: string; advance: number; payable: number } | null>(null)
+  const heldQuotePayable = useRef<number | null>(null)
 
   const [promoInput, setPromoInput] = useState(initialPromo)
   const [promoError, setPromoError] = useState<string | null>(null)
@@ -172,12 +189,20 @@ export default function ArtistBookScreen() {
 
   const loginNext = useMemo(() => {
     const base = `/artist/book/${safeSlug}`
+    if (quoteMode) {
+      const q = new URLSearchParams({
+        leadResponseId,
+        quoteRupees: String(quotedRupees),
+        ...(leadCategory ? { leadCategory } : {}),
+      })
+      return `${base}?${q.toString()}`
+    }
     const multi =
       typeof serviceIdsParam === "string" ? serviceIdsParam.trim() : ""
     if (multi) return `${base}?serviceIds=${encodeURIComponent(multi)}`
     const sid = typeof serviceIdParam === "string" ? serviceIdParam.trim() : ""
     return sid ? `${base}?serviceId=${encodeURIComponent(sid)}` : base
-  }, [safeSlug, serviceIdParam, serviceIdsParam])
+  }, [safeSlug, serviceIdParam, serviceIdsParam, quoteMode, leadResponseId, quotedRupees, leadCategory])
 
   useEffect(() => {
     if (!safeSlug) {
@@ -213,7 +238,19 @@ export default function ArtistBookScreen() {
               : []
           const wanted = fromMulti.length > 0 ? fromMulti : fromSingle
           const valid = wanted.filter((id) => data.services.some((s) => s.id === id))
-          const seed = valid.length > 0 ? valid : data.services[0] ? [data.services[0].id] : []
+          // Quote booking: one service for the duration, matched to the request's category if possible.
+          const quoteMatch = leadCategory
+            ? data.services.find((s) => s.category === leadCategory)
+            : undefined
+          const seed = quoteMode
+            ? quoteMatch
+              ? [quoteMatch.id]
+              : []
+            : valid.length > 0
+              ? valid
+              : data.services[0]
+                ? [data.services[0].id]
+                : []
           setSelectedIds(seed)
           const seedServices = data.services.filter((s) => seed.includes(s.id))
           const allHome =
@@ -360,6 +397,11 @@ export default function ArtistBookScreen() {
   }, [artist, canStudio, canHome, locationType])
 
   function toggleService(service: PublicArtistService) {
+    if (quoteMode) {
+      setSelectedIds([service.id])
+      setSlot(null)
+      return
+    }
     setSelectedIds((prev) => {
       if (prev.includes(service.id)) {
         if (prev.length === 1) return prev
@@ -434,8 +476,9 @@ export default function ArtistBookScreen() {
   }
 
   const loyaltyAvailable = canApplyLoyalty(loyalty)
-  const quoteTotal = quote ? Math.round(quote.total) : 0
-  const serviceSubtotal = quote ? Math.round(quote.servicePrice) : 0
+  // Quote booking: the CRM books at the quoted price (no travel fee, no offer codes).
+  const quoteTotal = quoteMode ? quotedRupees : quote ? Math.round(quote.total) : 0
+  const serviceSubtotal = quoteMode ? quotedRupees : quote ? Math.round(quote.servicePrice) : 0
   const promoDiscount = Math.min(
     Math.max(0, serviceSubtotal),
     Math.max(0, Math.round(appliedDiscount?.discountAmount ?? 0)),
@@ -450,7 +493,10 @@ export default function ArtistBookScreen() {
     : 0
   const payableTotal = Math.max(0, amountBeforeWallet - walletCredit)
   // Advance comes from the artist's quote; never more than what is left to pay.
-  const advanceDue = Math.min(quote?.advance ?? 0, payableTotal)
+  // Quote booking: the advance is only known once the server holds the booking.
+  const advanceDue = quoteMode
+    ? (heldQuote?.advance ?? 0)
+    : Math.min(quote?.advance ?? 0, payableTotal)
   const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
 
   async function applyPromo() {
@@ -531,8 +577,34 @@ export default function ArtistBookScreen() {
     }
     setError(null)
     // An advance is due: the one-tap pay bar books and pays in one go.
-    if (advanceDue > 0) return
+    if (advanceDue > 0 || heldQuote) return
+    // Quote booking already held, but its advance didn't load: only retry that.
+    const heldToken = paidBooking.current?.payToken
+    if (quoteMode && heldToken) {
+      setBusy("book")
+      await loadHeldQuoteAdvance(heldToken)
+      setBusy(null)
+      return
+    }
     void createBooking()
+  }
+
+  /** Quote booking: what the server will charge for the held booking's advance. */
+  async function loadHeldQuoteAdvance(token: string) {
+    try {
+      const order = await createAdvanceOrder(token)
+      setHeldQuote({
+        token,
+        advance: Math.round(order.amountPaise / 100),
+        payable: heldQuotePayable.current ?? quotedRupees,
+      })
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message
+          ? `${err.message} Tap Confirm to try again.`
+          : "Couldn't load the advance. Tap Confirm to try again.",
+      )
+    }
   }
 
   /** Creates the booking. Returns its token while the advance is still due, otherwise null. */
@@ -554,9 +626,10 @@ export default function ArtistBookScreen() {
         lat: pin?.lat,
         lng: pin?.lng,
         fullName: name.trim(),
-        promoCode: appliedPromoCode || undefined,
+        promoCode: quoteMode ? undefined : appliedPromoCode || undefined,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
+        leadResponseId: quoteMode ? leadResponseId : undefined,
       })
       const dateKey = new Date(res.booking.startsAt).toLocaleDateString("en-CA", {
         timeZone: timezone,
@@ -579,6 +652,10 @@ export default function ArtistBookScreen() {
       if (res.awaitingPayment) {
         paidBooking.current = { ...confirmation, payToken: res.booking.token }
         paidServiceIds.current = bookedIds
+        if (quoteMode) {
+          heldQuotePayable.current = Math.round(res.payable ?? quotedRupees)
+          await loadHeldQuoteAdvance(res.booking.token)
+        }
         return res.booking.token
       }
       clearBookedFromCart(artist.slug, bookedIds)
@@ -695,13 +772,17 @@ export default function ArtistBookScreen() {
     locationType === "client_home"
       ? "Artist comes to your home"
       : "At the artist's studio"
-  const travelFee = quote?.travelFee ?? 0
+  const travelFee = quoteMode ? 0 : quote?.travelFee ?? 0
+  const totalDue = heldQuote ? heldQuote.payable : payableTotal
   // One price in the bottom bar; the full breakdown lives on the review step.
-  const barPrice =
-    quote != null
+  const barPrice = quoteMode
+    ? formatRupees(quotedRupees)
+    : quote != null
       ? formatRupees(quote.total)
       : `${needsHome ? "From " : ""}${formatRupees(servicesSubtotal)}`
-  const barNote = awaitingPin
+  const barNote = quoteMode
+    ? "Your quoted price"
+    : awaitingPin
     ? "Add location for final price"
     : quote && quote.advance > 0
       ? `${formatRupees(quote.advance)} advance now`
@@ -722,6 +803,15 @@ export default function ArtistBookScreen() {
               ? "Step 2 of 3 · When and where"
               : "Step 3 of 3 · Review and confirm"}
         </Text>
+
+        {quoteMode ? (
+          <View style={styles.quoteBanner} accessibilityRole="summary">
+            <Icon name="pricetag-outline" size={18} color={sp.peachInk} />
+            <Text variant="bodyStrong" color={sp.peachInk} style={styles.quoteBannerText}>
+              Booking at your quoted price {formatRupees(quotedRupees)}
+            </Text>
+          </View>
+        ) : null}
 
         {step === 0 ? (
           <>
@@ -760,8 +850,9 @@ export default function ArtistBookScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHead}>
                 <Text variant="label" muted>
-                  Services
+                  {quoteMode ? "Pick a service" : "Services"}
                 </Text>
+                {quoteMode ? null : (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() =>
@@ -775,14 +866,22 @@ export default function ArtistBookScreen() {
                     Edit
                   </Text>
                 </Pressable>
+                )}
               </View>
+              {quoteMode ? (
+                <Text variant="caption" muted>
+                  {selectedIds.length === 0
+                    ? "Pick the service closest to what you asked for. It sets how long the visit takes; you pay the quoted price."
+                    : "This sets how long the visit takes. You pay the quoted price, not the list price."}
+                </Text>
+              ) : null}
               <View style={styles.serviceList}>
-                {selectedServices.map((s, index) => (
+                {(quoteMode ? artist.services : selectedServices).map((s, index, list) => (
                   <ArtistServiceRow
                     key={s.id}
                     service={s}
-                    selected
-                    isLast={index === selectedServices.length - 1}
+                    selected={selectedIds.includes(s.id)}
+                    isLast={index === list.length - 1}
                     pricingLocation="studio"
                     onOpenDetail={() => setDetailService(s)}
                     onToggle={() => toggleService(s)}
@@ -976,6 +1075,7 @@ export default function ArtistBookScreen() {
               </Text>
             </View>
 
+            {quoteMode ? null : (
             <View style={[styles.card, styles.rewardsCard]}>
               <Text variant="label" muted>
                 Promo code
@@ -1046,6 +1146,7 @@ export default function ArtistBookScreen() {
                 </Text>
               )}
             </View>
+            )}
 
             <View style={[styles.card, styles.rewardsCard]}>
               <Text variant="label" muted>
@@ -1151,8 +1252,8 @@ export default function ArtistBookScreen() {
               </Text>
               <View style={styles.summaryRow}>
                 <Text muted>
-                  Services
-                  {needsHome ? " (home rates)" : ""}
+                  {quoteMode ? "Quoted price" : "Services"}
+                  {needsHome && !quoteMode ? " (home rates)" : ""}
                 </Text>
                 <Text>{formatRupees(serviceSubtotal)}</Text>
               </View>
@@ -1193,7 +1294,7 @@ export default function ArtistBookScreen() {
               ) : null}
               <View style={[styles.summaryRow, styles.summaryTotal]}>
                 <Text variant="bodyStrong">Total</Text>
-                <Text variant="heading">{formatRupees(payableTotal)}</Text>
+                <Text variant="heading">{formatRupees(totalDue)}</Text>
               </View>
               {advanceDue > 0 ? (
                 <>
@@ -1203,12 +1304,17 @@ export default function ArtistBookScreen() {
                   </View>
                   <View style={styles.summaryRow}>
                     <Text muted>Pay the artist at your visit</Text>
-                    <Text muted>{formatRupees(payableTotal - advanceDue)}</Text>
+                    <Text muted>{formatRupees(Math.max(0, totalDue - advanceDue))}</Text>
                   </View>
                   <Text variant="caption" muted>
                     Your time is held for 15 minutes while you pay.
                   </Text>
                 </>
+              ) : quoteMode ? (
+                <Text variant="caption" muted>
+                  Pay the artist at your visit. If this artist takes an advance, you&apos;ll see it after you
+                  confirm.
+                </Text>
               ) : (
                 <Text variant="caption" muted>
                   Pay the artist at your visit.
@@ -1245,7 +1351,7 @@ export default function ArtistBookScreen() {
       {step === 2 && advanceDue > 0 ? (
         <OneTapPayBar
           amountRupees={advanceDue}
-          reserve={createBooking}
+          reserve={quoteMode ? async () => heldQuote?.token ?? null : createBooking}
           onPaid={onAdvancePaid}
           error={error}
           disabledReason={
@@ -1295,7 +1401,7 @@ export default function ArtistBookScreen() {
                     : advanceDue > 0
                       ? `Continue to pay ${formatRupees(advanceDue)}`
                       : quote
-                        ? `Confirm · ${formatRupees(payableTotal)}`
+                        ? `Confirm · ${formatRupees(totalDue)}`
                         : "Confirm booking"
             }
             loading={busy === "book" || busy === "session"}
@@ -1566,6 +1672,17 @@ const styles = StyleSheet.create({
   applyChipDisabled: {
     borderColor: colors.border,
     backgroundColor: colors.muted,
+  },
+  quoteBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    backgroundColor: sp.peachBg,
+  },
+  quoteBannerText: {
+    flex: 1,
   },
   summaryRow: {
     flexDirection: "row",

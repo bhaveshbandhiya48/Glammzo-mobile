@@ -22,6 +22,7 @@ import { salonsForTile } from "@/lib/home-salon-info"
 import { bootstrapLaunchPermissions } from "@/lib/launch-permissions"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { getServiceTile, type HomeAudience } from "@/lib/service-tiles"
+import { isGetQuotesEnabled } from "@/lib/get-quotes"
 import { DEFAULT_SAVED_LOCATION, getSavedLocation, type SavedLocation } from "@/lib/user"
 import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
 
@@ -154,6 +155,19 @@ export default function ServiceScreen() {
         {tab === "salons" ? <AudienceSwitch value={audience} onChange={setAudience} /> : null}
       </View>
 
+      {tab === "artists" && isGetQuotesEnabled() ? (
+        <Pressable
+          accessibilityRole="link"
+          hitSlop={6}
+          onPress={() =>
+            router.push({ pathname: "/requests/new", params: { category: tile.artistCategory } })
+          }
+          style={styles.quotesLink}
+        >
+          <Text style={styles.quotesLinkText}>Get quotes from artists →</Text>
+        </Pressable>
+      ) : null}
+
       {tab === "salons" ? (
         loading && salons.length === 0 ? (
           <ExploreSalonsSkeleton count={3} />
@@ -238,6 +252,17 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.lg,
+  },
+  quotesLink: {
+    alignSelf: "flex-start",
+    marginTop: -spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  quotesLinkText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    color: colors.text,
+    textDecorationLine: "underline",
   },
   empty: {
     gap: 6,

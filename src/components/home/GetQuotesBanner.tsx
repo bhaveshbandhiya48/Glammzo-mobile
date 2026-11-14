@@ -1,20 +1,64 @@
+import { useFocusEffect, useRouter } from "expo-router"
+import { useCallback, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
+import Svg, { Circle } from "react-native-svg"
 
 import { GradientFill } from "@/components/home/GradientFill"
 import { Text } from "@/components/ui/Text"
+import { isGetQuotesEnabled } from "@/lib/get-quotes"
+import { fetchLeads } from "@/lib/leads-api"
+import { getAccessToken } from "@/lib/session"
 import { fontFamily } from "@/theme/tokens"
 
-/** The quotes flow isn't built yet: Home shows this only when the flag is on. */
-export function isGetQuotesEnabled() {
-  return process.env.EXPO_PUBLIC_GET_QUOTES_ENABLED === "true"
-}
+export { isGetQuotesEnabled }
 
 const AVATAR_TINTS = ["#f6c7b8", "#d9c8ff", "#bfe6d3"]
 
-export function GetQuotesBanner({ onPress }: { onPress: () => void }) {
+type OpenRequest = { id: string; quoteCount: number }
+
+/** Home card for Get quotes. With an open request it points at its quotes instead. */
+export function GetQuotesBanner() {
+  const router = useRouter()
+  const [open, setOpen] = useState<OpenRequest | null>(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      if (!isGetQuotesEnabled()) return
+      void (async () => {
+        const token = await getAccessToken()
+        if (!token) {
+          if (active) setOpen(null)
+          return
+        }
+        try {
+          const requests = await fetchLeads()
+          const first = requests.find((r) => r.status === "open")
+          if (active) setOpen(first ? { id: first.id, quoteCount: first.quoteCount } : null)
+        } catch {
+          // Keep the default card.
+        }
+      })()
+      return () => {
+        active = false
+      }
+    }, []),
+  )
+
+  const subtitle = open
+    ? open.quoteCount > 0
+      ? `You have ${open.quoteCount} ${open.quoteCount === 1 ? "quote" : "quotes"} waiting`
+      : "Your request is open · quotes on the way"
+    : "Free · up to 5 quotes"
+  const ctaLabel = open ? "View quotes" : "Get quotes"
+
   return (
     <View style={styles.card}>
       <GradientFill colors={["#fde8e1", "#fbeff6", "#ece8fe"]} angle={120} radius={22} />
+      {/* Decorative ring tucked into the top-right corner, behind the text (title width is capped). */}
+      <Svg style={styles.ring} width={140} height={140} pointerEvents="none">
+        <Circle cx={70} cy={70} r={50} stroke="#ffffff" strokeOpacity={0.55} strokeWidth={18} fill="none" />
+      </Svg>
       <Text style={styles.eyebrow}>WEDDINGS · PARTIES · EVENTS</Text>
       <Text style={styles.title}>Let top artists come to you with a price</Text>
       <View style={styles.footer}>
@@ -27,15 +71,19 @@ export function GetQuotesBanner({ onPress }: { onPress: () => void }) {
               />
             ))}
           </View>
-          <Text style={styles.proofText}>Free · up to 5 quotes</Text>
+          <Text style={styles.proofText}>{subtitle}</Text>
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Get quotes"
-          onPress={onPress}
+          accessibilityLabel={ctaLabel}
+          onPress={() =>
+            open
+              ? router.push({ pathname: "/requests/[id]", params: { id: open.id } })
+              : router.push("/requests/new")
+          }
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
         >
-          <Text style={styles.ctaText}>Get quotes →</Text>
+          <Text style={styles.ctaText}>{ctaLabel} →</Text>
         </Pressable>
       </View>
     </View>
@@ -50,11 +98,18 @@ const styles = StyleSheet.create({
     padding: 18,
     overflow: "hidden",
   },
+  ring: {
+    position: "absolute",
+    top: -62,
+    right: -52,
+    zIndex: 0,
+  },
   eyebrow: {
     fontFamily: fontFamily.semibold,
     fontSize: 12,
     letterSpacing: 1.4,
     color: "#8a3524",
+    zIndex: 1,
   },
   title: {
     marginTop: 6,
@@ -63,7 +118,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     letterSpacing: -0.4,
     color: "#111111",
-    maxWidth: 260,
+    maxWidth: "68%",
+    zIndex: 1,
   },
   footer: {
     marginTop: 16,
@@ -71,6 +127,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
+    zIndex: 1,
   },
   proof: {
     flexDirection: "row",

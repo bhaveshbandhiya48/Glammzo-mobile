@@ -121,7 +121,7 @@ export function HomeV4({
             onPressTile={openTile}
             onSeeAll={() => setAllOpen(true)}
           />
-          {isGetQuotesEnabled() ? <GetQuotesBanner onPress={() => router.push("/artists")} /> : null}
+          {isGetQuotesEnabled() ? <GetQuotesBanner /> : null}
           <BookAgainRow bookings={bookAgain} />
           <TopRatedRow
             salons={topRated}

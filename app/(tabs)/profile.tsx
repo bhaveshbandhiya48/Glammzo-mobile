@@ -13,6 +13,7 @@ import { fetchMe } from "@/lib/auth-api"
 import { ApiError } from "@/lib/api"
 import { getAccessToken } from "@/lib/session"
 import { LOYALTY_VISITS_PER_FREE, type LoyaltySummary } from "@/lib/loyalty"
+import { isGetQuotesEnabled } from "@/lib/get-quotes"
 import { LEGAL } from "@/lib/legal"
 import { clearLocalSession, getConsumerProfile, getDisplayName } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
@@ -31,6 +32,7 @@ type HubRow = {
     | "/profile/support"
     | "/profile/refer"
     | "/profile/gift-cards"
+    | "/requests"
   url?: string
   action?: () => void
   hint?: string
@@ -42,6 +44,9 @@ const SECTIONS: { title: string; rows: HubRow[] }[] = [
     rows: [
       { label: "Your profile", href: "/profile/details", icon: "person-outline" },
       { label: "Saved salons and artists", href: "/profile/favorites", icon: "heart-outline" },
+      ...(isGetQuotesEnabled()
+        ? [{ label: "My requests", href: "/requests" as const, icon: "pricetags-outline" as const }]
+        : []),
     ],
   },
   {

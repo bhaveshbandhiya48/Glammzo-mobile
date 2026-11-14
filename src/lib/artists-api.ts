@@ -517,6 +517,8 @@ export async function createArtistBookingWithRewards(input: {
   promoCode?: string
   useWallet?: boolean
   useFreeService?: boolean
+  /** Accepted Get quotes response: the server books at the quoted price. */
+  leadResponseId?: string
 }) {
   return apiFetch<{
     ok: boolean

@@ -8,8 +8,9 @@ import {
   type TextInputInstance,
 } from "react-native"
 
+import { auth } from "@/components/auth/AuthUi"
 import { Text } from "@/components/ui/Text"
-import { colors, radii, spacing, typography } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Props = {
   value: string
@@ -18,6 +19,8 @@ type Props = {
   autoFocus?: boolean
   accessibilityLabel?: string
   textContentType?: TextInputProps["textContentType"]
+  /** Red borders on every box (e.g. wrong code). */
+  error?: boolean
 }
 
 export function OtpInput({
@@ -27,6 +30,7 @@ export function OtpInput({
   autoFocus = false,
   accessibilityLabel = "One-time password",
   textContentType = "oneTimeCode",
+  error = false,
 }: Props) {
   const inputRef = useRef<TextInputInstance>(null)
   const digits = value.replace(/\D/g, "").slice(0, length)
@@ -55,10 +59,11 @@ export function OtpInput({
                 styles.box,
                 Boolean(char) && styles.boxFilled,
                 focused && styles.boxFocused,
+                error && styles.boxError,
               ]}
             >
               {char ? (
-                <Text variant="heading" style={styles.digit}>
+                <Text style={styles.digit}>
                   {char}
                 </Text>
               ) : focused ? (
@@ -93,39 +98,41 @@ const styles = StyleSheet.create({
   boxes: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: spacing.sm,
+    gap: 8,
   },
   box: {
     flex: 1,
-    minWidth: 44,
-    maxWidth: 56,
-    aspectRatio: 0.92,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    maxWidth: 52,
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: auth.inputBorder,
+    backgroundColor: auth.inputBg,
     alignItems: "center",
     justifyContent: "center",
   },
   boxFilled: {
-    borderColor: "#E8C4BC",
-    backgroundColor: "#F1F1F1",
+    backgroundColor: auth.white,
   },
   boxFocused: {
-    borderColor: colors.primary,
+    borderColor: auth.focus,
     borderWidth: 1.5,
+  },
+  boxError: {
+    borderColor: auth.error,
   },
   digit: {
     fontSize: 22,
     lineHeight: 28,
-    fontFamily: typography.heading.fontFamily,
+    fontFamily: fontFamily.bold,
+    color: auth.text,
     textAlign: "center",
   },
   caret: {
     width: 2,
     height: 22,
     borderRadius: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: auth.text,
   },
   // Keep focus/autofill working, but fully invisible so the system caret
   // never peeks through under the boxes.

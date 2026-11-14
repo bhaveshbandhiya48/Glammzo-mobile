@@ -14,10 +14,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context"
 
 import { NameOnboarding } from "@/components/auth/NameOnboarding"
+import {
+  AuthBackdrop,
+  AuthFooter,
+  AuthHero,
+  AuthPill,
+  AuthRoundButton,
+  auth,
+  authInput,
+  authText,
+} from "@/components/auth/AuthUi"
 import { OtpInput } from "@/components/auth/OtpInput"
 import { Logo } from "@/components/brand/Logo"
-import { Button } from "@/components/ui/Button"
-import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
@@ -27,7 +35,7 @@ import { API_URL } from "@/lib/config"
 import { LEGAL } from "@/lib/legal"
 import { registerPushTokenWithServer } from "@/lib/push"
 import { patchConsumerProfileCache, setDisplayName } from "@/lib/user"
-import { colors, radii, spacing, typography } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Step = "phone" | "otp" | "name"
 
@@ -45,6 +53,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [resendSeconds, setResendSeconds] = useState(0)
+  const [phoneFocused, setPhoneFocused] = useState(false)
   const verifyingRef = useRef(false)
   const leavingRef = useRef(false)
 
@@ -262,151 +271,172 @@ export default function LoginScreen() {
     )
   }
 
+  function changeNumber() {
+    Keyboard.dismiss()
+    setOtp("")
+    setDebugOtp(null)
+    setChallengeToken(null)
+    setError(null)
+    setResendSeconds(0)
+    setStep("phone")
+  }
+
+  const maskedPhone =
+    phoneDigits.length >= 4
+      ? `${phoneDigits.slice(0, 2)}xxx xxx${phoneDigits.slice(-2)}`
+      : phoneDigits
+  const resendClock = `${Math.floor(resendSeconds / 60)}:${String(resendSeconds % 60).padStart(2, "0")}`
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+      <AuthBackdrop />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         <View style={styles.topBar}>
-          <Pressable
-            onPress={closeLogin}
-            hitSlop={12}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            style={styles.closeBtn}
-          >
-            <Icon name="close" size={22} color={colors.text} />
-          </Pressable>
+          {step === "phone" ? (
+            <Logo size="md" />
+          ) : (
+            <AuthRoundButton
+              icon="chevron-back"
+              onPress={changeNumber}
+              disabled={loading || resending}
+              accessibilityLabel="Back to mobile number"
+            />
+          )}
+          <AuthRoundButton icon="close" onPress={closeLogin} accessibilityLabel="Close" />
         </View>
 
         <ScrollView
+          style={styles.flex}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.brand}>
-            <Logo size="lg" />
-          </View>
+          {step === "phone" ? (
+            <>
+              <AuthHero />
+              <Text style={authText.title} accessibilityRole="header">
+                Book beauty near you
+              </Text>
+              <Text style={authText.subtitle}>Log in or sign up with your mobile number.</Text>
 
-          <Text variant="title" style={styles.title}>
-            {step === "phone" ? "Log in" : "Enter OTP"}
-          </Text>
-          <Text muted style={styles.subtitle}>
-            {step === "phone"
-              ? "Enter your mobile number to continue"
-              : `We sent a code to +91 ${phoneDigits}`}
-          </Text>
-
-          <View style={styles.form}>
-            {step === "phone" ? (
-              <View style={styles.phoneRow}>
+              <View
+                style={[
+                  authInput.field,
+                  styles.phoneRow,
+                  phoneFocused && authInput.focused,
+                  error ? authInput.error : null,
+                ]}
+              >
                 <View style={styles.prefix}>
-                  <Text variant="bodyStrong">+91</Text>
+                  <Text style={authInput.text}>+91</Text>
                 </View>
+                <View style={styles.divider} />
                 <TextInput
-                  style={styles.phoneInput}
+                  style={[authInput.text, styles.phoneInput]}
                   keyboardType="phone-pad"
                   placeholder="98765 43210"
-                  placeholderTextColor={colors.textSubtle}
+                  placeholderTextColor="#8A8A8A"
                   value={phone}
                   onChangeText={setPhone}
+                  onFocus={() => setPhoneFocused(true)}
+                  onBlur={() => setPhoneFocused(false)}
                   maxLength={12}
                   textContentType="telephoneNumber"
                   accessibilityLabel="Mobile number"
                 />
               </View>
-            ) : (
-              <OtpInput
-                value={otp}
-                onChange={setOtp}
-                length={6}
-                autoFocus
-                accessibilityLabel="One-time password"
-              />
-            )}
-          </View>
+            </>
+          ) : (
+            <>
+              <Text style={[authText.titleSm, styles.otpTitle]} accessibilityRole="header">
+                Enter the code
+              </Text>
+              <Text style={authText.subtitle}>
+                Sent to +91 {maskedPhone}
+                {" · "}
+                <Text
+                  style={styles.inlineLink}
+                  onPress={loading || resending ? undefined : changeNumber}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit mobile number"
+                >
+                  Edit
+                </Text>
+              </Text>
 
+              <View style={styles.otpWrap}>
+                <OtpInput
+                  value={otp}
+                  onChange={setOtp}
+                  length={6}
+                  autoFocus
+                  error={Boolean(error)}
+                  accessibilityLabel="One-time password"
+                />
+              </View>
+
+              <View style={styles.resendRow}>
+                {resending ? (
+                  <Text style={styles.resendMuted}>Sending…</Text>
+                ) : resendSeconds > 0 ? (
+                  <Text style={styles.resendMuted}>Resend code in {resendClock}</Text>
+                ) : (
+                  <Pressable
+                    onPress={() => void handleResend()}
+                    disabled={loading}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: loading }}
+                  >
+                    <Text style={[styles.resendLink, loading && styles.resendDisabled]}>
+                      Resend code
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </>
+          )}
+
+          {error ? <Text style={authText.error}>{error}</Text> : null}
           {__DEV__ ? (
             <Text variant="caption" muted style={styles.gap}>
               API: {API_URL}
             </Text>
           ) : null}
           {__DEV__ && debugOtp && step === "otp" ? (
-            <Text variant="caption" color={colors.primary} style={styles.gap}>
+            <Text variant="caption" style={styles.gap}>
               Dev OTP: {debugOtp}
             </Text>
           ) : null}
-          {error ? (
-            <Text variant="caption" color={colors.primary} style={styles.gap}>
-              {error}
+        </ScrollView>
+
+        <AuthFooter>
+          <AuthPill
+            label={step === "phone" ? "Continue" : "Verify"}
+            accessibilityLabel={step === "phone" ? "Continue" : "Verify OTP"}
+            loading={loading}
+            disabled={step === "phone" ? !canSendCode : !canVerify || resending}
+            onPress={handleContinue}
+          />
+          {step === "phone" ? (
+            <Text style={authText.legal}>
+              By continuing, you agree to Glammzo{" "}
+              <Text style={authText.link} onPress={() => void Linking.openURL(LEGAL.termsUrl)}>
+                Terms
+              </Text>
+              {" & "}
+              <Text style={authText.link} onPress={() => void Linking.openURL(LEGAL.privacyUrl)}>
+                Privacy Policy
+              </Text>
+              .
             </Text>
           ) : null}
-
-          <View style={styles.actions}>
-            <Button
-              label={step === "phone" ? "Continue" : "Verify OTP"}
-              loading={loading}
-              disabled={
-                step === "phone" ? !canSendCode : !canVerify || resending
-              }
-              onPress={handleContinue}
-            />
-            {step === "otp" ? (
-              <>
-                <Button
-                  label={
-                    resending
-                      ? "Sending…"
-                      : resendSeconds > 0
-                        ? `Resend code in ${resendSeconds}s`
-                        : "Resend code"
-                  }
-                  variant="ghost"
-                  loading={resending}
-                  disabled={resendSeconds > 0 || loading}
-                  onPress={() => void handleResend()}
-                />
-                <Button
-                  label="Change number"
-                  variant="ghost"
-                  disabled={loading || resending}
-                  onPress={() => {
-                    Keyboard.dismiss()
-                    setOtp("")
-                    setDebugOtp(null)
-                    setChallengeToken(null)
-                    setError(null)
-                    setResendSeconds(0)
-                    setStep("phone")
-                  }}
-                />
-              </>
-            ) : (
-              <Text variant="caption" muted style={styles.terms}>
-                By continuing, you agree to Glammzo{" "}
-                <Text
-                  variant="caption"
-                  color={colors.primary}
-                  onPress={() => void Linking.openURL(LEGAL.termsUrl)}
-                >
-                  Terms
-                </Text>
-                {" & "}
-                <Text
-                  variant="caption"
-                  color={colors.primary}
-                  onPress={() => void Linking.openURL(LEGAL.privacyUrl)}
-                >
-                  Privacy Policy
-                </Text>
-                .
-              </Text>
-            )}
-          </View>
-        </ScrollView>
+        </AuthFooter>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
@@ -415,78 +445,75 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: auth.white,
   },
   flex: {
     flex: 1,
   },
   topBar: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    alignItems: "flex-end",
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.pill,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    minHeight: 48,
   },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  brand: {
-    alignItems: "center",
-    marginTop: spacing.sm,
-    marginBottom: spacing.xxl,
-  },
-  title: {
-    textAlign: "left",
-  },
-  subtitle: {
-    textAlign: "left",
-    marginTop: spacing.sm,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
   },
   gap: {
-    marginTop: spacing.sm,
-  },
-  form: {
-    marginTop: spacing.xl,
-    gap: spacing.md,
+    marginTop: 8,
   },
   phoneRow: {
+    marginTop: 24,
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 52,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     overflow: "hidden",
   },
   prefix: {
-    paddingHorizontal: spacing.lg,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.border,
-    height: "100%",
+    paddingLeft: 16,
+    paddingRight: 12,
     justifyContent: "center",
-    minHeight: 52,
+  },
+  divider: {
+    width: 1,
+    height: 24,
+    backgroundColor: auth.inputBorder,
   },
   phoneInput: {
     flex: 1,
-    paddingHorizontal: spacing.lg,
-    fontSize: 17,
-    fontFamily: typography.bodyStrong.fontFamily,
-    color: colors.text,
+    height: "100%",
+    paddingHorizontal: 12,
   },
-  actions: {
-    marginTop: spacing.lg,
-    gap: spacing.md,
+  otpTitle: {
+    marginTop: 20,
   },
-  terms: {
-    textAlign: "left",
+  inlineLink: {
+    fontFamily: fontFamily.semibold,
+    color: auth.text,
+    textDecorationLine: "underline",
+  },
+  otpWrap: {
+    marginTop: 28,
+  },
+  resendRow: {
+    marginTop: 20,
+    alignItems: "flex-start",
+  },
+  resendMuted: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    color: auth.secondary,
+  },
+  resendLink: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    color: auth.text,
+    textDecorationLine: "underline",
+  },
+  resendDisabled: {
+    color: auth.disabled,
   },
 })

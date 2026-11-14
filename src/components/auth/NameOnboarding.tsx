@@ -13,8 +13,14 @@ import {
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 
+import {
+  AuthBackdrop,
+  AuthPill,
+  auth,
+  authInput,
+  authText,
+} from "@/components/auth/AuthUi"
 import { Logo } from "@/components/brand/Logo"
-import { Button } from "@/components/ui/Button"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
 import { saveDisplayName } from "@/lib/auth-api"
@@ -24,7 +30,7 @@ import {
   validateDisplayName,
 } from "@/lib/name-onboarding"
 import { setDisplayName, patchConsumerProfileCache } from "@/lib/user"
-import { colors, radii, spacing, typography } from "@/theme/tokens"
+import { colors, fontFamily, spacing } from "@/theme/tokens"
 
 type Phase = "ask" | "welcome"
 
@@ -32,7 +38,6 @@ type Props = {
   onComplete: (name: string) => void
 }
 
-const ONBOARDING_BG = "#FAF3EF"
 const MASCOT_NAME = require("../../../assets/brand/glammzo-mascot.png")
 const MASCOT_WELCOME = require("../../../assets/brand/glammzo-mascot-welcome.png")
 
@@ -67,6 +72,7 @@ export function NameOnboarding({ onComplete }: Props) {
   const submittingRef = useRef(false)
   const finishingRef = useRef(false)
   const [finishing, setFinishing] = useState(false)
+  const [nameFocused, setNameFocused] = useState(false)
 
   const askOpacity = useRef(new Animated.Value(1)).current
   const welcomeOpacity = useRef(new Animated.Value(0)).current
@@ -176,6 +182,7 @@ export function NameOnboarding({ onComplete }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right", "bottom"]}>
+      <AuthBackdrop />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -201,11 +208,7 @@ export function NameOnboarding({ onComplete }: Props) {
                 <Mascot variant="name" />
               </View>
 
-              <Text
-                variant="title"
-                style={styles.headline}
-                accessibilityRole="header"
-              >
+              <Text style={[authText.title, styles.headline]} accessibilityRole="header">
                 You&apos;re verified! 🎉
               </Text>
               <Text style={styles.lead}>
@@ -214,11 +217,19 @@ export function NameOnboarding({ onComplete }: Props) {
               </Text>
 
               <TextInput
-                style={[styles.input, fieldError ? styles.inputError : null]}
+                style={[
+                  authInput.field,
+                  authInput.text,
+                  styles.input,
+                  nameFocused && authInput.focused,
+                  fieldError ? authInput.error : null,
+                ]}
+                onFocus={() => setNameFocused(true)}
+                onBlur={() => setNameFocused(false)}
                 value={rawName}
                 onChangeText={onChangeName}
                 placeholder="Your name"
-                placeholderTextColor={colors.textSubtle}
+                placeholderTextColor="#8A8A8A"
                 autoFocus
                 autoCapitalize="words"
                 autoCorrect={false}
@@ -233,19 +244,11 @@ export function NameOnboarding({ onComplete }: Props) {
                 accessibilityHint="Enter the name we should use for greetings and bookings"
               />
 
-              {fieldError ? (
-                <Text variant="caption" color={colors.destructive} style={styles.error}>
-                  {fieldError}
-                </Text>
-              ) : null}
-              {submitError ? (
-                <Text variant="caption" color={colors.destructive} style={styles.error}>
-                  {submitError}
-                </Text>
-              ) : null}
+              {fieldError ? <Text style={authText.error}>{fieldError}</Text> : null}
+              {submitError ? <Text style={authText.error}>{submitError}</Text> : null}
 
-              <Button
-                label="That's me ✨"
+              <AuthPill
+                label="Continue"
                 loading={loading}
                 disabled={!canSubmit}
                 onPress={() => void handleSaveName()}
@@ -253,7 +256,7 @@ export function NameOnboarding({ onComplete }: Props) {
                 accessibilityLabel="Save name and continue"
               />
 
-              <Text variant="caption" muted style={styles.foot}>
+              <Text style={[authText.legal, styles.foot]}>
                 We’ll use this for greetings and your bookings.
               </Text>
             </ScrollView>
@@ -272,17 +275,13 @@ export function NameOnboarding({ onComplete }: Props) {
                 paddingHorizontal: spacing.xl,
               }}
             >
-              <Text
-                variant="title"
-                style={styles.welcomeTitle}
-                accessibilityRole="header"
-              >
+              <Text style={[authText.title, styles.welcomeTitle]} accessibilityRole="header">
                 Hey, {greeting}! 👋
               </Text>
               <Text style={styles.welcomeBody}>
                 Ready to find your next glow-up? ✨
               </Text>
-              <Button
+              <AuthPill
                 label="Let's Glammzo →"
                 loading={finishing}
                 disabled={finishing}
@@ -301,7 +300,7 @@ export function NameOnboarding({ onComplete }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: ONBOARDING_BG,
+    backgroundColor: auth.white,
   },
   flex: {
     flex: 1,
@@ -329,7 +328,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.sand,
   },
   dotActive: {
-    backgroundColor: colors.primary,
+    backgroundColor: auth.text,
     width: 18,
   },
   sparkleWrap: {
@@ -341,29 +340,15 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   lead: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: 17,
-    lineHeight: 26,
-    color: colors.textMuted,
+    fontFamily: fontFamily.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: auth.secondary,
     textAlign: "left",
     marginBottom: spacing.xxl,
   },
   input: {
-    minHeight: 56,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
-    fontSize: 18,
-    fontFamily: typography.bodyStrong.fontFamily,
-    color: colors.text,
-  },
-  inputError: {
-    borderColor: colors.destructive,
-  },
-  error: {
-    marginTop: spacing.sm,
   },
   cta: {
     marginTop: spacing.xl,
@@ -386,15 +371,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   welcomeBody: {
-    fontFamily: typography.body.fontFamily,
-    fontSize: 17,
-    lineHeight: 26,
-    color: colors.textMuted,
+    fontFamily: fontFamily.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    color: auth.secondary,
     textAlign: "center",
     marginBottom: spacing.xxl,
     maxWidth: 300,
   },
   welcomeCta: {
-    minWidth: 220,
+    minWidth: 240,
+    alignSelf: "center",
   },
 })

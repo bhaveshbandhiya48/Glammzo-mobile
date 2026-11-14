@@ -1,6 +1,5 @@
 import { formatRupees } from "@/lib/service-pricing"
 import Constants from "expo-constants"
-import { Image } from "expo-image"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -23,6 +22,10 @@ import MapView, {
 } from "react-native-maps"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { formatKm } from "@/components/home/HomeNextBookingCard"
+import { PhotoOrFallback } from "@/components/home/PhotoFallback"
+import { artistWhereLabel } from "@/components/home/ArtistListRow"
+import { salonPriceLine } from "@/components/home/SalonListRow"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
@@ -30,13 +33,14 @@ import type { ArtistCardData } from "@/lib/artists-api"
 import { getDeviceCoordinatesDetailed } from "@/lib/device-location"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { GLAMMZO_MAP_STYLE } from "@/lib/map-styles"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
 
 /** One card at a time, with the next one peeking in. */
 const SIDE_PAD = spacing.lg
 const CARD_GAP = spacing.sm
-const CARD_WIDTH = Dimensions.get("window").width - SIDE_PAD * 2 - spacing.xl
-const CARD_HEIGHT = 104
+const CARD_WIDTH = Dimensions.get("window").width - SIDE_PAD * 2 - spacing.lg
+const CARD_HEIGHT = 112
+const CARD_PHOTO = CARD_HEIGHT - 24
 const SNAP_INTERVAL = CARD_WIDTH + CARD_GAP
 /** How long after a location change the map keeps framing newly loaded pins. */
 const FIT_NEW_AREA_MS = 6000
@@ -66,13 +70,21 @@ type Props = {
   initialKind?: KindFilter
 }
 
-export type KindFilter = "all" | "salon" | "artist"
+export type KindFilter = "all" | "salon" | "artist" | "home"
 
 const KIND_FILTERS: { id: KindFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "salon", label: "Salons" },
   { id: "artist", label: "Artists" },
+  { id: "home", label: "At home" },
 ]
+
+/** "Salons near Indiranagar": what the map is showing, for the search pill. */
+function summaryTitle(kind: KindFilter, area: string) {
+  const what =
+    kind === "salon" ? "Salons" : kind === "artist" ? "Artists" : kind === "home" ? "At-home artists" : "Places"
+  return `${what} near ${area}`
+}
 
 type MapPin = {
   id: string
@@ -87,6 +99,10 @@ type MapPin = {
   imageUrl: string | null
   salonId?: string
   artistSlug?: string
+  /** Card lines, worked out like SalonListRow / ArtistListRow. */
+  meta: string | null
+  priceLine: string | null
+  offersHomeVisits: boolean
 }
 
 function regionAroundPoint(
@@ -205,8 +221,11 @@ function salonToPin(salon: Salon): MapPin | null {
     place: salon.area || null,
     rating: salon.rating > 0 ? salon.rating : null,
     distanceKm: salon.distanceKm > 0 ? salon.distanceKm : null,
-    imageUrl: salon.imageUrl || null,
+    imageUrl: salon.coverImageUrl?.trim() || salon.imageUrl || null,
     salonId: salon.id,
+    meta: [salon.area || null, formatKm(salon.distanceKm)].filter(Boolean).join(" · ") || null,
+    priceLine: salonPriceLine(salon),
+    offersHomeVisits: false,
   }
 }
 
@@ -225,8 +244,15 @@ function artistToPin(artist: ArtistCardData): MapPin | null {
         ? artist.averageRating
         : null,
     distanceKm: artist.distanceKm,
-    imageUrl: artist.profilePhotoUrl,
+    imageUrl:
+      artist.profilePhotoUrl?.trim() || artist.portfolio?.find((url) => url?.trim()) || null,
     artistSlug: artist.slug,
+    meta: [artistWhereLabel(artist), formatKm(artist.distanceKm)].filter(Boolean).join(" · ") || null,
+    priceLine:
+      artist.startingPrice != null && artist.startingPrice > 0
+        ? `From ${formatRupees(artist.startingPrice)}`
+        : null,
+    offersHomeVisits: Boolean(artist.offersHomeVisits),
   }
 }
 
@@ -252,33 +278,38 @@ function useGoogleMapsProvider() {
   return undefined
 }
 
-function pinLabel(pin: { price: number; name: string }) {
+function pinLabel(pin: { price: number; name: string; rating: number | null }) {
   const price = Number(pin.price) || 0
   if (price > 0) return formatRupees(price)
-  // No price yet: the name says more than an empty pin.
+  if (pin.rating != null) return `★ ${pin.rating.toFixed(1)}`
+  // No price or rating yet: the name says more than an empty pin.
   return pin.name.length > 12 ? `${pin.name.slice(0, 11).trim()}…` : pin.name
 }
 
-function pricePinMinWidth(label: string) {
+function pricePinMinWidth(label: string, selected = false) {
   // Android Google Maps snapshots custom markers into a bitmap and often
   // under-measures RN views, which clips multi-digit prices mid-glyph.
   const charWidth = Platform.OS === "android" ? 11 : 8
   const horizontalPad = Platform.OS === "android" ? 32 : 24
   const floor = Platform.OS === "android" ? 72 : 56
-  return Math.max(floor, Math.ceil(horizontalPad + label.length * charWidth))
+  const width = Math.max(floor, Math.ceil(horizontalPad + label.length * charWidth))
+  // The selected pin is drawn a touch larger.
+  return selected ? width + 8 : width
 }
 
 /** Fixed Android height, with room for the bitmap capture. */
 const ANDROID_PIN_HEIGHT = 36
+const ANDROID_PIN_HEIGHT_SELECTED = 40
 
 function PricePin({ label, selected }: { label: string; selected: boolean }) {
-  const width = pricePinMinWidth(label)
+  const width = pricePinMinWidth(label, selected)
+  const height = selected ? ANDROID_PIN_HEIGHT_SELECTED : ANDROID_PIN_HEIGHT
 
   return (
     <View
       style={[
         styles.pricePin,
-        Platform.OS === "android" ? { width, height: ANDROID_PIN_HEIGHT } : { minWidth: width },
+        Platform.OS === "android" ? { width, height } : { minWidth: width },
         selected && styles.pricePinSelected,
       ]}
       collapsable={false}
@@ -290,7 +321,8 @@ function PricePin({ label, selected }: { label: string; selected: boolean }) {
         style={[
           styles.pricePinText,
           Platform.OS === "android" && styles.pricePinTextAndroid,
-          { color: selected ? colors.primaryFg : colors.text },
+          selected && styles.pricePinTextSelected,
+          { color: selected ? "#FFFFFF" : INK },
         ]}
       >
         {label}
@@ -341,8 +373,8 @@ function MapPriceMarker({
       {...(Platform.OS === "android"
         ? {
             style: {
-              width: pricePinMinWidth(label),
-              height: ANDROID_PIN_HEIGHT,
+              width: pricePinMinWidth(label, selected),
+              height: selected ? ANDROID_PIN_HEIGHT_SELECTED : ANDROID_PIN_HEIGHT,
               overflow: "visible" as const,
             },
           }
@@ -353,16 +385,12 @@ function MapPriceMarker({
   )
 }
 
+/** Floating tap card: the SalonListRow / ArtistListRow content on a white card. */
 function MapListingCard({ pin, onOpen }: { pin: MapPin; onOpen: () => void }) {
-  const distanceLabel =
-    pin.distanceKm != null
-      ? pin.distanceKm < 10
-        ? `${pin.distanceKm.toFixed(1)} km`
-        : `${Math.round(pin.distanceKm)} km`
-      : null
   const kindLabel = pin.kind === "artist" ? "Artist" : "Salon"
-  const placeLine = [kindLabel, pin.place, distanceLabel].filter(Boolean).join(" · ")
-  const priceLabel = pin.price > 0 ? `from ${formatRupees(pin.price)}` : null
+  const metaLine = [kindLabel, pin.meta].filter(Boolean).join(" · ")
+  const fallbackPrice = pin.price > 0 ? `From ${formatRupees(pin.price)}` : null
+  const priceLine = pin.priceLine ?? fallbackPrice
 
   return (
     <Pressable
@@ -371,34 +399,38 @@ function MapListingCard({ pin, onOpen }: { pin: MapPin; onOpen: () => void }) {
       accessibilityRole="button"
       accessibilityLabel={[
         pin.name,
-        placeLine,
-        pin.rating != null ? `${pin.rating.toFixed(1)} stars` : "New",
-        priceLabel,
+        pin.rating != null ? `rated ${pin.rating.toFixed(1)}` : "new",
+        metaLine,
+        priceLine,
       ]
         .filter(Boolean)
-        .join(", ")}
+        .join(". ")}
       accessibilityHint="Opens the details"
     >
-      {pin.imageUrl ? (
-        <Image source={{ uri: pin.imageUrl }} style={styles.listingImage} contentFit="cover" />
-      ) : (
-        <View style={[styles.listingImage, styles.listingImageFallback]}>
-          <Text variant="heading" muted>
-            {pin.name.slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
-      )}
+      <View style={styles.listingImage}>
+        <PhotoOrFallback uri={pin.imageUrl} name={pin.name} />
+      </View>
       <View style={styles.listingBody}>
-        <Text variant="bodyStrong" numberOfLines={1}>
-          {pin.name}
-        </Text>
-        <Text variant="caption" muted numberOfLines={1}>
-          {placeLine}
-        </Text>
-        <Text variant="caption" numberOfLines={1} style={styles.listingMeta}>
-          {pin.rating != null ? `★ ${pin.rating.toFixed(1)}` : "New"}
-          {priceLabel ? `  ·  ${priceLabel}` : ""}
-        </Text>
+        <View style={styles.listingNameRow}>
+          <RNText style={styles.listingName} numberOfLines={1}>
+            {pin.name}
+          </RNText>
+          <View style={styles.ratingPill}>
+            <RNText style={styles.ratingText}>
+              {pin.rating != null ? `${pin.rating.toFixed(1)}★` : "New"}
+            </RNText>
+          </View>
+        </View>
+        {metaLine ? (
+          <RNText style={styles.listingMeta} numberOfLines={1}>
+            {metaLine}
+          </RNText>
+        ) : null}
+        {priceLine ? (
+          <RNText style={styles.listingPrice} numberOfLines={1}>
+            {priceLine}
+          </RNText>
+        ) : null}
       </View>
     </Pressable>
   )
@@ -429,8 +461,11 @@ export function MapOverlay({
   // Null until the customer picks a filter on the map; until then it opens on `initialKind`.
   const [pickedKind, setKindFilter] = useState<KindFilter | null>(null)
   const kindFilter = pickedKind ?? initialKind
-  const showSalons = kindFilter !== "artist"
+  const showSalons = kindFilter === "all" || kindFilter === "salon"
   const showArtists = kindFilter !== "salon"
+  const homeOnly = kindFilter === "home"
+  // The customer tapped the map to put the card away: keep it away until they pick a pin.
+  const [dismissed, setDismissed] = useState(false)
   const [viewRegion, setViewRegion] = useState<Region | null>(null)
   const [liveUserCoords, setLiveUserCoords] = useState<{
     latitude: number
@@ -444,16 +479,20 @@ export function MapOverlay({
   const provider = useGoogleMapsProvider()
   const useCustomStyle = provider === PROVIDER_GOOGLE
   const mappableRef = useRef<MapPin[]>([])
+  const dismissedRef = useRef(false)
+  dismissedRef.current = dismissed
 
   const mappable = useMemo(() => {
     const salonPins = showSalons
       ? salons.map(salonToPin).filter((item): item is MapPin => item != null)
       : []
     const artistPins = showArtists
-      ? artists.map(artistToPin).filter((item): item is MapPin => item != null)
+      ? artists
+          .map(artistToPin)
+          .filter((item): item is MapPin => item != null && (!homeOnly || item.offersHomeVisits))
       : []
     return [...salonPins, ...artistPins]
-  }, [salons, artists, showSalons, showArtists])
+  }, [salons, artists, showSalons, showArtists, homeOnly])
   mappableRef.current = mappable
 
   const areaIdSet = useMemo(() => {
@@ -512,16 +551,19 @@ export function MapOverlay({
     [carouselItems, selectedId],
   )
 
-  const showCarousel = carouselItems.length > 0
+  const hasPlacesInView = carouselItems.length > 0
+  const showCarousel = hasPlacesInView && !dismissed && selectedId != null
+  const showListPill = hasPlacesInView && !showCarousel
   const placeCount = carouselItems.length
   // Pins arrive just after a move, so wait a moment before saying there are none.
   const [emptyReady, setEmptyReady] = useState(false)
   useEffect(() => {
     setEmptyReady(false)
-    if (!visible || showCarousel) return
+    if (!visible || hasPlacesInView) return
     const timer = setTimeout(() => setEmptyReady(true), 900)
     return () => clearTimeout(timer)
-  }, [visible, showCarousel, locationLabel])
+  }, [visible, hasPlacesInView, locationLabel])
+  const finding = visible && !hasPlacesInView && !emptyReady
 
   const markerLatitude = liveUserCoords?.latitude ?? userLatitude
   const markerLongitude = liveUserCoords?.longitude ?? userLongitude
@@ -530,13 +572,13 @@ export function MapOverlay({
   const hasSavedUserCoords =
     Number.isFinite(userLatitude) && Number.isFinite(userLongitude)
 
-  const bottomChrome =
-    (showCarousel ? CARD_HEIGHT + spacing.xl : spacing.xxl) +
-    Math.max(insets.bottom, spacing.md)
+  const bottomInset = Math.max(insets.bottom, spacing.md)
+  const bottomChrome = (showCarousel ? CARD_HEIGHT + spacing.xl : spacing.xxl + 24) + bottomInset
 
   useEffect(() => {
     if (!visible) {
       setSelectedId(null)
+      setDismissed(false)
       setKindFilter(null)
       setViewRegion(null)
       setLiveUserCoords(null)
@@ -552,7 +594,7 @@ export function MapOverlay({
     ignoreScrollUntilRef.current = Date.now() + 500
     const pins = areaMappable
     const region = initialRegion
-    const topPad = insets.top + 112
+    const topPad = insets.top + 132
     const bottomPad =
       (pins.length > 0 ? CARD_HEIGHT + spacing.xl : spacing.xxl) +
       Math.max(insets.bottom, spacing.md) +
@@ -612,7 +654,7 @@ export function MapOverlay({
       mapRef.current?.fitToCoordinates(
         areaMappable.map((item) => ({ latitude: item.latitude, longitude: item.longitude })),
         {
-          edgePadding: { top: insets.top + 112, right: 40, bottom: CARD_HEIGHT + 64, left: 40 },
+          edgePadding: { top: insets.top + 132, right: 40, bottom: CARD_HEIGHT + 64, left: 40 },
           animated: true,
         },
       )
@@ -656,6 +698,7 @@ export function MapOverlay({
   }, [visible, onClose])
 
   function syncSelectionToRegion(region: Region) {
+    if (dismissedRef.current) return
     const visible = pinsInRegion(mappableRef.current, region)
     setSelectedId((current) => {
       if (current && visible.some((item) => item.id === current)) {
@@ -713,6 +756,7 @@ export function MapOverlay({
   }
 
   function focusPin(pinId: string, animateMap = true) {
+    setDismissed(false)
     setSelectedId(pinId)
     const pin = mappable.find((item) => item.id === pinId)
     if (!pin) return
@@ -744,7 +788,7 @@ export function MapOverlay({
     mapRef.current?.fitToCoordinates(
       mappable.map((item) => ({ latitude: item.latitude, longitude: item.longitude })),
       {
-        edgePadding: { top: insets.top + 120, right: 48, bottom: CARD_HEIGHT + 96, left: 48 },
+        edgePadding: { top: insets.top + 140, right: 48, bottom: CARD_HEIGHT + 96, left: 48 },
         animated: true,
       },
     )
@@ -783,6 +827,11 @@ export function MapOverlay({
           initialRegion={initialRegion}
           onMapReady={() => setMapReady(true)}
           onRegionChangeComplete={handleRegionChangeComplete}
+          onPress={(event) => {
+            // Tapping open map (not a pin) puts the card away, like the website map.
+            if (event.nativeEvent.action === "marker-press") return
+            if (selectedId) setDismissed(true)
+          }}
           showsUserLocation={false}
           showsMyLocationButton={false}
           showsCompass={false}
@@ -792,7 +841,7 @@ export function MapOverlay({
           pitchEnabled={false}
           toolbarEnabled={false}
           mapPadding={{
-            top: insets.top + 100,
+            top: insets.top + 124,
             right: 0,
             bottom: bottomChrome,
             left: 0,
@@ -843,28 +892,39 @@ export function MapOverlay({
             <Pressable
               onPress={onClose}
               hitSlop={8}
-              style={styles.roundBtn}
+              style={({ pressed }) => [styles.roundBtn, pressed && styles.pressedSoft]}
               accessibilityRole="button"
               accessibilityLabel="Back to list"
             >
-              <Icon name="chevron-back" size={22} color={colors.text} />
+              <Icon name="chevron-back" size={22} color={INK} />
             </Pressable>
             <Pressable
               onPress={onChangeLocation}
-              style={({ pressed }) => [styles.locationChip, pressed && styles.locationChipPressed]}
+              style={({ pressed }) => [styles.searchPill, pressed && styles.pressedSoft]}
               accessibilityRole="search"
-              accessibilityLabel={`Change location. Now ${locationLabel}, ${placeCount} ${placeCount === 1 ? "place" : "places"} in view`}
+              accessibilityLabel={`Change location. ${summaryTitle(kindFilter, locationLabel)}, ${placeCount} ${placeCount === 1 ? "place" : "places"} in view`}
             >
-              <Icon name="search" size={18} color={colors.text} />
-              <Text variant="bodyStrong" numberOfLines={1} style={styles.locationName}>
-                {locationLabel}
-              </Text>
-              <Text variant="caption" muted>
-                {placeCount} {placeCount === 1 ? "place" : "places"}
-              </Text>
+              <Icon name="search" size={18} color={INK} />
+              <View style={styles.searchCopy}>
+                <RNText style={styles.searchTitle} numberOfLines={1}>
+                  {summaryTitle(kindFilter, locationLabel)}
+                </RNText>
+                <RNText style={styles.searchSub} numberOfLines={1}>
+                  {finding
+                    ? "Looking around here"
+                    : `${placeCount} ${placeCount === 1 ? "place" : "places"} in view · Change area`}
+                </RNText>
+              </View>
             </Pressable>
           </View>
-          <View style={styles.filters} accessibilityRole="tablist">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filters}
+            style={styles.filtersScroll}
+            accessibilityRole="tablist"
+            keyboardShouldPersistTaps="handled"
+          >
             {KIND_FILTERS.map((item) => {
               const on = kindFilter === item.id
               return (
@@ -875,24 +935,32 @@ export function MapOverlay({
                   accessibilityRole="tab"
                   accessibilityState={{ selected: on }}
                 >
-                  <Text variant="caption" style={styles.filterText} color={on ? colors.primaryFg : colors.text}>
-                    {item.label}
-                  </Text>
+                  <RNText style={[styles.filterText, on && styles.filterTextOn]}>{item.label}</RNText>
                 </Pressable>
               )
             })}
-          </View>
+          </ScrollView>
+          {finding ? (
+            <View style={styles.findingPill} accessibilityLiveRegion="polite" pointerEvents="none">
+              <ActivityIndicator size="small" color={INK} />
+              <RNText style={styles.findingText}>Finding places…</RNText>
+            </View>
+          ) : null}
         </View>
 
         <Pressable
           onPress={goToMyLocation}
-          style={[
+          style={({ pressed }) => [
             styles.roundBtn,
             styles.locateBtn,
+            pressed && styles.pressedSoft,
             {
               bottom:
-                (showCarousel || mappable.length > 0 ? CARD_HEIGHT + spacing.xl : spacing.xxl) +
-                Math.max(insets.bottom, spacing.md),
+                (showCarousel
+                  ? CARD_HEIGHT + spacing.xl
+                  : emptyReady && !hasPlacesInView
+                    ? 96 + spacing.md
+                    : 44 + spacing.lg) + bottomInset,
             },
           ]}
           accessibilityRole="button"
@@ -900,9 +968,9 @@ export function MapOverlay({
           disabled={locating}
         >
           {locating ? (
-            <ActivityIndicator size="small" color={colors.primary} />
+            <ActivityIndicator size="small" color={INK} />
           ) : (
-            <Icon name="locate" size={22} color={colors.primary} />
+            <Icon name="locate" size={22} color={INK} />
           )}
         </Pressable>
 
@@ -911,7 +979,7 @@ export function MapOverlay({
             onPress={() => setLocateMessage(null)}
             accessibilityRole="alert"
             accessibilityLiveRegion="polite"
-            style={[styles.locateMessage, { top: insets.top + 112 }]}
+            style={[styles.locateMessage, { top: insets.top + 150 }]}
           >
             <Text variant="caption" color={colors.primaryFg}>
               {locateMessage}
@@ -921,10 +989,7 @@ export function MapOverlay({
 
         {showCarousel ? (
           <View
-            style={[
-              styles.carouselWrap,
-              { paddingBottom: Math.max(insets.bottom, spacing.md) },
-            ]}
+            style={[styles.carouselWrap, { paddingBottom: bottomInset }]}
             pointerEvents="box-none"
           >
             <ScrollView
@@ -936,6 +1001,7 @@ export function MapOverlay({
               snapToAlignment="start"
               disableIntervalMomentum
               directionalLockEnabled
+              contentOffset={{ x: Math.max(0, selectedCarouselIndex) * SNAP_INTERVAL, y: 0 }}
               onScrollBeginDrag={() => {
                 carouselDragged.current = true
               }}
@@ -949,25 +1015,37 @@ export function MapOverlay({
               ))}
             </ScrollView>
           </View>
+        ) : showListPill ? (
+          <View style={[styles.listPillWrap, { bottom: bottomInset + spacing.sm }]} pointerEvents="box-none">
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [styles.listPill, pressed && styles.listPillPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Show list, ${placeCount} ${placeCount === 1 ? "place" : "places"}`}
+            >
+              <Icon name="list" size={16} color="#FFFFFF" />
+              <RNText style={styles.listPillText}>{`Show list · ${placeCount}`}</RNText>
+            </Pressable>
+          </View>
         ) : emptyReady ? (
           <View
-            style={[styles.emptyCardWrap, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}
+            style={[styles.emptyCardWrap, { paddingBottom: bottomInset }]}
             pointerEvents="box-none"
           >
             <View style={styles.emptyCard} accessibilityLiveRegion="polite">
               <View style={styles.emptyCopy}>
-                <Text variant="bodyStrong">
+                <RNText style={styles.emptyTitle}>
                   {areaMappable.length > 0
-                    ? "Nothing in this part of the map"
-                    : `No ${kindFilter === "salon" ? "salons" : kindFilter === "artist" ? "artists" : "salons or artists"} in ${locationLabel}`}
-                </Text>
-                <Text variant="caption" muted>
+                    ? "Nothing here, try zooming out"
+                    : `No ${kindFilter === "salon" ? "salons" : kindFilter === "artist" ? "artists" : kindFilter === "home" ? "at-home artists" : "salons or artists"} in ${locationLabel}`}
+                </RNText>
+                <RNText style={styles.emptySub}>
                   {areaMappable.length > 0
-                    ? "Move the map or see every place."
+                    ? "Or see every place on the map."
                     : kindFilter !== "all"
                       ? "See everything here, or try another area."
                       : "Try a nearby area."}
-                </Text>
+                </RNText>
               </View>
               <Pressable
                 accessibilityRole="button"
@@ -981,9 +1059,9 @@ export function MapOverlay({
                 hitSlop={8}
                 style={styles.emptyAction}
               >
-                <Text variant="caption" style={styles.filterText} color={colors.primaryFg}>
+                <RNText style={styles.emptyActionText}>
                   {areaMappable.length > 0 || kindFilter !== "all" ? "Show all" : "Change"}
-                </Text>
+                </RNText>
               </Pressable>
             </View>
           </View>
@@ -993,12 +1071,16 @@ export function MapOverlay({
   )
 }
 
+const INK = "#111111"
+const INK_MUTED = "#595959"
+const CHIP_BORDER = "#e3e3e3"
+
 const floating = {
   shadowColor: "#000",
-  shadowOpacity: 0.1,
-  shadowRadius: 12,
+  shadowOpacity: 0.12,
+  shadowRadius: 14,
   shadowOffset: { width: 0, height: 4 },
-  elevation: 4,
+  elevation: 5,
 }
 
 const styles = StyleSheet.create({
@@ -1018,12 +1100,12 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 4,
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
   },
   topRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
   },
   roundBtn: {
     width: 44,
@@ -1031,43 +1113,91 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     ...floating,
   },
-  locationChip: {
+  pressedSoft: {
+    backgroundColor: "#F4F4F4",
+  },
+  searchPill: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
+    minHeight: 52,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.lg,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     ...floating,
   },
-  locationChipPressed: {
-    backgroundColor: colors.muted,
-  },
-  locationName: {
+  searchCopy: {
     flex: 1,
+    minWidth: 0,
+  },
+  searchTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    lineHeight: 18,
+    color: INK,
+  },
+  searchSub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    color: INK_MUTED,
+  },
+  filtersScroll: {
+    flexGrow: 0,
+    overflow: "visible",
   },
   filters: {
     flexDirection: "row",
     gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 6,
   },
   filterChip: {
-    minHeight: 36,
+    height: 36,
     justifyContent: "center",
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    ...floating,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: CHIP_BORDER,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   filterChipOn: {
-    backgroundColor: colors.primary,
+    backgroundColor: INK,
+    borderColor: INK,
   },
   filterText: {
-    fontFamily: "Geist_600SemiBold",
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    color: INK,
+  },
+  filterTextOn: {
+    color: "#FFFFFF",
+  },
+  findingPill: {
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    height: 32,
+    paddingHorizontal: 14,
+    borderRadius: radii.pill,
+    backgroundColor: "#FFFFFF",
+    ...floating,
+  },
+  findingText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    color: INK,
   },
   locateMessage: {
     position: "absolute",
@@ -1076,7 +1206,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: colors.primary,
+    backgroundColor: INK,
   },
   locateBtn: {
     position: "absolute",
@@ -1084,27 +1214,32 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   pricePin: {
-    backgroundColor: colors.surface,
+    backgroundColor: "#FFFFFF",
     borderRadius: radii.pill,
     paddingHorizontal: Platform.OS === "android" ? 10 : 12,
     paddingVertical: Platform.OS === "android" ? 0 : 7,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(0,0,0,0.14)",
+    borderColor: "rgba(0,0,0,0.12)",
     shadowColor: "#000",
-    shadowOpacity: 0.14,
-    shadowRadius: 5,
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: Platform.OS === "android" ? 0 : 4,
   },
   pricePinSelected: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: INK,
+    borderColor: INK,
+    paddingHorizontal: Platform.OS === "android" ? 12 : 14,
+    paddingVertical: Platform.OS === "android" ? 0 : 8,
   },
   pricePinText: {
     fontSize: 13,
-    fontFamily: "Geist_600SemiBold",
+    fontFamily: fontFamily.bold,
+  },
+  pricePinTextSelected: {
+    fontSize: 14,
   },
   pricePinTextAndroid: {
     includeFontPadding: false,
@@ -1125,7 +1260,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#2563EB",
     borderWidth: 2,
-    borderColor: colors.surface,
+    borderColor: "#FFFFFF",
   },
   carouselWrap: {
     position: "absolute",
@@ -1137,8 +1272,8 @@ const styles = StyleSheet.create({
   },
   carousel: {
     paddingHorizontal: SIDE_PAD,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     alignItems: "stretch",
     overflow: "visible",
   },
@@ -1150,35 +1285,89 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
+    gap: 14,
+    padding: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
     ...floating,
   },
   listingCardPressed: {
-    backgroundColor: colors.muted,
+    opacity: 0.9,
   },
   listingImage: {
-    width: CARD_HEIGHT - spacing.sm * 2,
-    height: CARD_HEIGHT - spacing.sm * 2,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-  },
-  listingImageFallback: {
-    alignItems: "center",
-    justifyContent: "center",
+    width: CARD_PHOTO,
+    height: CARD_PHOTO,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: "#f2f2f2",
   },
   listingBody: {
     flex: 1,
     justifyContent: "center",
-    gap: 2,
     minWidth: 0,
-    paddingRight: spacing.sm,
+  },
+  listingNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  listingName: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: INK,
+  },
+  ratingPill: {
+    backgroundColor: "#e6f5ec",
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  ratingText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    color: "#17633e",
   },
   listingMeta: {
-    marginTop: spacing.xs,
-    fontFamily: "Geist_600SemiBold",
+    marginTop: 2,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: INK_MUTED,
+  },
+  listingPrice: {
+    marginTop: 4,
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: INK,
+  },
+  listPillWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    zIndex: 4,
+    alignItems: "center",
+  },
+  listPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    height: 44,
+    paddingHorizontal: 18,
+    borderRadius: radii.pill,
+    backgroundColor: INK,
+    ...floating,
+  },
+  listPillPressed: {
+    backgroundColor: "#2B2B2B",
+  },
+  listPillText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 14,
+    color: "#FFFFFF",
   },
   emptyCardWrap: {
     position: "absolute",
@@ -1192,8 +1381,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     padding: spacing.lg,
-    borderRadius: radii.xl,
-    backgroundColor: colors.surface,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
     ...floating,
   },
   emptyCopy: {
@@ -1201,11 +1390,28 @@ const styles = StyleSheet.create({
     gap: 2,
     minWidth: 0,
   },
+  emptyTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: INK,
+  },
+  emptySub: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: INK_MUTED,
+  },
   emptyAction: {
-    minHeight: 36,
+    height: 36,
     justifyContent: "center",
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary,
+    backgroundColor: INK,
+  },
+  emptyActionText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    color: "#FFFFFF",
   },
 })

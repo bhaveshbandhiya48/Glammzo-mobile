@@ -1,11 +1,8 @@
-import { Image } from "expo-image"
+import { StatusBar } from "expo-status-bar"
 import { useLocalSearchParams, useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  ActivityIndicator,
-  FlatList,
   Linking,
-  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -19,46 +16,64 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
-import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
+import { ArtistBookBar, BOOK_BAR_GAP, BOOK_BAR_HEIGHT } from "@/components/artist-page/ArtistBookBar"
+import { ArtistIntro, type QuickFact } from "@/components/artist-page/ArtistIntro"
+import { ArtistPortfolioGrid } from "@/components/artist-page/ArtistPortfolioGrid"
+import { ArtistReviewCard } from "@/components/artist-page/ArtistReviewCard"
+import { ArtistServiceRow } from "@/components/artist-page/ArtistServiceRow"
+import { ArtistServiceSheet } from "@/components/artist-page/ArtistServiceSheet"
+import { ArtistTabBar, TAB_BAR_HEIGHT, type ArtistTabKey } from "@/components/artist-page/ArtistTabs"
+import { ArtistTopBar } from "@/components/artist-page/ArtistTopBar"
 import { ArtistOffersStrip } from "@/components/artists/ArtistOffersStrip"
-import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
+import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
+import { SalonAboutCard, type AboutRow } from "@/components/salon-page/SalonAboutCard"
+import { SalonHero } from "@/components/salon-page/SalonHero"
+import { ReviewSummary } from "@/components/salon-page/SalonReviews"
+import { CHIP_ROW_HEIGHT, SalonCategoryChips } from "@/components/salon-page/SalonTabs"
+import { pastels, sp, ui } from "@/components/salon-page/theme"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
-import { CartStrip } from "@/components/ui/CartStrip"
-import { Icon } from "@/components/ui/Icon"
-import { DetailIntro } from "@/components/detail/DetailIntro"
-import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
-import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
+import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useCart } from "@/context/CartContext"
 import { artistCartId } from "@/lib/artist-cart"
+import { artistLevelLabel, parseArtistLevel } from "@/lib/artist-level"
 import {
-  artistLevelLabel,
-  parseArtistLevel,
-} from "@/lib/artist-level"
-import {
+  artistCategoryLabel,
   fetchPublicArtist,
   type PublicArtist,
   type PublicArtistService,
 } from "@/lib/artists-api"
-import {
-  fetchGlammzoOffersForArtist,
-  type GlammzoOfferCard,
-} from "@/lib/glammzo-offers-api"
+import { isGetQuotesEnabled, isQuoteCategory } from "@/lib/get-quotes"
+import { fetchGlammzoOffersForArtist, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { LEGAL } from "@/lib/legal"
 import { formatRupees } from "@/lib/service-pricing"
-import { colors, radii, shadows, spacing } from "@/theme/tokens"
-import { formatDuration } from "@/lib/booking-display"
+import { fontFamily, spacing } from "@/theme/tokens"
 
-function locationLabel(mode: PublicArtistService["locationMode"]) {
-  if (mode === "both") return "Artist's studio or they can come to you"
-  if (mode === "studio") return "At the artist's studio"
-  return "Artist comes to your home"
-}
+/** Ignore scroll-spy briefly after a tap so the animated scroll doesn't flicker the tabs. */
+const SPY_LOCK_MS = 500
+const REVIEW_PREVIEW = 3
 
 function placeLine(artist: PublicArtist) {
   return [artist.area, artist.city].filter(Boolean).join(", ")
+}
+
+/** Price after a live offer, the same figure the bag uses. */
+function bagPrice(service: PublicArtistService) {
+  const listPrice = Number(service.price) || 0
+  return service.offerPrice != null && service.offerPrice < listPrice ? service.offerPrice : listPrice
+}
+
+function travelFeeLine(artist: PublicArtist): string | null {
+  if (artist.travelFeeType === "flat" && artist.travelFeeAmount > 0) {
+    return `${formatRupees(artist.travelFeeAmount)} travel fee`
+  }
+  if (artist.travelFeeType === "per_km" && artist.travelFeeAmount > 0) {
+    return `${formatRupees(artist.travelFeeAmount)} per km travel fee`
+  }
+  if (artist.travelFeeType === "none") return "No travel fee"
+  return null
 }
 
 export default function ArtistDetailScreen() {
@@ -72,11 +87,27 @@ export default function ArtistDetailScreen() {
   const [offers, setOffers] = useState<GlammzoOfferCard[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
   const [detailService, setDetailService] = useState<PublicArtistService | null>(null)
+  const [reviewsOpen, setReviewsOpen] = useState(false)
+
+  // Scroll-driven UI, same as the salon page.
+  const [headerSolid, setHeaderSolid] = useState(false)
+  const [showStickyTabs, setShowStickyTabs] = useState(false)
+  const [showStickyChips, setShowStickyChips] = useState(false)
+  const [activeTab, setActiveTab] = useState<ArtistTabKey>("services")
+  const [activeCategory, setActiveCategory] = useState("")
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 60)
+
   const scrollRef = useRef<ScrollViewInstance>(null)
-  const portfolioY = useRef(0)
-  const reviewsY = useRef(0)
+  const spyLockUntil = useRef(0)
+  const tabBarY = useRef(0)
+  const sectionY = useRef<Partial<Record<ArtistTabKey, number>>>({})
+  const servicesBottom = useRef(0)
+  const chipsLocalY = useRef<number | null>(null)
+  const listLocalY = useRef(0)
+  const categoryLocalY = useRef<Record<string, number>>({})
   const didFocusPortfolio = useRef(false)
 
   const safeSlug = (slug ?? "").trim().toLowerCase()
@@ -84,6 +115,7 @@ export default function ArtistDetailScreen() {
   const artistCart = cartId ? cart.getCart(cartId) : undefined
   const selectedServiceIds = artistCart?.serviceIds ?? []
   const wantsPortfolio = (focus ?? "").toLowerCase() === "portfolio"
+  const quotesOn = isGetQuotesEnabled()
 
   useEffect(() => {
     if (!safeSlug) {
@@ -118,44 +150,73 @@ export default function ArtistDetailScreen() {
     }
   }, [safeSlug])
 
-  const portfolio = artist?.portfolio ?? []
+  const portfolio = useMemo(() => artist?.portfolio ?? [], [artist])
   const reviews = artist?.reviews ?? []
-  /** Single-row slider preview; View all after this many thumbs. */
-  const PORTFOLIO_PREVIEW = 5
-  const portfolioThumb = Math.floor((width - spacing.lg * 2 - spacing.sm * 3) / 3.4)
-  const portfolioPreview = portfolio.slice(0, PORTFOLIO_PREVIEW)
-  const portfolioExtra = Math.max(0, portfolio.length - PORTFOLIO_PREVIEW)
-  const showPortfolioViewAll = portfolio.length > PORTFOLIO_PREVIEW
-  const portfolioImages = useMemo(
-    () => portfolio.map((item) => item.imageUrl).filter(Boolean),
-    [portfolio],
+  const portfolioImages = useMemo(() => portfolio.map((item) => item.imageUrl).filter(Boolean), [portfolio])
+  const heroSlides = useMemo(() => {
+    if (portfolioImages.length > 0) return portfolioImages.slice(0, 5)
+    const photo = artist?.profilePhotoUrl?.trim()
+    return photo ? [photo] : []
+  }, [artist?.profilePhotoUrl, portfolioImages])
+
+  /** Services grouped by category, keeping the artist's own order. */
+  const serviceGroups = useMemo(() => {
+    const groups = new Map<string, PublicArtistService[]>()
+    for (const service of artist?.services ?? []) {
+      const category = service.category?.trim() || "Services"
+      const existing = groups.get(category)
+      if (existing) existing.push(service)
+      else groups.set(category, [service])
+    }
+    return Array.from(groups.entries()).map(([category, items]) => ({ category, items }))
+  }, [artist])
+  const categories = useMemo(() => serviceGroups.map((group) => group.category), [serviceGroups])
+
+  const hasAbout = Boolean(
+    artist &&
+      (artist.bio?.trim() ||
+        placeLine(artist) ||
+        artist.instagramHandle ||
+        artist.cancellationPolicyText ||
+        (artist.cancellationPolicyLines?.length ?? 0) > 0),
   )
+  const tabs = useMemo<ArtistTabKey[]>(
+    () => [
+      "services",
+      ...(portfolio.length > 0 ? (["portfolio"] as const) : []),
+      "reviews",
+      ...(hasAbout ? (["about"] as const) : []),
+    ],
+    [hasAbout, portfolio.length],
+  )
+
+  useEffect(() => {
+    setActiveCategory(categories[0] ?? "")
+    categoryLocalY.current = {}
+  }, [categories])
 
   useEffect(() => {
     if (!wantsPortfolio || loading || !artist || portfolio.length === 0) return
     if (didFocusPortfolio.current) return
     didFocusPortfolio.current = true
     const timer = setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, portfolioY.current - spacing.md), animated: true })
-      setLightboxIndex(0)
+      const y = sectionY.current.portfolio
+      if (typeof y === "number") scrollToY(y - headerHeight - TAB_BAR_HEIGHT)
+      openLightbox(0)
     }, 280)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wantsPortfolio, loading, artist, portfolio.length])
 
   function toggleService(service: PublicArtistService) {
     if (!artist || !cartId) return
-    const listPrice = Number(service.price) || 0
-    const offerPrice =
-      service.offerPrice != null && service.offerPrice < listPrice
-        ? service.offerPrice
-        : listPrice
     cart.toggleService(cartId, service.id, {
       kind: "artist",
       providerName: artist.displayName,
       providerImageUrl: artist.profilePhotoUrl,
       providerArea: artist.area,
       serviceName: service.name,
-      servicePrice: offerPrice,
+      servicePrice: bagPrice(service),
       serviceDurationMin: service.durationMinutes,
     })
   }
@@ -166,23 +227,11 @@ export default function ArtistDetailScreen() {
   }, [artist, selectedServiceIds])
 
   const selectedTotal = useMemo(
-    () =>
-      selectedServices.reduce((sum, s) => {
-        const listPrice = Number(s.price) || 0
-        const offerPrice =
-          s.offerPrice != null && s.offerPrice < listPrice ? s.offerPrice : listPrice
-        return sum + offerPrice
-      }, 0),
+    () => selectedServices.reduce((sum, s) => sum + bagPrice(s), 0),
     [selectedServices],
   )
 
-  const cartPreviewLabel = useMemo(() => {
-    if (selectedServices.length === 0) return undefined
-    if (selectedServices.length === 1) return selectedServices[0]?.name
-    return `${selectedServices.length} services`
-  }, [selectedServices])
-
-  const goBook = (serviceIds?: string[]) => {
+  function goBook(serviceIds?: string[]) {
     if (!artist) return
     const ids = (serviceIds ?? selectedServiceIds).filter(Boolean)
     if (ids.length === 0) return
@@ -195,85 +244,24 @@ export default function ArtistDetailScreen() {
     } as Href)
   }
 
-  const favorited = artist ? isFavorite(artist.slug) : false
-
-  const header = useMemo(
-    () => (
-      <View style={[styles.topBar, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/artists" as Href))}
-          style={styles.iconBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Icon name="chevron-back" size={22} color={colors.text} />
-        </Pressable>
-        <Text variant="heading" style={{ flex: 1 }} numberOfLines={1}>
-          {artist?.displayName ?? "Artist"}
-        </Text>
-        <Pressable
-          onPress={() => {
-            if (!artist) return
-            void (async () => {
-              const result = await toggle(artist.slug)
-              if (result === "auth") {
-                router.push({
-                  pathname: "/login",
-                  params: { next: `/artist/${artist.slug}` },
-                } as Href)
-              }
-            })()
-          }}
-          style={styles.iconBtn}
-          accessibilityRole="button"
-          accessibilityLabel={favorited ? "Remove favorite" : "Save artist"}
-        >
-          <Icon
-            name={favorited ? "heart" : "heart-outline"}
-            size={22}
-            color={favorited ? colors.primary : colors.text}
-          />
-        </Pressable>
-      </View>
-    ),
-    [artist, favorited, insets.top, router, toggle],
-  )
-
-  if (loading) {
-    return (
-      <View style={styles.root}>
-        {header}
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      </View>
-    )
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/artists" as Href)
   }
 
-  if (error || !artist) {
-    return (
-      <View style={styles.root}>
-        {header}
-        <View style={styles.center}>
-          <Text variant="heading">Couldn't load artist</Text>
-          <Text variant="body" muted style={{ textAlign: "center" }}>
-            {error ?? "This booking page isn't available."}
-          </Text>
-          <Button label="Go back" onPress={() => router.back()} style={{ marginTop: spacing.lg }} />
-        </View>
-      </View>
-    )
+  function toggleFavorite() {
+    if (!artist) return
+    const target = artist
+    void (async () => {
+      const result = await toggle(target.slug)
+      if (result === "auth") {
+        router.push({
+          pathname: "/login",
+          params: { next: `/artist/${target.slug}` },
+        } as Href)
+      }
+    })()
   }
-
-  const where = placeLine(artist)
-  const reviewCount = artist.reviewCount ?? reviews.length
-  const averageRating = artist.averageRating ?? 0
-  const level = parseArtistLevel(artist.level)
-  // "Getting started" is the Partner app's wording; customers read it as a new artist.
-  const levelName = level === "new" ? "New artist" : artistLevelLabel(level, artist.levelLabel)
-  const coverUrl = portfolio[0]?.imageUrl || artist.profilePhotoUrl
-  const prices = artist.services.map((service) => service.price).filter((price) => price > 0)
-  const startingPrice = prices.length > 0 ? Math.min(...prices) : null
 
   function shareArtist() {
     if (!artist) return
@@ -285,605 +273,582 @@ export default function ArtistDetailScreen() {
     ).catch(() => {})
   }
 
-  function toggleFavorite() {
-    if (!artist) return
-    void (async () => {
-      const result = await toggle(artist.slug)
-      if (result === "auth") {
-        router.push({
-          pathname: "/login",
-          params: { next: `/artist/${artist.slug}` },
-        } as Href)
-      }
-    })()
+  function openInstagram() {
+    if (!artist?.instagramHandle) return
+    void Linking.openURL(`https://instagram.com/${artist.instagramHandle.replace(/^@/, "")}`)
   }
+
+  function openGetQuotes() {
+    const category = artist?.categories.find((id) => isQuoteCategory(id))
+    router.push({ pathname: "/requests/new", params: category ? { category } : {} } as Href)
+  }
+
+  function openLightbox(index: number) {
+    if (portfolioImages.length === 0) return
+    setLightboxIndex(Math.min(Math.max(0, index), portfolioImages.length - 1))
+    setLightboxOpen(true)
+  }
+
+  // ---- Scroll geometry (same approach as the salon page) ---------------------
+
+  function categoryY(category: string): number | null {
+    const local = categoryLocalY.current[category]
+    const services = sectionY.current.services
+    if (typeof local !== "number" || typeof services !== "number") return null
+    return services + listLocalY.current + local
+  }
+
+  function chipsY(): number | null {
+    const services = sectionY.current.services
+    if (chipsLocalY.current == null || typeof services !== "number") return null
+    return services + chipsLocalY.current
+  }
+
+  function scrollToY(y: number) {
+    spyLockUntil.current = Date.now() + SPY_LOCK_MS
+    scrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true })
+  }
+
+  function scrollToTab(tab: ArtistTabKey) {
+    setActiveTab(tab)
+    if (tab === "services") {
+      scrollToY(tabBarY.current - headerHeight)
+      return
+    }
+    const y = sectionY.current[tab]
+    if (typeof y === "number") scrollToY(y - headerHeight - TAB_BAR_HEIGHT)
+  }
+
+  function scrollToCategory(category: string) {
+    setActiveCategory(category)
+    setActiveTab("services")
+    const y = categoryY(category)
+    if (y != null) scrollToY(y - headerHeight - TAB_BAR_HEIGHT - CHIP_ROW_HEIGHT - 4)
+  }
+
+  function updateScrollUi(y: number, viewportHeight: number, contentHeight: number) {
+    const solid = y > Math.max(48, insets.top)
+    if (solid !== headerSolid) setHeaderSolid(solid)
+
+    const stickTabs = y + headerHeight >= tabBarY.current && tabBarY.current > 0
+    if (stickTabs !== showStickyTabs) setShowStickyTabs(stickTabs)
+
+    const chipsTop = chipsY()
+    const pinnedTop = y + headerHeight + TAB_BAR_HEIGHT
+    const stickChips =
+      stickTabs &&
+      chipsTop != null &&
+      categories.length > 1 &&
+      pinnedTop >= chipsTop &&
+      pinnedTop + CHIP_ROW_HEIGHT < servicesBottom.current
+    if (stickChips !== showStickyChips) setShowStickyChips(stickChips)
+
+    if (Date.now() < spyLockUntil.current) return
+
+    const probe = pinnedTop + (stickChips ? CHIP_ROW_HEIGHT : 0) + 12
+    let nextTab: ArtistTabKey = tabs[0] ?? "services"
+    for (const tab of tabs) {
+      const top = tab === "services" ? tabBarY.current : sectionY.current[tab]
+      if (typeof top === "number" && top <= probe) nextTab = tab
+    }
+    if (y + viewportHeight >= contentHeight - 4 && y > 0) nextTab = tabs[tabs.length - 1] ?? nextTab
+    if (nextTab !== activeTab) setActiveTab(nextTab)
+
+    let nextCategory = categories[0] ?? ""
+    for (const category of categories) {
+      const top = categoryY(category)
+      if (top != null && top <= probe) nextCategory = category
+    }
+    if (nextCategory !== activeCategory) setActiveCategory(nextCategory)
+  }
+
+  function onPageScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
+    updateScrollUi(contentOffset.y, layoutMeasurement.height, contentSize.height)
+  }
+
+  // ---- States ----------------------------------------------------------------
+
+  const favorited = artist ? isFavorite(artist.slug) : false
+
+  if (loading) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <SalonDetailSkeleton />
+        <ArtistTopBar topInset={insets.top} solid={false} title="Artist" favorited={false} onBack={goBack} />
+      </View>
+    )
+  }
+
+  if (error || !artist) {
+    return (
+      <View style={styles.root}>
+        <StatusBar style="dark" />
+        <ArtistTopBar topInset={insets.top} solid title="Artist" favorited={false} onBack={goBack} />
+        <View style={styles.centered}>
+          <Text style={styles.emptyTitle}>Couldn't load artist</Text>
+          <Text style={styles.emptyBody}>{error ?? "This booking page isn't available."}</Text>
+          <Button label="Go back" onPress={goBack} style={{ marginTop: spacing.lg }} />
+        </View>
+      </View>
+    )
+  }
+
+  const where = placeLine(artist)
+  const reviewCount = artist.reviewCount ?? reviews.length
+  const averageRating = artist.averageRating ?? 0
+  const level = parseArtistLevel(artist.level)
+  // "Getting started" is the Partner app's wording; customers read it as a new artist.
+  const levelName = level === "new" ? "New artist" : artistLevelLabel(level, artist.levelLabel)
+  const prices = artist.services.map((service) => service.price).filter((price) => price > 0)
+  const startingPrice = prices.length > 0 ? Math.min(...prices) : null
+  const studio = artist.services.length === 0 || artist.services.some((service) => service.locationMode !== "client_home")
+  const specialities = artist.categories.slice(0, 4).map((id) => artistCategoryLabel(id))
+  const travelRadius = artist.offersHomeVisits && artist.serviceRadiusKm > 0 ? artist.serviceRadiusKm : null
+
+  const facts: QuickFact[] = [
+    ...(artist.yearsExperience
+      ? [{ key: "exp", icon: "ribbon-outline" as const, pastel: pastels.lavender, value: `${artist.yearsExperience}+ yrs`, label: "experience" }]
+      : []),
+    ...(startingPrice != null
+      ? [{ key: "price", icon: "pricetag-outline" as const, pastel: pastels.peach, value: formatRupees(startingPrice), label: "starting price" }]
+      : []),
+    ...(travelRadius != null
+      ? [{ key: "travel", icon: "car-outline" as const, pastel: pastels.sky, value: `${travelRadius} km`, label: "travel radius" }]
+      : []),
+  ]
+
+  const travelFee = artist.offersHomeVisits ? travelFeeLine(artist) : null
+  const policyLines = artist.cancellationPolicyLines ?? []
+  const aboutRows: AboutRow[] = [
+    ...(where
+      ? [
+          {
+            key: "area",
+            icon: "location-outline" as const,
+            title: where,
+            subtitle: artist.offersHomeVisits
+              ? [travelRadius != null ? `Comes to you within ${travelRadius} km` : "Comes to you", travelFee]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Studio appointments",
+          },
+        ]
+      : []),
+    ...(artist.instagramHandle
+      ? [
+          {
+            key: "instagram",
+            icon: "logo-instagram" as const,
+            title: `@${artist.instagramHandle.replace(/^@/, "")}`,
+            subtitle: "Instagram",
+            action: { label: "Open", onPress: openInstagram },
+          },
+        ]
+      : []),
+    ...(artist.advancePaymentRequired
+      ? [
+          {
+            key: "advance",
+            icon: "wallet-outline" as const,
+            title: "Advance payment to confirm",
+            subtitle: "Paid when you book",
+          },
+        ]
+      : []),
+  ]
+
+  const itemCount = selectedServiceIds.length
+  const firstItemName = selectedServices[0]?.name
+  const showBar = itemCount > 0 || quotesOn
+  const bottomPad = showBar ? BOOK_BAR_HEIGHT + BOOK_BAR_GAP + insets.bottom + 24 : insets.bottom + 32
+  const darkStatus = headerSolid || heroSlides.length === 0
+  const visibleReviews = reviews.slice(0, REVIEW_PREVIEW)
+  const bio = artist.bio?.trim()
 
   return (
     <View style={styles.root}>
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + (selectedServiceIds.length > 0 ? 120 : 40) },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={[styles.cover, { height: Math.round(width * 0.72) + insets.top }]}>
-          {coverUrl ? (
-            <Image source={{ uri: coverUrl }} style={styles.coverImage} contentFit="cover" transition={150} />
+      <StatusBar style={darkStatus ? "dark" : "light"} />
+
+      <ArtistTopBar
+        topInset={insets.top}
+        solid={headerSolid}
+        title={artist.displayName}
+        favorited={favorited}
+        onBack={goBack}
+        onShare={shareArtist}
+        onToggleFavorite={toggleFavorite}
+        onLayout={(event) => {
+          const next = Math.round(event.nativeEvent.layout.height)
+          if (next !== headerHeight) setHeaderHeight(next)
+        }}
+      />
+
+      {showStickyTabs ? (
+        <View style={[styles.sticky, { top: headerHeight }]}>
+          <ArtistTabBar tabs={tabs} active={activeTab} onSelect={scrollToTab} />
+          {showStickyChips ? (
+            <View style={styles.stickyChips}>
+              <SalonCategoryChips categories={categories} active={activeCategory} onSelect={scrollToCategory} />
+            </View>
           ) : null}
         </View>
-        <DetailIntro
-          style={styles.intro}
-          leading={
-            <View style={styles.avatarWrap}>
-              {artist.profilePhotoUrl ? (
-                <Image source={{ uri: artist.profilePhotoUrl }} style={styles.avatar} contentFit="cover" />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Text variant="title" color={colors.primary}>
-                    {artist.displayName.slice(0, 1).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-            </View>
-          }
-          status={{
-            label: artist.offersHomeVisits ? "Home & studio" : "Studio",
-            tone: "neutral",
-          }}
-          offerLabel={artist.offers?.[0]?.title ?? null}
-          title={artist.displayName}
-          titleAccessory={
-            <View accessible accessibilityLabel={`${levelName} level`}>
-              <ArtistLevelBadge level={level} size={26} />
-            </View>
-          }
-          subtitle={[levelName, where].filter(Boolean).join(" · ")}
-          stats={[
-            reviewCount > 0
-              ? {
-                  value: `★ ${averageRating.toFixed(1)}`,
-                  label: `${reviewCount} review${reviewCount === 1 ? "" : "s"}`,
-                  onPress: () =>
-                    scrollRef.current?.scrollTo({ y: Math.max(0, reviewsY.current - spacing.md), animated: true }),
-                }
-              : { value: "New", label: "on Glammzo" },
-            ...(artist.yearsExperience ? [{ value: `${artist.yearsExperience}+ yrs`, label: "experience" }] : []),
-            ...(startingPrice != null ? [{ value: formatRupees(startingPrice), label: "starting price" }] : []),
-          ]}
-          actions={[
-            ...(artist.instagramHandle
-              ? [{
-                  icon: "logo-instagram" as const,
-                  label: "Instagram",
-                  onPress: () =>
-                    void Linking.openURL(`https://instagram.com/${artist.instagramHandle!.replace(/^@/, "")}`),
-                }]
-              : []),
-          ]}
-          about={artist.bio}
+      ) : null}
+
+      <ScrollView
+        ref={scrollRef}
+        style={styles.root}
+        contentContainerStyle={{ paddingBottom: bottomPad }}
+        showsVerticalScrollIndicator={false}
+        onScroll={onPageScroll}
+        scrollEventThrottle={16}
+      >
+        <SalonHero
+          slides={heroSlides}
+          name={artist.displayName}
+          width={width}
+          onOpenPhoto={(index) => openLightbox(index)}
         />
 
-        {portfolio.length > 0 ? (
-          <View
-            style={styles.section}
-            onLayout={(e) => {
-              portfolioY.current = e.nativeEvent.layout.y
-            }}
-          >
-            <SectionHeader
-              title="Portfolio"
-              actionLabel={`See all ${portfolio.length}`}
-              onAction={() => setLightboxIndex(0)}
-              style={sectionHeaderInline}
-            />
-            <ScrollView
-              horizontal
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.portfolioStrip}
-            >
-              {portfolioPreview.map((item, index) => {
-                const uri = item.thumbnailUrl || item.imageUrl
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => setLightboxIndex(index)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Portfolio photo ${index + 1}`}
-                  >
-                    <Image
-                      source={{ uri }}
-                      style={{
-                        width: portfolioThumb,
-                        height: portfolioThumb,
-                        borderRadius: radii.md,
-                        backgroundColor: colors.muted,
-                      }}
-                      contentFit="cover"
-                    />
-                  </Pressable>
-                )
-              })}
-              {showPortfolioViewAll ? (
-                <Pressable
-                  onPress={() => setLightboxIndex(0)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`View all ${portfolio.length} portfolio photos`}
-                  style={({ pressed }) => [
-                    {
-                      width: portfolioThumb,
-                      height: portfolioThumb,
-                      borderRadius: radii.md,
-                    },
-                    styles.portfolioViewAll,
-                    pressed && { opacity: 0.88 },
-                  ]}
-                >
-                  {portfolioExtra > 0 ? (
-                    <Text variant="caption" color={colors.primary}>
-                      +{portfolioExtra}
-                    </Text>
-                  ) : null}
-                  <Text variant="caption" color={colors.primary}>
-                    View all
-                  </Text>
-                </Pressable>
-              ) : null}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        <ArtistOffersStrip
-          artistOffers={artist.offers ?? []}
-          services={artist.services}
-          glammzoOffers={offers}
+        <ArtistIntro
+          name={artist.displayName}
+          photoUrl={artist.profilePhotoUrl}
+          verified={Boolean(artist.isVerified)}
+          level={level}
+          levelName={levelName}
+          rating={averageRating}
+          reviewCount={reviewCount}
+          specialities={specialities}
+          place={where}
+          comesToYou={artist.offersHomeVisits}
+          studio={studio}
+          instagramHandle={artist.instagramHandle}
+          facts={facts}
+          onPressRating={() => scrollToTab("reviews")}
+          onOpenInstagram={openInstagram}
         />
 
-        <View style={styles.section}>
-          <SectionHeader title="Services" style={sectionHeaderInline} />
-          {artist.services.length === 0 ? (
-            <Text variant="body" muted>
-              No services are open for online booking yet.
-            </Text>
-          ) : (
-            <View style={styles.serviceBand}>
-              {artist.services.map((service, index) => (
-                <ArtistServiceRow
-                  key={service.id}
-                  service={service}
-                  selected={selectedServiceIds.includes(service.id)}
-                  isLast={index === artist.services.length - 1}
-                  onOpenDetail={() => setDetailService(service)}
-                  onToggle={() => toggleService(service)}
-                />
-              ))}
-            </View>
-          )}
+        <View style={styles.offers}>
+          <ArtistOffersStrip artistOffers={artist.offers ?? []} services={artist.services} glammzoOffers={offers} />
         </View>
 
-        {reviewCount > 0 ? (
+        <View
+          style={styles.tabsInFlow}
+          onLayout={(event) => {
+            tabBarY.current = event.nativeEvent.layout.y
+          }}
+        >
+          <ArtistTabBar tabs={tabs} active={activeTab} onSelect={scrollToTab} />
+        </View>
+
+        {/* SERVICES */}
+        <View
+          onLayout={(event) => {
+            sectionY.current.services = event.nativeEvent.layout.y
+            servicesBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height
+          }}
+        >
+          {categories.length > 1 ? (
+            <View
+              onLayout={(event) => {
+                chipsLocalY.current = event.nativeEvent.layout.y
+              }}
+            >
+              <SalonCategoryChips categories={categories} active={activeCategory} onSelect={scrollToCategory} />
+            </View>
+          ) : null}
+
           <View
-            style={styles.section}
-            onLayout={(e) => {
-              reviewsY.current = e.nativeEvent.layout.y
+            style={styles.serviceList}
+            onLayout={(event) => {
+              listLocalY.current = event.nativeEvent.layout.y
             }}
           >
-            <SectionHeader title="Reviews" style={sectionHeaderInline} />
-            <View
-              style={styles.reviewSummary}
-              accessible
-              accessibilityLabel={`Rated ${averageRating.toFixed(1)} out of 5 from ${reviewCount} review${reviewCount === 1 ? "" : "s"}`}
-            >
-              <Text style={styles.reviewScore}>{averageRating.toFixed(1)}</Text>
-              <View>
-                <Text variant="bodyStrong">{"★".repeat(Math.round(averageRating))}</Text>
-                <Text variant="caption" muted>
-                  {reviewCount} review{reviewCount === 1 ? "" : "s"}
-                </Text>
-              </View>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.bleed}
-              contentContainerStyle={styles.reviewRow}
-            >
-            {(reviews.length > 0 ? reviews : []).slice(0, 8).map((review) => (
-              <View key={review.id} style={[styles.reviewCard, { width: Math.min(300, width * 0.8) }]}>
-                {review.comment ? (
-                  <Text variant="body" numberOfLines={4}>
-                    {`“${review.comment}”`}
-                  </Text>
-                ) : null}
-                <View style={styles.reviewHead}>
-                  <View style={styles.reviewInitial}>
-                    <Text variant="caption" style={styles.reviewInitialText}>
-                      {review.authorName.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="caption" style={styles.reviewAuthor} numberOfLines={1}>
-                      {review.authorName}
-                    </Text>
-                    <Text variant="caption" muted numberOfLines={1}>
-                      {new Date(review.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      {review.serviceName ? ` · ${review.serviceName}` : ""}
-                    </Text>
-                  </View>
-                  <Text variant="caption" style={styles.reviewAuthor} accessibilityLabel={`${Number(review.rating).toFixed(1)} stars`}>
-                    ★ {Number(review.rating).toFixed(1)}
+            {serviceGroups.length === 0 ? (
+              <Text style={styles.emptyText}>No services are open for online booking yet.</Text>
+            ) : null}
+            {serviceGroups.map((group) => (
+              <View
+                key={group.category}
+                style={styles.category}
+                onLayout={(event) => {
+                  categoryLocalY.current[group.category] = event.nativeEvent.layout.y
+                }}
+              >
+                <View style={styles.categoryHeader} accessibilityRole="header">
+                  <Text style={styles.categoryName}>{group.category}</Text>
+                  <Text style={styles.categoryCount}>
+                    {group.items.length} {group.items.length === 1 ? "service" : "services"}
                   </Text>
                 </View>
-                <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
+                <View style={styles.serviceCard}>
+                  {group.items.map((service, index) => (
+                    <ArtistServiceRow
+                      key={service.id}
+                      service={service}
+                      selected={selectedServiceIds.includes(service.id)}
+                      isLast={index === group.items.length - 1}
+                      onOpenDetail={() => setDetailService(service)}
+                      onToggle={() => toggleService(service)}
+                    />
+                  ))}
+                </View>
               </View>
             ))}
-            </ScrollView>
+          </View>
+        </View>
+
+        {/* PORTFOLIO */}
+        {portfolio.length > 0 ? (
+          <View
+            onLayout={(event) => {
+              sectionY.current.portfolio = event.nativeEvent.layout.y
+            }}
+          >
+            <View style={ui.sectionHead}>
+              <Text style={ui.sectionLabel}>Portfolio</Text>
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => openLightbox(0)}>
+                <Text style={ui.seeAll}>See all {portfolio.length}</Text>
+              </Pressable>
+            </View>
+            <ArtistPortfolioGrid items={portfolio} width={width} onOpen={openLightbox} />
           </View>
         ) : null}
 
-        {artist.cancellationPolicyText ? (
-          <View style={styles.policy}>
-            <Icon name="shield-checkmark-outline" size={20} color={colors.textMuted} />
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text variant="caption" style={styles.reviewAuthor}>
-                Cancellation policy
-              </Text>
-              <Text variant="caption" muted numberOfLines={4}>
-                {artist.cancellationPolicyText}
-              </Text>
+        {/* REVIEWS */}
+        <View
+          onLayout={(event) => {
+            sectionY.current.reviews = event.nativeEvent.layout.y
+          }}
+        >
+          <View style={ui.sectionHead}>
+            <Text style={ui.sectionLabel}>Reviews</Text>
+            {reviews.length > REVIEW_PREVIEW ? (
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setReviewsOpen(true)}>
+                <Text style={ui.seeAll}>See all {reviews.length}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          <View style={styles.reviews}>
+            {reviewCount > 0 && averageRating > 0 ? <ReviewSummary rating={averageRating} reviews={reviewCount} /> : null}
+            {visibleReviews.length > 0 ? (
+              visibleReviews.map((review) => <ArtistReviewCard key={review.id} review={review} />)
+            ) : (
+              <View style={styles.emptyReviews}>
+                <Text style={styles.emptyText}>No reviews yet. Be the first after your booking.</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ABOUT */}
+        {hasAbout ? (
+          <View
+            onLayout={(event) => {
+              sectionY.current.about = event.nativeEvent.layout.y
+            }}
+          >
+            <View style={ui.sectionHead}>
+              <Text style={ui.sectionLabel}>About</Text>
             </View>
+            {bio ? <Text style={styles.bio}>{bio}</Text> : null}
+            <SalonAboutCard rows={aboutRows} amenities={[]} />
+            {artist.cancellationPolicyText || policyLines.length > 0 ? (
+              <View style={styles.policyCard}>
+                <Text style={ui.sectionLabel}>Cancellation policy</Text>
+                {artist.cancellationPolicyText ? (
+                  <Text style={styles.policyText}>{artist.cancellationPolicyText}</Text>
+                ) : null}
+                {policyLines.map((line, index) => (
+                  <View key={`${line}-${index}`} style={styles.policyLine}>
+                    <View style={styles.policyDot} />
+                    <Text style={[styles.policyText, { flex: 1, marginTop: 0 }]}>{line}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         ) : null}
       </ScrollView>
 
-      <View style={[styles.photoActions, { top: insets.top + spacing.sm }]} pointerEvents="box-none">
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/artists" as Href))}
-          style={styles.roundBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <Icon name="chevron-back" size={22} color={colors.text} />
-        </Pressable>
-        <View style={styles.photoActionsRight} pointerEvents="box-none">
-          <Pressable onPress={shareArtist} style={styles.roundBtn} accessibilityRole="button" accessibilityLabel="Share">
-            <Icon name="share-outline" size={20} color={colors.text} />
-          </Pressable>
-          <Pressable
-            onPress={toggleFavorite}
-            style={styles.roundBtn}
-            accessibilityRole="button"
-            accessibilityLabel={favorited ? "Remove favorite" : "Save artist"}
-          >
-            <Icon name={favorited ? "heart" : "heart-outline"} size={20} color={favorited ? colors.primary : colors.text} />
-          </Pressable>
-        </View>
-      </View>
-
-      <BottomSheet
-        visible={detailService != null}
-        title="Service summary"
+      <ArtistServiceSheet
+        service={detailService}
+        selected={detailService ? selectedServiceIds.includes(detailService.id) : false}
         onClose={() => setDetailService(null)}
-      >
-        {detailService ? (
-          <View style={styles.sheetBody}>
-            <Text variant="heading">{detailService.name}</Text>
-            <Text muted style={{ marginTop: spacing.xs }}>
-              {detailService.category || locationLabel(detailService.locationMode)} ·{" "}
-              {formatDuration(detailService.durationMinutes)}
-            </Text>
-            <View style={styles.sheetPriceBox}>
-              <Text variant="caption" muted>
-                At artist's studio
-              </Text>
-              {detailService.offerPrice != null &&
-              detailService.offerPrice < detailService.price ? (
-                <>
-                  <Text variant="caption" muted style={{ textDecorationLine: "line-through" }}>
-                    {formatRupees(detailService.price)}
-                  </Text>
-                  <Text variant="title" color={colors.primary}>
-                    {formatRupees(detailService.offerPrice)}
-                  </Text>
-                  {detailService.offerDealLabel ? (
-                    <Text variant="caption" color={colors.primary} style={{ marginTop: 4 }}>
-                      {detailService.offerDealLabel}
-                      {detailService.offerTitle ? ` · ${detailService.offerTitle}` : ""}
-                    </Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text variant="title">{formatRupees(detailService.price)}</Text>
-              )}
-              {detailService.homeVisitPriceOverride != null ? (
-                <>
-                  <Text variant="caption" muted style={{ marginTop: spacing.sm }}>
-                    If artist comes to your home
-                  </Text>
-                  <Text variant="heading">
-                    {formatRupees(detailService.homeVisitPriceOverride)}
-                  </Text>
-                </>
-              ) : detailService.locationMode === "client_home" ||
-                detailService.locationMode === "both" ? (
-                <Text variant="caption" muted style={{ marginTop: 4 }}>
-                  Same price for home visits
-                </Text>
-              ) : null}
-            </View>
-            {detailService.description ? (
-              <Text variant="body" muted style={{ marginTop: spacing.lg }}>
-                {detailService.description}
-              </Text>
-            ) : null}
-            <Text variant="caption" muted style={{ marginTop: spacing.md }}>
-              {locationLabel(detailService.locationMode)}
-            </Text>
-            <Button
-              label={
-                selectedServiceIds.includes(detailService.id)
-                  ? "Remove from bag"
-                  : "Add to bag"
-              }
-              variant={
-                selectedServiceIds.includes(detailService.id) ? "secondary" : "primary"
-              }
-              style={{ marginTop: spacing.xxl }}
-              onPress={() => {
-                toggleService(detailService)
-                setDetailService(null)
-              }}
-            />
-          </View>
-        ) : null}
+        onToggle={toggleService}
+      />
+
+      <BottomSheet visible={reviewsOpen} title={`Reviews (${reviews.length})`} onClose={() => setReviewsOpen(false)}>
+        <View style={styles.allReviews}>
+          {reviews.map((review) => (
+            <ArtistReviewCard key={review.id} review={review} />
+          ))}
+        </View>
       </BottomSheet>
 
-      {selectedServiceIds.length > 0 && artist ? (
-        <CartStrip
-          entries={[
-            {
-              salonId: artist.slug,
-              salonName: artist.displayName,
-              itemCount: selectedServiceIds.length,
-              totalLabel: formatRupees(selectedTotal),
-              imageUrls: artist.profilePhotoUrl ? [artist.profilePhotoUrl] : [],
-              previewLabel: cartPreviewLabel,
-              ctaLabel: "Next",
-              onPress: () => goBook(),
-              onClear: () => {
-                if (cartId) cart.clearSalon(cartId)
-              },
-            },
-          ]}
+      <SalonGalleryLightbox
+        visible={lightboxOpen}
+        gallery={portfolioImages}
+        salonName={artist.displayName}
+        index={lightboxIndex}
+        onClose={() => setLightboxOpen(false)}
+        onIndexChange={setLightboxIndex}
+      />
+
+      {showBar ? (
+        <ArtistBookBar
+          bottomInset={insets.bottom}
+          itemCount={itemCount}
+          totalLabel={formatRupees(selectedTotal)}
+          firstItemName={itemCount === 1 ? firstItemName : undefined}
+          emptyLine={startingPrice != null ? `Pick a service · from ${formatRupees(startingPrice)}` : "Pick a service to book"}
+          onBook={() => (itemCount > 0 ? goBook() : scrollToTab("services"))}
+          onClear={() => {
+            if (cartId) cart.clearSalon(cartId)
+          }}
+          onGetQuotes={quotesOn ? openGetQuotes : undefined}
         />
       ) : null}
-
-      <Modal
-        visible={lightboxIndex != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLightboxIndex(null)}
-      >
-        <View style={[styles.lightbox, { paddingTop: insets.top + spacing.sm }]}>
-          <View style={styles.lightboxBar}>
-            <Pressable
-              onPress={() => setLightboxIndex(null)}
-              style={styles.iconBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Close portfolio"
-            >
-              <Icon name="close" size={24} color={colors.primaryFg} />
-            </Pressable>
-            <Text variant="bodyStrong" color={colors.primaryFg}>
-              {lightboxIndex != null ? `${lightboxIndex + 1} / ${portfolioImages.length}` : ""}
-            </Text>
-            <View style={styles.iconBtn} />
-          </View>
-          {lightboxIndex != null && portfolioImages.length > 0 ? (
-            <FlatList
-              data={portfolioImages}
-              keyExtractor={(uri, i) => `${uri}-${i}`}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              initialScrollIndex={lightboxIndex}
-              getItemLayout={(_, index) => ({
-                length: width,
-                offset: width * index,
-                index,
-              })}
-              onMomentumScrollEnd={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-                const next = Math.round(e.nativeEvent.contentOffset.x / width)
-                if (next >= 0 && next < portfolioImages.length) setLightboxIndex(next)
-              }}
-              renderItem={({ item: uri }) => (
-                <View style={{ width, height: "100%", justifyContent: "center" }}>
-                  <Image source={{ uri }} style={styles.lightboxImage} contentFit="contain" />
-                </View>
-              )}
-              style={{ flex: 1 }}
-            />
-          ) : null}
-        </View>
-      </Modal>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.sm,
-    paddingBottom: spacing.sm,
-    backgroundColor: colors.card,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+  root: {
+    flex: 1,
+    backgroundColor: "#ffffff",
   },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scroll: { padding: spacing.lg, gap: spacing.xl },
-  center: {
+  centered: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  cover: {
-    marginHorizontal: -spacing.lg,
-    marginTop: -spacing.lg,
-    backgroundColor: colors.muted,
-    overflow: "hidden",
+  emptyTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    color: sp.text,
+    textAlign: "center",
   },
-  coverImage: {
-    width: "100%",
-    height: "100%",
+  emptyBody: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.secondary,
+    textAlign: "center",
   },
-  // Pull the info card up over the cover (the scroll gap is spacing.xl).
-  intro: {
-    marginTop: -(spacing.xl + 28),
-    marginHorizontal: -spacing.lg,
-  },
-  avatarWrap: {
-    position: "relative",
-    alignSelf: "flex-start",
-    marginTop: -52,
-  },
-  avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    borderWidth: 4,
-    borderColor: colors.bg,
-    backgroundColor: colors.muted,
-  },
-  avatarFallback: { alignItems: "center", justifyContent: "center" },
-  ratingPill: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.sm,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  section: { gap: spacing.md, marginTop: spacing.md },
-  bleed: { marginHorizontal: -spacing.lg },
-  reviewRow: { gap: spacing.md, paddingHorizontal: spacing.lg },
-  portfolioStrip: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    alignItems: "center",
-    paddingRight: spacing.sm,
-  },
-  portfolioViewAll: {
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F2F2F2",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(232, 120, 90, 0.35)",
-    gap: 2,
-    paddingHorizontal: 4,
-  },
-  // Full width on white, so the list reads differently from the cards around it.
-  serviceBand: {
-    marginHorizontal: -spacing.lg,
-    paddingHorizontal: spacing.xs,
-    backgroundColor: colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  photoActions: {
+  sticky: {
     position: "absolute",
-    left: spacing.lg,
-    right: spacing.lg,
+    left: 0,
+    right: 0,
+    zIndex: 28,
+    backgroundColor: "#ffffff",
+  },
+  stickyChips: {
+    borderBottomWidth: 1,
+    borderBottomColor: sp.tabBorder,
+  },
+  offers: {
+    paddingHorizontal: spacing.lg,
+    marginTop: 12,
+  },
+  tabsInFlow: {
+    marginTop: 24,
+  },
+  serviceList: {
+    paddingHorizontal: sp.gutter,
+  },
+  category: {
+    paddingTop: 18,
+  },
+  categoryHeader: {
     flexDirection: "row",
+    alignItems: "baseline",
     justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 10,
   },
-  photoActionsRight: {
-    flexDirection: "row",
-    gap: spacing.sm,
+  categoryName: {
+    flexShrink: 1,
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    lineHeight: 23,
+    color: sp.text,
   },
-  roundBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-    ...shadows.card,
+  categoryCount: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 17,
+    color: sp.secondary,
   },
-  reviewSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  reviewScore: {
-    fontSize: 40,
-    lineHeight: 46,
-    fontFamily: "Geist_700Bold",
-    color: colors.text,
-  },
-  reviewInitial: {
-    width: 32,
-    height: 32,
+  serviceCard: {
     borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: sp.border,
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
   },
-  reviewInitialText: {
-    fontFamily: "Geist_600SemiBold",
+  emptyText: {
+    paddingTop: 20,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.secondary,
   },
-  reviewAuthor: {
-    fontFamily: "Geist_600SemiBold",
+  reviews: {
+    paddingHorizontal: sp.gutter,
+    gap: 12,
   },
-  policy: {
+  emptyReviews: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: sp.tabBorder,
+    borderStyle: "dashed",
+  },
+  allReviews: {
+    gap: 12,
+    paddingBottom: 12,
+  },
+  bio: {
+    paddingHorizontal: sp.gutter,
+    marginBottom: 14,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 21,
+    color: sp.body,
+  },
+  policyCard: {
+    marginTop: 14,
+    marginHorizontal: sp.gutter,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: sp.border,
+    backgroundColor: "#ffffff",
+    gap: 6,
+  },
+  policyText: {
+    marginTop: 4,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 19,
+    color: sp.body,
+  },
+  policyLine: {
     flexDirection: "row",
-    gap: spacing.md,
-    marginTop: spacing.md,
-    paddingTop: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    alignItems: "flex-start",
+    gap: 8,
   },
-  sheetBody: {
-    gap: spacing.xs,
-    paddingBottom: spacing.md,
+  policyDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 7,
+    backgroundColor: sp.secondary,
   },
-  sheetPriceBox: {
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-  },
-  // Quiet quotes on grey: no shadow, the words come first.
-  reviewCard: {
-    backgroundColor: colors.muted,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: spacing.md,
-    justifyContent: "space-between",
-  },
-  reviewHead: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  lightbox: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.94)",
-  },
-  lightboxBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: spacing.sm,
-  },
-  lightboxImage: { width: "100%", height: "80%" },
 })

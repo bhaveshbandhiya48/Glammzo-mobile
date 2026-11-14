@@ -1,39 +1,63 @@
-import { Image } from "expo-image"
 import { useCallback, useState } from "react"
 import { Pressable, StyleSheet, View } from "react-native"
-import { useFocusEffect, useRouter, type Href } from "expo-router"
+import { useFocusEffect, useRouter } from "expo-router"
 
-import { Button } from "@/components/ui/Button"
+import { ArtistListRow, ArtistListRowSkeleton } from "@/components/home/ArtistListRow"
+import { SalonListRow } from "@/components/home/SalonListRow"
+import { Chip, EmptyState, HEADER_TINTS, ProfileSubScreen } from "@/components/profile/ProfileScreenParts"
+import { pastels, sp, ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
-import { Screen } from "@/components/ui/Screen"
-import { SalonCard } from "@/components/ui/SalonCard"
-import { ExploreSalonsSkeleton } from "@/components/ui/Skeleton"
-import { Text } from "@/components/ui/Text"
 import { useArtistFavorites } from "@/context/ArtistFavoritesContext"
 import { useFavorites } from "@/context/FavoritesContext"
 import type { Salon } from "@/data/types"
-import {
-  fetchFavoriteArtistSlugs,
-} from "@/lib/artist-favorites-api"
-import {
-  fetchPublicArtist,
-  type PublicArtist,
-} from "@/lib/artists-api"
+import { fetchFavoriteArtistSlugs } from "@/lib/artist-favorites-api"
+import { fetchPublicArtist, type ArtistCardData, type PublicArtist } from "@/lib/artists-api"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
-import { colors, radii, spacing } from "@/theme/tokens"
 
-type FavoriteArtist = Pick<
-  PublicArtist,
-  "slug" | "displayName" | "city" | "area" | "profilePhotoUrl"
->
+type Tab = "salons" | "artists"
+const NO_LABELS: Record<string, string> = {}
+const LOGIN_ROUTE = { pathname: "/login", params: { next: "/profile/favorites" } } as const
+
+/** The artist page payload in the shape the shared list row reads. */
+function toCardData(artist: PublicArtist): ArtistCardData {
+  const prices = artist.services.map((service) => Number(service.price)).filter((price) => price > 0)
+  const portfolio = (artist.portfolio ?? [])
+    .map((item) => item.thumbnailUrl?.trim() || item.imageUrl?.trim() || "")
+    .filter(Boolean)
+  return {
+    slug: artist.slug,
+    url: "",
+    displayName: artist.displayName,
+    area: artist.area,
+    city: artist.city,
+    profilePhotoUrl: artist.profilePhotoUrl,
+    categories: artist.categories,
+    primaryCategory: artist.categories[0] ?? null,
+    startingPrice: prices.length > 0 ? Math.min(...prices) : null,
+    offersHomeVisits: artist.offersHomeVisits,
+    hasStudio: artist.services.some((service) => service.locationMode !== "client_home"),
+    serviceRadiusKm: artist.serviceRadiusKm,
+    yearsExperience: artist.yearsExperience,
+    portfolio,
+    distanceKm: null,
+    coversYourArea: null,
+    averageRating: artist.averageRating,
+    reviewCount: artist.reviewCount,
+    level: artist.level,
+    levelLabel: artist.levelLabel,
+    isVerified: artist.isVerified,
+  }
+}
 
 export default function FavoritesScreen() {
   const router = useRouter()
-  const { ids, refresh } = useFavorites()
-  const { refresh: refreshArtistFavorites } = useArtistFavorites()
+  const { ids, refresh, toggle: toggleSalon } = useFavorites()
+  const { refresh: refreshArtistFavorites, toggle: toggleArtist } = useArtistFavorites()
   const [catalog, setCatalog] = useState<Salon[]>([])
-  const [artists, setArtists] = useState<FavoriteArtist[]>([])
+  const [artists, setArtists] = useState<ArtistCardData[]>([])
+  const [unsavedArtists, setUnsavedArtists] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<Tab | null>(null)
 
   useFocusEffect(
     useCallback(() => {
@@ -48,9 +72,8 @@ export default function FavoritesScreen() {
         .then(async ([, , { salons }, slugs]) => {
           if (cancelled) return
           setCatalog(salons)
-          const unique = Array.from(
-            new Set(slugs.map((s) => s.trim().toLowerCase()).filter(Boolean)),
-          )
+          setUnsavedArtists([])
+          const unique = Array.from(new Set(slugs.map((s) => s.trim().toLowerCase()).filter(Boolean)))
           if (unique.length === 0) {
             setArtists([])
             return
@@ -58,21 +81,14 @@ export default function FavoritesScreen() {
           const loaded = await Promise.all(
             unique.map(async (slug) => {
               try {
-                const artist = await fetchPublicArtist(slug)
-                return {
-                  slug: artist.slug,
-                  displayName: artist.displayName,
-                  city: artist.city,
-                  area: artist.area,
-                  profilePhotoUrl: artist.profilePhotoUrl,
-                } satisfies FavoriteArtist
+                return toCardData(await fetchPublicArtist(slug))
               } catch {
                 return null
               }
             }),
           )
           if (!cancelled) {
-            setArtists(loaded.filter((a): a is FavoriteArtist => a != null))
+            setArtists(loaded.filter((a): a is ArtistCardData => a != null))
           }
         })
         .catch(() => {
@@ -90,145 +106,128 @@ export default function FavoritesScreen() {
   )
 
   const salons = catalog.filter((salon) => ids.includes(salon.id))
-  const empty = salons.length === 0 && artists.length === 0
+  const savedArtists = artists.filter((artist) => !unsavedArtists.includes(artist.slug))
+  const total = salons.length + savedArtists.length
+  // Open on Artists only when there are saved artists and no saved salons.
+  const activeTab: Tab = tab ?? (salons.length === 0 && savedArtists.length > 0 ? "artists" : "salons")
+
+  function unsaveSalon(salon: Salon) {
+    void (async () => {
+      if ((await toggleSalon(salon.id)) === "auth") router.push(LOGIN_ROUTE)
+    })()
+  }
+
+  function unsaveArtist(artist: ArtistCardData) {
+    void (async () => {
+      const result = await toggleArtist(artist.slug)
+      if (result === "auth") router.push(LOGIN_ROUTE)
+      else setUnsavedArtists((current) => [...current, artist.slug])
+    })()
+  }
+
+  let body
+  if (loading) {
+    body = (
+      <View accessibilityLabel="Loading your saved salons and artists">
+        <ArtistListRowSkeleton />
+        <ArtistListRowSkeleton />
+        <ArtistListRowSkeleton />
+      </View>
+    )
+  } else if (activeTab === "salons") {
+    body =
+      salons.length === 0 ? (
+        <EmptyState
+          pastel={pastels.pink}
+          icon="heart-outline"
+          title="No saved salons yet"
+          text="Tap the heart on a salon to save it here."
+          ctaLabel="Find a salon"
+          onCta={() => router.push("/(tabs)/explore")}
+        />
+      ) : (
+        <View>
+          {salons.map((salon) => (
+            <View key={salon.id}>
+              <SalonListRow salon={salon} />
+              <HeartButton name={salon.name} onPress={() => unsaveSalon(salon)} />
+            </View>
+          ))}
+        </View>
+      )
+  } else {
+    body =
+      savedArtists.length === 0 ? (
+        <EmptyState
+          pastel={pastels.lavender}
+          icon="heart-outline"
+          title="No saved artists yet"
+          text="Tap the heart on an artist's page to save them here."
+          ctaLabel="Find an artist"
+          onCta={() => router.push("/(tabs)/explore")}
+        />
+      ) : (
+        <View>
+          {savedArtists.map((artist) => (
+            <View key={artist.slug}>
+              <ArtistListRow artist={artist} labels={NO_LABELS} />
+              <HeartButton name={artist.displayName} onPress={() => unsaveArtist(artist)} />
+            </View>
+          ))}
+        </View>
+      )
+  }
 
   return (
-    <Screen scroll>
-      <Text variant="title">Saved</Text>
-      <Text muted style={styles.gap}>
-        Salons and solo artists you can book again quickly.
-      </Text>
+    <ProfileSubScreen
+      title="Saved"
+      subtitle={loading ? "Salons and artists you've saved" : `${total} saved`}
+      tint={HEADER_TINTS.saved}
+    >
+      <View style={styles.chips}>
+        <Chip
+          label={loading ? "Salons" : `Salons · ${salons.length}`}
+          active={activeTab === "salons"}
+          onPress={() => setTab("salons")}
+        />
+        <Chip
+          label={loading ? "Artists" : `Artists · ${savedArtists.length}`}
+          active={activeTab === "artists"}
+          onPress={() => setTab("artists")}
+        />
+      </View>
+      {body}
+    </ProfileSubScreen>
+  )
+}
 
-      {loading ? (
-        <View style={styles.list}>
-          <ExploreSalonsSkeleton count={2} />
-        </View>
-      ) : empty ? (
-        <View style={styles.empty}>
-          <Text variant="bodyStrong">Nothing saved yet</Text>
-          <Text muted>
-            Tap the heart on a salon or solo-artist page to save them here.
-          </Text>
-          <Button label="Explore" onPress={() => router.push("/(tabs)/explore")} />
-        </View>
-      ) : (
-        <>
-          {salons.length > 0 ? (
-            <View style={styles.block}>
-              <Text variant="heading">Salons</Text>
-              <View style={styles.list}>
-                {salons.map((salon) => (
-                  <SalonCard
-                    key={salon.id}
-                    salon={salon}
-                    onPress={() =>
-                      router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
-                    }
-                  />
-                ))}
-              </View>
-            </View>
-          ) : null}
-
-          {artists.length > 0 ? (
-            <View style={styles.block}>
-              <Text variant="heading">Solo artists</Text>
-              <View style={styles.artistList}>
-                {artists.map((artist) => {
-                  const where = [artist.area, artist.city].filter(Boolean).join(", ")
-                  return (
-                    <Pressable
-                      key={artist.slug}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/artist/[slug]",
-                          params: { slug: artist.slug },
-                        } as Href)
-                      }
-                      style={({ pressed }) => [styles.artistCard, pressed && { opacity: 0.9 }]}
-                      accessibilityRole="button"
-                      accessibilityLabel={artist.displayName}
-                    >
-                      {artist.profilePhotoUrl ? (
-                        <Image
-                          source={{ uri: artist.profilePhotoUrl }}
-                          style={styles.artistAvatar}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                          <Text variant="heading" color={colors.primary}>
-                            {artist.displayName.slice(0, 1).toUpperCase()}
-                          </Text>
-                        </View>
-                      )}
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="heading" numberOfLines={1}>
-                          {artist.displayName}
-                        </Text>
-                        {where ? (
-                          <Text variant="caption" muted numberOfLines={1}>
-                            {where}
-                          </Text>
-                        ) : null}
-                      </View>
-                      <Icon name="chevron-forward" size={18} color={colors.textMuted} />
-                    </Pressable>
-                  )
-                })}
-              </View>
-            </View>
-          ) : null}
-        </>
-      )}
-    </Screen>
+/** Filled heart over the row photo; tapping it unsaves, like the heart on the salon or artist page. */
+function HeartButton({ name, onPress }: { name: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Remove ${name} from saved`}
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.heart, pressed && ui.pressed]}
+    >
+      <Icon name="heart" size={16} color="#e0245e" />
+    </Pressable>
   )
 }
 
 const styles = StyleSheet.create({
-  gap: {
-    marginTop: spacing.sm,
-  },
-  empty: {
-    marginTop: spacing.xxxl,
-    gap: spacing.md,
-    padding: spacing.xl,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-    backgroundColor: colors.card,
-  },
-  block: {
-    marginTop: spacing.xl,
-    gap: spacing.md,
-  },
-  list: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  artistList: {
-    gap: spacing.sm,
-  },
-  artistCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  artistAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.muted,
-  },
-  artistAvatarFallback: {
+  chips: { flexDirection: "row", gap: 8, marginTop: 4, marginBottom: 4 },
+  heart: {
+    position: "absolute",
+    top: 20,
+    left: 62,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: sp.border,
     alignItems: "center",
     justifyContent: "center",
   },

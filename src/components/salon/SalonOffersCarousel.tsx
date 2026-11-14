@@ -2,21 +2,23 @@ import { useMemo, useState } from "react"
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
 } from "react-native"
 
+import { PastelIcon, type Pastel } from "@/components/profile/ProfileParts"
+import { PrimaryPill } from "@/components/profile/ProfileScreenParts"
+import { OfferCard, OfferDots } from "@/components/salon-page/OfferCard"
+import { pastels, sp, ui } from "@/components/salon-page/theme"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { Button } from "@/components/ui/Button"
 import { CodeChip } from "@/components/ui/CodeChip"
-import { Icon } from "@/components/ui/Icon"
+import { type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { SalonOffer } from "@/data/types"
 import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type DisplayOffer =
   | {
@@ -33,7 +35,7 @@ type DisplayOffer =
 type Props = {
   glammzoOffers: GlammzoOfferCard[]
   salonOffers: SalonOffer[]
-  /** Horizontal inset already applied by parent screen padding. */
+  /** Left / right inset of the first and last card (the page gutter). */
   contentInset?: number
   onPressCta?: () => void
 }
@@ -76,10 +78,22 @@ function servicesLine(offer: SalonOffer) {
   return "Salon offer"
 }
 
+function glammzoCaption(offer: GlammzoOfferCard) {
+  if (offer.cashbackRupees > 0) {
+    return `${offerCashbackText(offer)}${offer.benefitType === "instant" ? " at checkout" : " after visit"}${
+      offer.minOrderRupees > 0 ? ` (min ₹${offer.minOrderRupees})` : ""
+    }`
+  }
+  return offer.subtitle || "Glammzo offer"
+}
+
+const GLAMMZO_PASTEL: Pastel = pastels.lavender
+const SALON_PASTEL: Pastel = pastels.peach
+
 export function SalonOffersCarousel({
   glammzoOffers,
   salonOffers,
-  contentInset = spacing.xl,
+  contentInset = sp.gutter,
   onPressCta,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions()
@@ -102,8 +116,12 @@ export function SalonOffersCarousel({
     return next
   }, [glammzoOffers, salonOffers])
 
-  const cardWidth = Math.max(260, windowWidth - contentInset * 2)
-  const gap = spacing.md
+  const gap = 12
+  // A second card peeks in when there is more than one.
+  const cardWidth =
+    items.length > 1
+      ? Math.max(260, windowWidth - contentInset * 2 - 28)
+      : Math.max(260, windowWidth - contentInset * 2)
   const snap = cardWidth + gap
   const activeOffer = items.find((item) => item.key === activeOfferKey) ?? null
 
@@ -121,100 +139,49 @@ export function SalonOffersCarousel({
         nestedScrollEnabled
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
-        snapToInterval={snap}
+        snapToInterval={items.length > 1 ? snap : undefined}
         snapToAlignment="start"
         disableIntervalMomentum
-        contentContainerStyle={[
-          styles.row,
-          items.length === 1 ? styles.rowSingle : null,
-        ]}
+        contentContainerStyle={[styles.row, { paddingHorizontal: contentInset }]}
         onMomentumScrollEnd={onMomentumEnd}
       >
-        {items.map((item) => (
-          <Pressable
-            accessibilityRole="button"
-            key={item.key}
-            onPress={() => setActiveOfferKey(item.key)}
-            style={[
-              styles.card,
-              { width: cardWidth },
-              item.kind === "glammzo" ? styles.cardGlammzo : styles.cardSalon,
-            ]}
-          >
-            {item.kind === "glammzo" ? (
-              <>
-                <View style={[styles.icon, styles.iconGlammzo]}>
-                  <Icon name="sparkles" size={20} color={colors.primaryFg} />
-                </View>
-                <View style={styles.copy}>
-                  <Text variant="label" color={colors.textMuted}>
-                    {item.offer.eyebrow || "Glammzo offer"}
-                  </Text>
-                  <Text variant="bodyStrong" numberOfLines={2}>
-                    {item.offer.title}
-                  </Text>
-                  <Text variant="caption" muted numberOfLines={2}>
-                    {item.offer.cashbackRupees > 0
-                      ? `${offerCashbackText(item.offer)}${
-                          item.offer.benefitType === "instant" ? " at checkout" : " after visit"
-                        }${
-                          item.offer.minOrderRupees > 0
-                            ? ` (min ₹${item.offer.minOrderRupees})`
-                            : ""
-                        }`
-                      : item.offer.subtitle || "Glammzo offer"}
-                  </Text>
-                  {item.offer.promoCode ? (
-                    <CodeChip code={item.offer.promoCode} label="Code" style={styles.cardChip} />
-                  ) : null}
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={[styles.icon, styles.iconSalon]}>
-                  {item.offer.discountType === "percent" ? (
-                    <Text variant="heading" color={colors.primaryFg}>
-                      %
-                    </Text>
-                  ) : (
-                    <Icon name="pricetag" size={20} color={colors.primaryFg} />
-                  )}
-                </View>
-                <View style={styles.copy}>
-                  <Text variant="caption" color={colors.primary} style={styles.code}>
-                    {salonDiscountLabel(item.offer)}
-                  </Text>
-                  <Text variant="bodyStrong" numberOfLines={2}>
-                    {item.offer.title}
-                  </Text>
-                  <Text variant="caption" muted numberOfLines={2}>
-                    {servicesLine(item.offer)}
-                  </Text>
-                  {item.offer.code ? (
-                    <CodeChip code={item.offer.code} label="Code" style={styles.cardChip} />
-                  ) : null}
-                  {formatExpiry(item.offer.endsAt) ? (
-                    <Text variant="caption" muted numberOfLines={1}>
-                      Valid till {formatExpiry(item.offer.endsAt)}
-                    </Text>
-                  ) : null}
-                </View>
-              </>
-            )}
-          </Pressable>
-        ))}
+        {items.map((item) =>
+          item.kind === "glammzo" ? (
+            <OfferCard
+              key={item.key}
+              width={cardWidth}
+              pastel={GLAMMZO_PASTEL}
+              icon="sparkles"
+              eyebrow={item.offer.eyebrow || "Glammzo offer"}
+              title={item.offer.title}
+              lines={[glammzoCaption(item.offer)]}
+              accessibilityLabel={`${item.offer.eyebrow || "Glammzo offer"}. ${item.offer.title}. ${glammzoCaption(item.offer)}. Opens offer details`}
+              onPress={() => setActiveOfferKey(item.key)}
+              footer={item.offer.promoCode ? <CodeChip code={item.offer.promoCode} label="Code" /> : null}
+            />
+          ) : (
+            <OfferCard
+              key={item.key}
+              width={cardWidth}
+              pastel={SALON_PASTEL}
+              glyph={item.offer.discountType === "percent" ? "%" : undefined}
+              icon="pricetag"
+              eyebrow="Salon offer"
+              badge={salonDiscountLabel(item.offer)}
+              title={item.offer.title}
+              lines={[
+                servicesLine(item.offer),
+                formatExpiry(item.offer.endsAt) ? `Valid till ${formatExpiry(item.offer.endsAt)}` : null,
+              ]}
+              accessibilityLabel={`${salonOfferCaption(item.offer)}. ${item.offer.title}. Opens offer details`}
+              onPress={() => setActiveOfferKey(item.key)}
+              footer={item.offer.code ? <CodeChip code={item.offer.code} label="Code" /> : null}
+            />
+          ),
+        )}
       </ScrollView>
 
-      {items.length > 1 ? (
-        <View style={styles.dots}>
-          {items.map((item, i) => (
-            <View
-              key={item.key}
-              style={[styles.dot, i === index && styles.dotActive]}
-            />
-          ))}
-        </View>
-      ) : null}
+      <OfferDots count={items.length} index={index} />
 
       <BottomSheet
         visible={activeOffer != null}
@@ -222,12 +189,8 @@ export function SalonOffersCarousel({
         onClose={() => setActiveOfferKey(null)}
         footer={
           activeOffer ? (
-            <Button
-              label={
-                activeOffer.kind === "salon"
-                  ? activeOffer.offer.ctaLabel?.trim() || "Book now"
-                  : activeOffer.offer.ctaLabel?.trim() || "Book now"
-              }
+            <PrimaryPill
+              label={activeOffer.offer.ctaLabel?.trim() || "Book now"}
               onPress={() => {
                 setActiveOfferKey(null)
                 onPressCta?.()
@@ -239,108 +202,76 @@ export function SalonOffersCarousel({
         {activeOffer ? (
           activeOffer.kind === "glammzo" ? (
             <View style={styles.sheetBody}>
-              <View style={[styles.sheetHero, styles.iconGlammzo]}>
-                <Icon name="sparkles" size={24} color={colors.primaryFg} />
-              </View>
-              <Text variant="label" muted>
-                {activeOffer.offer.eyebrow || "Glammzo offer"}
-              </Text>
-              <Text variant="heading">{activeOffer.offer.title}</Text>
-              {activeOffer.offer.promoCode ? (
-                <View style={styles.sheetCode}>
-                  <Text variant="caption" muted>
-                    Promo code
-                  </Text>
-                  <CodeChip code={activeOffer.offer.promoCode} />
-                </View>
-              ) : null}
+              <PastelIcon pastel={GLAMMZO_PASTEL} name="sparkles" size={52} />
+              <Text style={ui.sectionLabel}>{activeOffer.offer.eyebrow || "Glammzo offer"}</Text>
+              <Text style={styles.sheetTitle}>{activeOffer.offer.title}</Text>
               {activeOffer.offer.description ? (
-                <Text muted>{activeOffer.offer.description}</Text>
+                <Text style={styles.sheetText}>{activeOffer.offer.description}</Text>
               ) : activeOffer.offer.subtitle ? (
-                <Text muted>{activeOffer.offer.subtitle}</Text>
+                <Text style={styles.sheetText}>{activeOffer.offer.subtitle}</Text>
+              ) : null}
+              {activeOffer.offer.promoCode ? (
+                <CodeBlock code={activeOffer.offer.promoCode} />
               ) : null}
               <View style={styles.sheetFacts}>
                 {activeOffer.offer.cashbackRupees > 0 ? (
-                  <View style={styles.factRow}>
-                    <Icon name="wallet-outline" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>
-                      {offerCashbackText(activeOffer.offer)}
-                      {activeOffer.offer.benefitType === "instant" ? " at checkout" : " after visit"}
-                      {activeOffer.offer.autoApply ? " · applied automatically" : ""}
-                    </Text>
-                  </View>
+                  <Fact
+                    pastel={pastels.mint}
+                    icon="wallet-outline"
+                    text={`${offerCashbackText(activeOffer.offer)}${
+                      activeOffer.offer.benefitType === "instant" ? " at checkout" : " after visit"
+                    }${activeOffer.offer.autoApply ? " · applied automatically" : ""}`}
+                  />
                 ) : null}
                 {activeOffer.offer.minOrderRupees > 0 ? (
-                  <View style={styles.factRow}>
-                    <Icon name="pricetag-outline" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>
-                      Minimum booking ₹{activeOffer.offer.minOrderRupees}
-                    </Text>
-                  </View>
+                  <Fact
+                    pastel={pastels.gold}
+                    icon="pricetag-outline"
+                    text={`Minimum booking ₹${activeOffer.offer.minOrderRupees}`}
+                  />
                 ) : null}
               </View>
             </View>
           ) : (
             <View style={styles.sheetBody}>
-              <View style={[styles.sheetHero, styles.iconSalon]}>
-                <Icon name="pricetag" size={24} color={colors.primaryFg} />
-              </View>
-              <Text variant="label" color={colors.primary}>
-                {salonDiscountLabel(activeOffer.offer)}
-              </Text>
-              <Text variant="heading">{activeOffer.offer.title}</Text>
+              <PastelIcon pastel={SALON_PASTEL} name="pricetag" size={52} />
+              <Text style={ui.sectionLabel}>{salonDiscountLabel(activeOffer.offer)}</Text>
+              <Text style={styles.sheetTitle}>{activeOffer.offer.title}</Text>
               {activeOffer.offer.description ? (
-                <Text muted>{activeOffer.offer.description}</Text>
+                <Text style={styles.sheetText}>{activeOffer.offer.description}</Text>
               ) : null}
-              {activeOffer.offer.code ? (
-                <View style={styles.sheetCode}>
-                  <Text variant="caption" muted>
-                    Promo code
-                  </Text>
-                  <CodeChip code={activeOffer.offer.code} />
-                </View>
-              ) : null}
+              {activeOffer.offer.code ? <CodeBlock code={activeOffer.offer.code} /> : null}
               <View style={styles.sheetFacts}>
-                <View style={styles.factRow}>
-                  <Icon name="cut-outline" size={18} color={colors.primary} />
-                  <Text style={{ flex: 1 }}>{servicesLine(activeOffer.offer)}</Text>
-                </View>
-                <View style={styles.factRow}>
-                  <Icon name="repeat-outline" size={18} color={colors.primary} />
-                  <Text style={{ flex: 1 }}>
-                    {activeOffer.offer.customerEligibility === "new_customers_only"
+                <Fact pastel={pastels.peach} icon="cut-outline" text={servicesLine(activeOffer.offer)} />
+                <Fact
+                  pastel={pastels.lavender}
+                  icon="repeat-outline"
+                  text={
+                    activeOffer.offer.customerEligibility === "new_customers_only"
                       ? "New customers only"
-                      : "Available to all customers"}
-                  </Text>
-                </View>
-                <View style={styles.factRow}>
-                  <Icon name="checkmark-circle-outline" size={18} color={colors.primary} />
-                  <Text style={{ flex: 1 }}>Once per customer</Text>
-                </View>
-                {activeOffer.offer.minOrderRupees != null &&
-                activeOffer.offer.minOrderRupees > 0 ? (
-                  <View style={styles.factRow}>
-                    <Icon name="cash-outline" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>
-                      Minimum booking ₹{activeOffer.offer.minOrderRupees}
-                    </Text>
-                  </View>
+                      : "Available to all customers"
+                  }
+                />
+                <Fact pastel={pastels.mint} icon="checkmark-circle-outline" text="Once per customer" />
+                {activeOffer.offer.minOrderRupees != null && activeOffer.offer.minOrderRupees > 0 ? (
+                  <Fact
+                    pastel={pastels.gold}
+                    icon="cash-outline"
+                    text={`Minimum booking ₹${activeOffer.offer.minOrderRupees}`}
+                  />
                 ) : null}
                 {formatExpiry(activeOffer.offer.endsAt) ? (
-                  <View style={styles.factRow}>
-                    <Icon name="time-outline" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>
-                      Valid till {formatExpiry(activeOffer.offer.endsAt)}
-                    </Text>
-                  </View>
+                  <Fact
+                    pastel={pastels.sky}
+                    icon="time-outline"
+                    text={`Valid till ${formatExpiry(activeOffer.offer.endsAt)}`}
+                  />
                 ) : null}
               </View>
               {activeOffer.offer.terms ? (
                 <>
-                  <Text variant="label" muted style={styles.sheetSectionLabel}>
-                    Terms
-                  </Text>
-                  <Text muted>{activeOffer.offer.terms}</Text>
+                  <Text style={[ui.sectionLabel, styles.termsLabel]}>Terms</Text>
+                  <Text style={styles.sheetText}>{activeOffer.offer.terms}</Text>
                 </>
               ) : null}
             </View>
@@ -351,101 +282,79 @@ export function SalonOffersCarousel({
   )
 }
 
+function CodeBlock({ code }: { code: string }) {
+  return (
+    <View style={styles.codeBlock}>
+      <Text style={styles.codeLabel}>Promo code · tap to copy</Text>
+      <CodeChip code={code} />
+    </View>
+  )
+}
+
+function Fact({ pastel, icon, text }: { pastel: Pastel; icon: IconName; text: string }) {
+  return (
+    <View style={styles.factRow}>
+      <PastelIcon pastel={pastel} name={icon} size={32} />
+      <Text style={styles.factText}>{text}</Text>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.md,
+    gap: 12,
   },
   row: {
-    gap: spacing.md,
-    paddingRight: spacing.xl,
-  },
-  rowSingle: {
-    paddingRight: 0,
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    minHeight: 112,
-  },
-  cardSalon: {
-    borderColor: "rgba(249, 92, 72, 0.25)",
-    backgroundColor: "#F1F1F1",
-  },
-  cardGlammzo: {
-    borderColor: "rgba(0,0,0,0.12)",
-    backgroundColor: colors.surface,
-  },
-  icon: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconSalon: {
-    backgroundColor: colors.primary,
-  },
-  iconGlammzo: {
-    backgroundColor: colors.text,
-  },
-  copy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-  },
-  code: {
-    letterSpacing: 0.8,
-  },
-  cardChip: {
-    marginTop: 4,
+    gap: 12,
   },
   sheetBody: {
-    gap: spacing.md,
+    gap: 10,
   },
-  sheetHero: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.md,
-    alignItems: "center",
-    justifyContent: "center",
+  sheetTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+    color: sp.text,
   },
-  sheetCode: {
-    gap: 4,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  sheetText: {
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.secondary,
+  },
+  codeBlock: {
+    marginTop: 4,
+    gap: 8,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: sp.border,
+    backgroundColor: "#ffffff",
+  },
+  codeLabel: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: sp.secondary,
   },
   sheetFacts: {
-    gap: spacing.md,
-    marginTop: spacing.xs,
+    marginTop: 6,
+    gap: 12,
   },
   factRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
+    alignItems: "center",
+    gap: 12,
   },
-  sheetSectionLabel: {
-    marginTop: spacing.sm,
+  factText: {
+    flex: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.text,
   },
-  dots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.sand,
-  },
-  dotActive: {
-    backgroundColor: colors.primary,
-    width: 16,
+  termsLabel: {
+    marginTop: 12,
   },
 })

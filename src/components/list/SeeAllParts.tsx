@@ -448,3 +448,112 @@ const radioStyles = StyleSheet.create({
     backgroundColor: "#111111",
   },
 })
+
+/* ------------------------------------------------------------------ */
+/* Filter sheet pieces (salons / artists filter sheets)               */
+/* ------------------------------------------------------------------ */
+
+export function FilterSection({ title, children, wrap = true }: { title: string; children: ReactNode; wrap?: boolean }) {
+  return (
+    <View style={filterStyles.section}>
+      <Text style={filterStyles.label} accessibilityRole="header">
+        {title}
+      </Text>
+      {wrap ? <View style={filterStyles.chipWrap}>{children}</View> : <View>{children}</View>}
+    </View>
+  )
+}
+
+/** 36-tall option chip: active black, inactive white with a #e3e3e3 border. */
+export function FilterOptionChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string
+  selected: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={({ pressed }) => [styles.chip, selected && styles.chipOn, pressed && !selected && styles.chipPressed]}
+    >
+      <Text style={[styles.chipText, selected && styles.chipTextOn]}>{label}</Text>
+    </Pressable>
+  )
+}
+
+/** Clear all (outline) + Apply (black), both 52 pills. */
+export function FilterSheetFooter({ onClear, onApply }: { onClear: () => void; onApply: () => void }) {
+  return (
+    <View style={filterStyles.footer}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onClear}
+        style={({ pressed }) => [filterStyles.pill, filterStyles.pillOutline, pressed && styles.pressed]}
+      >
+        <Text style={filterStyles.pillOutlineText}>Clear all</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onApply}
+        style={({ pressed }) => [filterStyles.pill, filterStyles.pillSolid, pressed && styles.pressed]}
+      >
+        <Text style={filterStyles.pillSolidText}>Apply</Text>
+      </Pressable>
+    </View>
+  )
+}
+
+const filterStyles = StyleSheet.create({
+  section: {
+    gap: 12,
+  },
+  label: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: "#4b5563",
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  footer: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  pill: {
+    flex: 1,
+    height: 52,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillOutline: {
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
+  },
+  pillSolid: {
+    backgroundColor: "#111111",
+  },
+  pillOutlineText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#111111",
+  },
+  pillSolidText: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#ffffff",
+  },
+})

@@ -1,11 +1,10 @@
-import type { ReactNode } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { StyleSheet, View } from "react-native"
 
+import { FilterOptionChip, FilterSection, FilterSheetFooter, SheetRadioRow } from "@/components/list/SeeAllParts"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { Button } from "@/components/ui/Button"
 import { Text } from "@/components/ui/Text"
 import type { ArtistCategory, ArtistOccasion, ArtistSort, ArtistWhere } from "@/lib/artists-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 export type ArtistsFilterDraft = {
   category: string | null
@@ -28,50 +27,6 @@ type Props = {
   onClear: () => void
 }
 
-function OptionChip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string
-  selected: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={[styles.chip, selected && styles.chipOn]}
-    >
-      <Text
-        variant="caption"
-        color={selected ? colors.primary : colors.text}
-        style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-function Section({
-  title,
-  children,
-}: {
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <View style={styles.section}>
-      <Text variant="label" muted>
-        {title}
-      </Text>
-      <View style={styles.chipWrap}>{children}</View>
-    </View>
-  )
-}
-
 export function ArtistsFilterSheet({
   visible,
   draft,
@@ -85,27 +40,25 @@ export function ArtistsFilterSheet({
   onApply,
   onClear,
 }: Props) {
+  const sortOptions = sorts.filter((s) => s.id !== "nearest" || hasPin)
   return (
     <BottomSheet
       visible={visible}
       title="Filters"
       onClose={onClose}
       footer={
-        <View style={styles.footer}>
-          <Button label="Clear all" variant="secondary" onPress={onClear} style={styles.footerBtn} />
-          <Button label="Apply" onPress={onApply} style={styles.footerBtn} />
-        </View>
+        <FilterSheetFooter onClear={onClear} onApply={onApply} />
       }
     >
       <View style={styles.body}>
-        <Section title="Category">
-          <OptionChip
+        <FilterSection title="Category">
+          <FilterOptionChip
             label="All"
             selected={draft.category === null}
             onPress={() => onChange({ ...draft, category: null })}
           />
           {categories.map((c) => (
-            <OptionChip
+            <FilterOptionChip
               key={c.id}
               label={`${c.label}${c.count > 0 ? ` (${c.count})` : ""}`}
               selected={draft.category === c.id}
@@ -117,33 +70,31 @@ export function ArtistsFilterSheet({
               }
             />
           ))}
-        </Section>
+        </FilterSection>
 
-        <Section title="Service location">
+        <FilterSection title="Service location">
           {whereOptions.map((o) => (
-            <OptionChip
+            <FilterOptionChip
               key={o.id}
               label={o.label}
               selected={draft.where === o.id}
               onPress={() => onChange({ ...draft, where: o.id })}
             />
           ))}
-        </Section>
+        </FilterSection>
         {draft.where === "home" && !hasPin ? (
-          <Text variant="caption" muted>
-            Set your location on Explore to see artists who travel to you.
-          </Text>
+          <Text style={styles.note}>Set your location on Explore to see artists who travel to you.</Text>
         ) : null}
 
         {occasions.length > 0 ? (
-          <Section title="Occasion">
-            <OptionChip
+          <FilterSection title="Occasion">
+            <FilterOptionChip
               label="Any"
               selected={draft.occasion === null}
               onPress={() => onChange({ ...draft, occasion: null })}
             />
             {occasions.map((o) => (
-              <OptionChip
+              <FilterOptionChip
                 key={o.id}
                 label={o.label}
                 selected={draft.occasion === o.id}
@@ -155,21 +106,20 @@ export function ArtistsFilterSheet({
                 }
               />
             ))}
-          </Section>
+          </FilterSection>
         ) : null}
 
-        <Section title="Sort by">
-          {sorts
-            .filter((s) => s.id !== "nearest" || hasPin)
-            .map((s) => (
-              <OptionChip
-                key={s.id}
-                label={s.label}
-                selected={draft.sort === s.id}
-                onPress={() => onChange({ ...draft, sort: s.id })}
-              />
-            ))}
-        </Section>
+        <FilterSection title="Sort by" wrap={false}>
+          {sortOptions.map((option, index) => (
+            <SheetRadioRow
+              key={option.id}
+              label={option.label}
+              on={draft.sort === option.id}
+              last={index === sortOptions.length - 1}
+              onPress={() => onChange({ ...draft, sort: option.id })}
+            />
+          ))}
+        </FilterSection>
       </View>
     </BottomSheet>
   )
@@ -177,36 +127,14 @@ export function ArtistsFilterSheet({
 
 const styles = StyleSheet.create({
   body: {
-    gap: spacing.xl,
-    paddingBottom: spacing.md,
+    gap: 24,
+    paddingBottom: 12,
   },
-  section: {
-    gap: spacing.md,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  chip: {
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chipOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  footer: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  footerBtn: {
-    flex: 1,
+  note: {
+    marginTop: -12,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
   },
 })

@@ -1,8 +1,7 @@
-import type { ReactNode } from "react"
-import { Pressable, StyleSheet, View } from "react-native"
+import { StyleSheet, View } from "react-native"
 
+import { FilterOptionChip, FilterSection, FilterSheetFooter, SheetRadioRow } from "@/components/list/SeeAllParts"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { Button } from "@/components/ui/Button"
 import { Text } from "@/components/ui/Text"
 import {
   EXPLORE_CATEGORY_FILTERS,
@@ -12,7 +11,6 @@ import {
   EXPLORE_SORT_FILTERS,
   type ExploreFilterState,
 } from "@/lib/explore-filters"
-import { colors, radii, spacing } from "@/theme/tokens"
 
 type Props = {
   visible: boolean
@@ -24,128 +22,89 @@ type Props = {
   onClear: () => void
 }
 
-function OptionChip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string
-  selected: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      style={[styles.chip, selected && styles.chipOn]}
-    >
-      <Text
-        variant="caption"
-        color={selected ? colors.primary : colors.text}
-        style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text variant="label" muted>
-        {title}
-      </Text>
-      <View style={styles.chipWrap}>{children}</View>
-    </View>
-  )
-}
-
 /** Same sheet as the artists list, with the salon filters. */
 export function SalonsFilterSheet({ visible, draft, hasPin, onChange, onClose, onApply, onClear }: Props) {
+  const sortOptions = EXPLORE_SORT_FILTERS.filter((option) => option.id !== "nearest" || hasPin)
   return (
     <BottomSheet
       visible={visible}
       title="Filters"
       onClose={onClose}
       footer={
-        <View style={styles.footer}>
-          <Button label="Clear all" variant="secondary" onPress={onClear} style={styles.footerBtn} />
-          <Button label="Apply" onPress={onApply} style={styles.footerBtn} />
-        </View>
+        <FilterSheetFooter onClear={onClear} onApply={onApply} />
       }
     >
       <View style={styles.body}>
-        <Section title="Type">
+        <FilterSection title="Type">
           {EXPLORE_CATEGORY_FILTERS.map((option) => (
-            <OptionChip
+            <FilterOptionChip
               key={option.id}
               label={option.label}
               selected={draft.category === option.id}
               onPress={() => onChange({ ...draft, category: option.id })}
             />
           ))}
-        </Section>
+        </FilterSection>
 
-        <Section title="Availability">
-          <OptionChip
+        <FilterSection title="Availability">
+          <FilterOptionChip
             label="Any time"
             selected={!draft.openOnly}
             onPress={() => onChange({ ...draft, openOnly: false })}
           />
-          <OptionChip
+          <FilterOptionChip
             label="Open now"
             selected={draft.openOnly}
             onPress={() => onChange({ ...draft, openOnly: true })}
           />
-        </Section>
+        </FilterSection>
 
-        <Section title="Price">
+        <FilterSection title="Price">
           {EXPLORE_PRICE_FILTERS.map((option) => (
-            <OptionChip
+            <FilterOptionChip
               key={option.id}
               label={option.label}
               selected={draft.price === option.id}
               onPress={() => onChange({ ...draft, price: option.id })}
             />
           ))}
-        </Section>
+        </FilterSection>
 
-        <Section title="Rating">
+        <FilterSection title="Rating">
           {EXPLORE_RATING_FILTERS.map((option) => (
-            <OptionChip
+            <FilterOptionChip
               key={option.id}
               label={option.label}
               selected={draft.rating === option.id}
               onPress={() => onChange({ ...draft, rating: option.id })}
             />
           ))}
-        </Section>
+        </FilterSection>
 
         {hasPin ? (
-          <Section title="Distance">
+          <FilterSection title="Distance">
             {EXPLORE_RADIUS_FILTERS.map((option) => (
-              <OptionChip
+              <FilterOptionChip
                 key={option.id}
                 label={option.label}
                 selected={draft.radius === option.id}
                 onPress={() => onChange({ ...draft, radius: option.id })}
               />
             ))}
-          </Section>
+          </FilterSection>
         ) : null}
 
-        <Section title="Sort by">
-          {EXPLORE_SORT_FILTERS.filter((option) => option.id !== "nearest" || hasPin).map((option) => (
-            <OptionChip
+        <FilterSection title="Sort by" wrap={false}>
+          {sortOptions.map((option, index) => (
+            <SheetRadioRow
               key={option.id}
               label={option.label}
-              selected={draft.sort === option.id}
+              on={draft.sort === option.id}
+              last={index === sortOptions.length - 1}
               onPress={() => onChange({ ...draft, sort: option.id })}
             />
           ))}
-        </Section>
+        </FilterSection>
       </View>
     </BottomSheet>
   )
@@ -153,36 +112,7 @@ export function SalonsFilterSheet({ visible, draft, hasPin, onChange, onClose, o
 
 const styles = StyleSheet.create({
   body: {
-    gap: spacing.xl,
-    paddingBottom: spacing.md,
-  },
-  section: {
-    gap: spacing.md,
-  },
-  chipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  chip: {
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chipOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  footer: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  footerBtn: {
-    flex: 1,
+    gap: 24,
+    paddingBottom: 12,
   },
 })

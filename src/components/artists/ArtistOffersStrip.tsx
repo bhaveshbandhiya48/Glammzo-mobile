@@ -8,13 +8,14 @@ import {
   View,
 } from "react-native"
 
-import { SectionHeader, sectionHeaderInline } from "@/components/detail/SectionHeader"
+import { OfferCard, OfferDots } from "@/components/salon-page/OfferCard"
+import { pastels, sp, ui } from "@/components/salon-page/theme"
 import { CodeChip } from "@/components/ui/CodeChip"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistOffer, PublicArtistService } from "@/lib/artists-api"
 import { copyCode } from "@/lib/copy-code"
 import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Props = {
   artistOffers: PublicArtistOffer[]
@@ -54,7 +55,7 @@ export function ArtistOffersStrip({
   artistOffers,
   services,
   glammzoOffers = [],
-  contentInset = spacing.lg,
+  contentInset = 16,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions()
   const [index, setIndex] = useState(0)
@@ -76,11 +77,11 @@ export function ArtistOffersStrip({
 
   if (items.length === 0) return null
 
-  const gap = spacing.md
+  const gap = 12
   const cardWidth =
     items.length === 1
       ? Math.max(240, windowWidth - contentInset * 2)
-      : Math.max(260, windowWidth - contentInset * 2 - spacing.xl)
+      : Math.max(260, windowWidth - contentInset * 2 - 28)
   const snap = cardWidth + gap
 
   function onMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -90,7 +91,9 @@ export function ArtistOffersStrip({
 
   return (
     <View style={styles.section}>
-      <SectionHeader title="Offers" style={sectionHeaderInline} />
+      <Text style={ui.sectionLabel} accessibilityRole="header">
+        Offers
+      </Text>
 
       <ScrollView
         horizontal
@@ -100,11 +103,8 @@ export function ArtistOffersStrip({
         snapToInterval={items.length > 1 ? snap : undefined}
         snapToAlignment="start"
         disableIntervalMomentum={items.length > 1}
-        style={styles.scroller}
-        contentContainerStyle={[
-          styles.row,
-          items.length === 1 ? styles.rowSingle : null,
-        ]}
+        style={{ marginHorizontal: -contentInset }}
+        contentContainerStyle={[styles.row, { paddingHorizontal: contentInset }]}
         onMomentumScrollEnd={items.length > 1 ? onMomentumEnd : undefined}
       >
         {items.map((item) => {
@@ -117,137 +117,70 @@ export function ArtistOffersStrip({
                 ? `Enter code ${offer.code} when you book.`
                 : "Applied automatically when you book — no code needed.")
             return (
-              <View
+              <OfferCard
                 key={item.key}
-                style={[styles.card, { width: cardWidth }]}
+                width={cardWidth}
+                pastel={pastels.pink}
+                icon="pricetag"
+                eyebrow="Artist offer"
+                badge={offer.dealLabel}
+                title={offer.title}
+                lines={[`${appliesLabel(offer, services)}${till ? ` · ${till}` : ""}`]}
                 accessible
                 accessibilityLabel={`${offer.dealLabel} ${offer.title}. ${appliesLabel(offer, services)}${till ? `, ${till}` : ""}. ${how}`}
                 accessibilityActions={offer.code ? [{ name: "copy", label: `Copy code ${offer.code}` }] : undefined}
                 onAccessibilityAction={(event) => {
                   if (event.nativeEvent.actionName === "copy" && offer.code) copyCode(offer.code)
                 }}
-              >
-                <View style={styles.cardTop}>
-                  <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={1} style={{ flex: 1 }}>
-                    {offer.title}
-                  </Text>
-                  <View style={styles.dealBadge}>
-                    <Text variant="caption" color={colors.primary} style={styles.dealText}>
-                      {offer.dealLabel}
-                    </Text>
-                  </View>
-                </View>
-                <Text variant="caption" color={colors.accent} numberOfLines={1}>
-                  {appliesLabel(offer, services)}
-                  {till ? ` · ${till}` : ""}
-                </Text>
-                {offer.code ? (
-                  <CodeChip code={offer.code} label="Code" tone="dark" style={styles.codeChip} />
-                ) : (
-                  <Text variant="caption" color={colors.accent}>
-                    Applied automatically
-                  </Text>
-                )}
-              </View>
+                footer={
+                  offer.code ? (
+                    <CodeChip code={offer.code} label="Code" />
+                  ) : (
+                    <Text style={styles.auto}>Applied automatically</Text>
+                  )
+                }
+              />
             )
           }
 
           const offer = item.offer
           return (
-            <View key={item.key} style={[styles.card, { width: cardWidth }]}>
-              <Text variant="caption" color={colors.accent}>
-                {offer.eyebrow || "Glammzo offer"}
-              </Text>
-              <Text variant="bodyStrong" color={colors.primaryFg} numberOfLines={2}>
-                {offer.title}
-              </Text>
-              {offer.cashbackRupees > 0 ? (
-                <Text variant="caption" color={colors.accent}>
-                  {offerCashbackText(offer)}
-                  {offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}
-                </Text>
-              ) : null}
-              {offer.promoCode ? (
-              <CodeChip code={offer.promoCode} label="Code" tone="dark" style={styles.codeChip} />
-              ) : (
-                <Text variant="caption" color={colors.accent}>
-                  Cashback after your visit
-                </Text>
-              )}
-            </View>
+            <OfferCard
+              key={item.key}
+              width={cardWidth}
+              pastel={pastels.lavender}
+              icon="sparkles"
+              eyebrow={offer.eyebrow || "Glammzo offer"}
+              title={offer.title}
+              lines={[
+                offer.cashbackRupees > 0
+                  ? `${offerCashbackText(offer)}${offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}`
+                  : null,
+              ]}
+              footer={
+                offer.promoCode ? (
+                  <CodeChip code={offer.promoCode} label="Code" />
+                ) : (
+                  <Text style={styles.auto}>Cashback after your visit</Text>
+                )
+              }
+            />
           )
         })}
       </ScrollView>
 
-      {items.length > 1 ? (
-        <View style={styles.dots}>
-          {items.map((item, i) => (
-            <View
-              key={item.key}
-              style={[styles.dot, i === index && styles.dotActive]}
-            />
-          ))}
-        </View>
-      ) : null}
+      <OfferDots count={items.length} index={index} />
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  section: { gap: spacing.md },
-  scroller: {
-    marginHorizontal: -spacing.lg,
-    marginTop: spacing.xs,
-  },
-  row: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
-  },
-  rowSingle: {
-    paddingRight: spacing.lg,
-  },
-  // The one dark block on the page, so an offer can't be missed.
-  card: {
-    backgroundColor: colors.hero,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: 6,
-  },
-  codeChip: {
-    marginTop: 4,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.sm,
-  },
-  dealBadge: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radii.sm,
-    flexShrink: 0,
-  },
-  dealText: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: "700",
-  },
-  dots: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 6,
-    marginTop: spacing.xs,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.border,
-  },
-  dotActive: {
-    backgroundColor: colors.primary,
-    width: 16,
+  section: { gap: 12 },
+  row: { gap: 12 },
+  auto: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 13,
+    lineHeight: 17,
+    color: sp.text,
   },
 })

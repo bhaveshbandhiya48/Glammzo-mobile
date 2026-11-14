@@ -3,7 +3,7 @@ import { AccessibilityInfo, Pressable, StyleSheet, Text, View, type StyleProp, t
 
 import { Icon } from "@/components/ui/Icon"
 import { copyCode } from "@/lib/copy-code"
-import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 
 type Tone = "light" | "dark" | "white"
 
@@ -16,10 +16,10 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-const TONES: Record<Tone, { bg: string; border: string; text: string; muted: string }> = {
-  light: { bg: colors.surface, border: colors.inputBorder, text: colors.text, muted: colors.textMuted },
-  dark: { bg: "transparent", border: colors.accent, text: colors.primaryFg, muted: colors.accent },
-  white: { bg: colors.surface, border: colors.inputBorder, text: colors.text, muted: colors.textMuted },
+const TONES: Record<Tone, { bg: string; border: string; text: string; muted: string; done: string }> = {
+  light: { bg: "#ffffff", border: "#bdbdbd", text: "#111111", muted: "#595959", done: "#17633e" },
+  dark: { bg: "transparent", border: "rgba(255,255,255,0.55)", text: "#ffffff", muted: "rgba(255,255,255,0.75)", done: "#ffffff" },
+  white: { bg: "#ffffff", border: "#e3e3e3", text: "#111111", muted: "#595959", done: "#17633e" },
 }
 
 /** Dashed code chip; tap copies the code and shows "Copied" for 1.5s. */
@@ -60,8 +60,8 @@ export function CodeChip({ code, label, tone = "light", style }: Props) {
         {code}
       </Text>
       <View style={styles.action}>
-        <Icon name={copied ? "checkmark" : "copy-outline"} size={14} color={t.text} />
-        {copied ? <Text style={[styles.copied, { color: t.text }]}>Copied</Text> : null}
+        <Icon name={copied ? "checkmark-circle" : "copy-outline"} size={14} color={copied ? t.done : t.text} />
+        {copied ? <Text style={[styles.copied, { color: t.done }]}>Copied</Text> : null}
       </View>
     </Pressable>
   )
@@ -73,10 +73,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
-    borderRadius: radii.sm,
-    borderWidth: 1,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1.5,
     borderStyle: "dashed",
     maxWidth: "100%",
   },
@@ -90,8 +90,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   pressed: { opacity: 0.7 },
-  label: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 16 },
-  code: { fontFamily: fontFamily.bold, fontSize: 13, lineHeight: 17, letterSpacing: 1, flexShrink: 1 },
+  label: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 16 },
+  code: { fontFamily: fontFamily.bold, fontSize: 13, lineHeight: 17, letterSpacing: 1.2, flexShrink: 1 },
   action: { flexDirection: "row", alignItems: "center", gap: 3 },
   copied: { fontFamily: fontFamily.semibold, fontSize: 12, lineHeight: 16 },
 })

@@ -639,7 +639,8 @@ const styles = StyleSheet.create({
   offersLabel: {
     marginHorizontal: -spacing.lg,
     paddingHorizontal: 20,
-    marginTop: 28,
+    // Sits right under HomeV4, whose Top rated row (8) and wrap (20) already leave the usual 28.
+    marginTop: 0,
     marginBottom: 12,
   },
   offersLabelText: {

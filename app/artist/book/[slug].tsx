@@ -1,27 +1,47 @@
-import { Image } from "expo-image"
-import { useLocalSearchParams, useNavigation, useRouter, type Href } from "expo-router"
+import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from "react-native"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { ArtistServiceRow } from "@/components/artists/ArtistServiceRow"
 import { HomeVisitMapPicker } from "@/components/artists/HomeVisitMapPicker"
-import { BookingDateSheet } from "@/components/book/BookingDateSheet"
-import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
+import {
+  bk,
+  BookingBar,
+  BookingCard,
+  BookingHeader,
+  BookingSectionLabel,
+  BookingSkeleton,
+  bookingStyles,
+  DayStrip,
+  Hairline,
+  Notice,
+  PlaceRow,
+  ReceiptRow,
+  ReceiptTotal,
+  TimeGrid,
+  ToggleRow,
+} from "@/components/book/BookingUi"
 import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
-import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { OneTapPayBar } from "@/components/payments/OneTapPayBar"
-import { sp } from "@/components/salon-page/theme"
-import { Button } from "@/components/ui/Button"
-import { Icon } from "@/components/ui/Icon"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
+import { PastelIcon, type Pastel } from "@/components/profile/ProfileParts"
+import {
+  EmptyState,
+  ErrorCard,
+  Field,
+  OutlinePill,
+  PrimaryPill,
+} from "@/components/profile/ProfileScreenParts"
+import { pastels, ui } from "@/components/salon-page/theme"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import {
   artistServiceUnitPrice,
@@ -60,8 +80,10 @@ import {
   patchConsumerProfileCache,
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
-import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 import { formatDuration } from "@/lib/booking-display"
+
+const STEPS = ["Services", "When & where", "Confirm"]
 
 function dayKeys(from: Date, count: number, timeZone: string) {
   const keys: string[] = []
@@ -92,8 +114,6 @@ function formatDayChip(dateKey: string) {
 
 export default function ArtistBookScreen() {
   const router = useRouter()
-  const navigation = useNavigation()
-  const insets = useSafeAreaInsets()
   const {
     slug,
     serviceId: serviceIdParam,
@@ -708,42 +728,38 @@ export default function ArtistBookScreen() {
     }
   }, [artist?.slug, selectedIds.join("|")])
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () => (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            if (step > 0) setStep((prev) => prev - 1)
-            else if (router.canGoBack()) router.back()
-            else router.replace("/(tabs)/explore" as Href)
-          }}
-          hitSlop={8}
-          accessibilityLabel="Go back"
-          style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.xs }}
-        >
-          <Icon name="chevron-back" size={24} color={colors.text} />
-        </Pressable>
-      ),
-    })
-  }, [navigation, router, step])
+  function leaveScreen() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/explore" as Href)
+  }
+
+  /** Header back: previous step first, then leave the screen. */
+  function goBack() {
+    if (step > 0) setStep((prev) => prev - 1)
+    else leaveScreen()
+  }
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingSkeleton />
+      </>
     )
   }
 
   if (loadError || !artist) {
     return (
-      <View style={styles.center}>
-        <Text variant="heading">Couldn't start booking</Text>
-        <Text variant="body" muted>
-          {loadError ?? "Artist not found."}
-        </Text>
-        <Button label="Go back" onPress={() => router.back()} style={{ marginTop: spacing.lg }} />
+      <View style={bookingStyles.page}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingHeader title="Book your visit" onBack={leaveScreen} />
+        <View style={styles.pad}>
+          <ErrorCard
+            title="Couldn't start booking"
+            text={loadError ?? "Artist not found."}
+            onRetry={() => router.back()}
+          />
+        </View>
       </View>
     )
   }
@@ -787,622 +803,484 @@ export default function ArtistBookScreen() {
     : quote && quote.advance > 0
       ? `${formatRupees(quote.advance)} advance now`
       : "Pay at your visit"
+  const showOneTap = step === 2 && advanceDue > 0
+  const serviceRows = quoteMode ? artist.services : selectedServices
 
   return (
-    <View style={styles.root}>
-      <Screen
-        scroll
-        contentStyle={[styles.scroll, { paddingBottom: insets.bottom + 120 }]}
-        edges={["left", "right"]}
+    <View style={bookingStyles.page}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text variant="title">Reserve your visit</Text>
-        <Text muted style={styles.gap}>
-          {step === 0
-            ? "Step 1 of 3 · Your services"
-            : step === 1
-              ? "Step 2 of 3 · When and where"
-              : "Step 3 of 3 · Review and confirm"}
-        </Text>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.scrollContent, showOneTap && styles.scrollOneTap]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
+        >
+          <BookingHeader
+            title="Book your visit"
+            subtitle={artist.displayName}
+            step={step}
+            steps={STEPS}
+            onBack={goBack}
+            backLabel={step > 0 ? `Back to ${STEPS[step - 1]}` : "Go back"}
+          />
 
-        {quoteMode ? (
-          <View style={styles.quoteBanner} accessibilityRole="summary">
-            <Icon name="pricetag-outline" size={18} color={sp.peachInk} />
-            <Text variant="bodyStrong" color={sp.peachInk} style={styles.quoteBannerText}>
-              Booking at your quoted price {formatRupees(quotedRupees)}
-            </Text>
-          </View>
-        ) : null}
-
-        {step === 0 ? (
-          <>
-            <View style={styles.card}>
-              <View style={styles.artistRow}>
-                {artist.profilePhotoUrl ? (
-                  <Image
-                    source={{ uri: artist.profilePhotoUrl }}
-                    style={styles.artistAvatar}
-                    contentFit="cover"
-                    transition={200}
-                  />
-                ) : (
-                  <View style={[styles.artistAvatar, styles.artistAvatarFallback]}>
-                    <Text variant="heading" color={colors.primary}>
-                      {artist.displayName.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.artistCopy}>
-                  <Text variant="label" muted>
-                    Solo artist
-                  </Text>
-                  <Text variant="heading" numberOfLines={1}>
-                    {artist.displayName}
-                  </Text>
-                  {whereLine ? (
-                    <Text muted numberOfLines={1}>
-                      {whereLine}
-                    </Text>
-                  ) : null}
-                </View>
-              </View>
+          {quoteMode ? (
+            <View style={[styles.pad, styles.quoteWrap]}>
+              <Notice tone="peach" icon="pricetag-outline">
+                Booking at your quoted price {formatRupees(quotedRupees)}
+              </Notice>
             </View>
+          ) : null}
 
-            <View style={styles.section}>
-              <View style={styles.sectionHead}>
-                <Text variant="label" muted>
-                  {quoteMode ? "Pick a service" : "Services"}
-                </Text>
-                {quoteMode ? null : (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/artist/[slug]",
-                      params: { slug: artist.slug },
-                    } as Href)
-                  }
-                >
-                  <Text variant="caption" color={colors.primary}>
-                    Edit
-                  </Text>
-                </Pressable>
-                )}
-              </View>
+          {step === 0 ? (
+            <View style={styles.pad}>
+              <BookingSectionLabel first>Your artist</BookingSectionLabel>
+              <BookingCard>
+                <PlaceRow
+                  imageUrl={artist.profilePhotoUrl}
+                  name={artist.displayName}
+                  caption="Solo artist"
+                  meta={whereLine || null}
+                />
+              </BookingCard>
+
+              <BookingSectionLabel
+                action={
+                  quoteMode
+                    ? undefined
+                    : {
+                        label: "Edit",
+                        onPress: () =>
+                          router.push({
+                            pathname: "/artist/[slug]",
+                            params: { slug: artist.slug },
+                          } as Href),
+                      }
+                }
+              >
+                {quoteMode ? "Pick a service" : "Your services"}
+              </BookingSectionLabel>
               {quoteMode ? (
-                <Text variant="caption" muted>
+                <Text style={styles.helper}>
                   {selectedIds.length === 0
                     ? "Pick the service closest to what you asked for. It sets how long the visit takes; you pay the quoted price."
                     : "This sets how long the visit takes. You pay the quoted price, not the list price."}
                 </Text>
               ) : null}
-              <View style={styles.serviceList}>
-                {(quoteMode ? artist.services : selectedServices).map((s, index, list) => (
-                  <ArtistServiceRow
-                    key={s.id}
-                    service={s}
-                    selected={selectedIds.includes(s.id)}
-                    isLast={index === list.length - 1}
-                    pricingLocation="studio"
-                    onOpenDetail={() => setDetailService(s)}
-                    onToggle={() => toggleService(s)}
-                  />
-                ))}
-              </View>
-            </View>
-          </>
-        ) : null}
-
-        {step === 1 ? (
-          <>
-            <View style={styles.section}>
-              <Text variant="heading">Where is the visit?</Text>
-              {showWhereChooser ? (
-                <View style={styles.whereChoices}>
-                  <Pressable
-                    onPress={() => {
-                      setLocationType("studio")
-                      setSlot(null)
-                    }}
-                    style={[
-                      styles.whereCard,
-                      locationType === "studio" && styles.whereCardOn,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: locationType === "studio" }}
-                  >
-                    <Icon
-                      name="storefront-outline"
-                      size={22}
-                      color={locationType === "studio" ? colors.primary : colors.textMuted}
+              {serviceRows.length > 0 ? (
+                <View style={styles.serviceList}>
+                  {serviceRows.map((s, index, list) => (
+                    <ArtistServiceRow
+                      key={s.id}
+                      service={s}
+                      selected={selectedIds.includes(s.id)}
+                      isLast={index === list.length - 1}
+                      pricingLocation="studio"
+                      onOpenDetail={() => setDetailService(s)}
+                      onToggle={() => toggleService(s)}
                     />
-                    <Text variant="bodyStrong" style={styles.whereCardTitle}>
-                      Artist&apos;s studio
-                    </Text>
-                    <Text variant="caption" muted style={styles.whereCardSub}>
-                      You visit them
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => {
-                      setLocationType("client_home")
-                      setSlot(null)
-                    }}
-                    style={[
-                      styles.whereCard,
-                      locationType === "client_home" && styles.whereCardOn,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: locationType === "client_home" }}
-                  >
-                    <Icon
-                      name="home-outline"
-                      size={22}
-                      color={
-                        locationType === "client_home" ? colors.primary : colors.textMuted
-                      }
-                    />
-                    <Text variant="bodyStrong" style={styles.whereCardTitle}>
-                      Your home
-                    </Text>
-                    <Text variant="caption" muted style={styles.whereCardSub}>
-                      They come to you
-                    </Text>
-                  </Pressable>
+                  ))}
                 </View>
               ) : (
-                <View style={styles.card}>
-                  <Text variant="bodyStrong">{visitWhereLabel}</Text>
-                  <Text variant="caption" muted style={{ marginTop: 4 }}>
-                    {canHome && !canStudio
-                      ? "This artist only offers home visits for these services."
-                      : "This artist only offers studio visits for these services."}
-                  </Text>
-                </View>
+                <EmptyState
+                  pastel={pastels.pink}
+                  icon="bag-handle-outline"
+                  title="No services yet"
+                  text="Add services on the artist's page to continue."
+                  ctaLabel="Browse services"
+                  onCta={() =>
+                    router.push({ pathname: "/artist/[slug]", params: { slug: artist.slug } } as Href)
+                  }
+                />
               )}
-              {homeIncompatible ? (
-                <Text variant="caption" color={colors.destructive}>
-                  One or more selected services are studio-only. Switch back to the
-                  artist&apos;s studio, or remove those services.
-                </Text>
-              ) : null}
             </View>
+          ) : null}
 
-            {needsHome ? (
-              <View style={styles.section}>
-                <Text variant="heading">Your address</Text>
-                <HomeVisitMapPicker
-                  latitude={pin?.lat}
-                  longitude={pin?.lng}
-                  address={address}
-                  onChange={(next) => {
-                    setPin({ lat: next.lat, lng: next.lng })
-                    if (next.address.trim()) setAddress(next.address.trim())
+          {step === 1 ? (
+            <>
+              <View style={styles.pad}>
+                <BookingSectionLabel first>Where is the visit?</BookingSectionLabel>
+                {showWhereChooser ? (
+                  <View style={styles.whereChoices} accessibilityRole="radiogroup">
+                    <WhereCard
+                      icon="storefront-outline"
+                      pastel={pastels.peach}
+                      title="Artist's studio"
+                      caption="You visit them"
+                      active={locationType === "studio"}
+                      onPress={() => {
+                        setLocationType("studio")
+                        setSlot(null)
+                      }}
+                    />
+                    <WhereCard
+                      icon="home-outline"
+                      pastel={pastels.sky}
+                      title="Your home"
+                      caption="They come to you"
+                      active={locationType === "client_home"}
+                      onPress={() => {
+                        setLocationType("client_home")
+                        setSlot(null)
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <BookingCard>
+                    <View style={styles.factRow}>
+                      <PastelIcon
+                        pastel={locationType === "client_home" ? pastels.sky : pastels.peach}
+                        name={locationType === "client_home" ? "home-outline" : "storefront-outline"}
+                      />
+                      <View style={styles.flexCopy}>
+                        <Text style={styles.strong}>{visitWhereLabel}</Text>
+                        <Text style={styles.muted}>
+                          {canHome && !canStudio
+                            ? "This artist only offers home visits for these services."
+                            : "This artist only offers studio visits for these services."}
+                        </Text>
+                      </View>
+                    </View>
+                  </BookingCard>
+                )}
+                {homeIncompatible ? (
+                  <View style={styles.noticeGap}>
+                    <Notice tone="red" icon="alert-circle-outline">
+                      One or more selected services are studio-only. Switch back to the
+                      artist&apos;s studio, or remove those services.
+                    </Notice>
+                  </View>
+                ) : null}
+
+                {needsHome ? (
+                  <>
+                    <BookingSectionLabel>Your address</BookingSectionLabel>
+                    <BookingCard>
+                      <HomeVisitMapPicker
+                        latitude={pin?.lat}
+                        longitude={pin?.lng}
+                        address={address}
+                        onChange={(next) => {
+                          setPin({ lat: next.lat, lng: next.lng })
+                          if (next.address.trim()) setAddress(next.address.trim())
+                          setSlot(null)
+                        }}
+                      />
+                      <Field
+                        label="Full address"
+                        value={address}
+                        onChangeText={setAddress}
+                        placeholder="House / street / area"
+                      />
+                      <Field
+                        label="Landmark (optional)"
+                        value={landmark}
+                        onChangeText={setLandmark}
+                        placeholder="Near…"
+                      />
+                      {travelFee > 0 ? (
+                        <Notice tone="grey" icon="car-outline">
+                          Travel fee {formatRupees(travelFee)}
+                          {quote?.distanceKm != null ? ` · ${quote.distanceKm.toFixed(1)} km` : ""}
+                        </Notice>
+                      ) : null}
+                    </BookingCard>
+                  </>
+                ) : null}
+
+                <BookingSectionLabel>Pick a day</BookingSectionLabel>
+              </View>
+              {homeIncompatible ? (
+                <View style={styles.pad}>
+                  <Notice tone="grey">Choose a valid visit location first.</Notice>
+                </View>
+              ) : dateOptions.length === 0 ? (
+                <View style={styles.pad}>
+                  <Notice tone="grey">No dates available for this booking yet.</Notice>
+                </View>
+              ) : (
+                <DayStrip
+                  options={dateOptions}
+                  value={date || null}
+                  onSelect={(next) => {
+                    autoDate.current = false
+                    setDate(next)
                     setSlot(null)
                   }}
                 />
-                <Input
-                  label="Full address"
-                  value={address}
-                  onChangeText={setAddress}
-                  placeholder="House / street / area"
-                />
-                <Input
-                  label="Landmark (optional)"
-                  value={landmark}
-                  onChangeText={setLandmark}
-                  placeholder="Near…"
-                />
-                {travelFee > 0 ? (
-                  <Text variant="caption" muted>
-                    Travel fee {formatRupees(travelFee)}
-                    {quote?.distanceKm != null ? ` · ${quote.distanceKm.toFixed(1)} km` : ""}
-                  </Text>
+              )}
+
+              <View style={styles.pad}>
+                <BookingSectionLabel>Pick a time</BookingSectionLabel>
+                {homeIncompatible ? (
+                  <Notice tone="grey">Choose a valid visit location first.</Notice>
+                ) : !date ? (
+                  <Notice tone="grey">Pick a day first.</Notice>
+                ) : slotMessage && !slotsLoading ? (
+                  <Notice tone="peach" icon="time-outline">
+                    {slotMessage}
+                  </Notice>
+                ) : (
+                  <TimeGrid
+                    options={timeOptions}
+                    value={slot}
+                    onSelect={setSlot}
+                    loading={slotsLoading}
+                    emptyMessage="No time slots for this day."
+                  />
+                )}
+                {date && !slotsLoading && !homeIncompatible && !slotMessage && timeOptions.length === 0 ? (
+                  <View style={styles.noticeGap}>
+                    <WaitlistPrompt kind="artist" provider={artist.slug} date={date} serviceIds={selectedIds} />
+                  </View>
                 ) : null}
               </View>
-            ) : null}
+            </>
+          ) : null}
 
-            <View style={styles.section}>
-              <Text variant="heading">Date & time</Text>
-              <BookingSelectTrigger
-                label="Date"
-                icon="calendar-outline"
-                value={date ? formatDayChip(date) : ""}
-                placeholder="Select date"
-                disabled={dateOptions.length === 0 || homeIncompatible}
-                onPress={() => setDateSheetOpen(true)}
-              />
-              <BookingSelectTrigger
-                label="Time"
-                icon="time-outline"
-                value={selectedSlotLabel}
-                placeholder={
-                  homeIncompatible
-                    ? "Choose a valid visit location first"
-                    : !date
-                      ? "Pick a date first"
-                      : slotsLoading
-                        ? "Loading available times…"
-                        : slotMessage
-                          ? slotMessage
-                          : timeOptions.length === 0
-                            ? "No times available"
-                            : "Select time"
-                }
-                disabled={
-                  homeIncompatible ||
-                  !date ||
-                  slotsLoading ||
-                  Boolean(slotMessage) ||
-                  timeOptions.length === 0
-                }
-                onPress={() => setTimeSheetOpen(true)}
-              />
-              {date && !slotsLoading && !homeIncompatible && !slotMessage && timeOptions.length === 0 ? (
-                <WaitlistPrompt kind="artist" provider={artist.slug} date={date} serviceIds={selectedIds} />
-              ) : null}
-            </View>
+          {step === 2 ? (
+            <View style={styles.pad}>
+              <BookingSectionLabel first action={{ label: "Change", onPress: () => setStep(1) }}>
+                Your visit
+              </BookingSectionLabel>
+              <BookingCard>
+                <PlaceRow
+                  imageUrl={artist.profilePhotoUrl}
+                  name={artist.displayName}
+                  caption={whereLine || "Solo artist"}
+                />
+                <Hairline />
+                <VisitFact icon="sparkles-outline" text={selectedServices.map((s) => s.name).join(" · ") || "Services"} />
+                <VisitFact
+                  icon="calendar-outline"
+                  text={`${date ? formatDayChip(date) : "—"}${selectedSlotLabel ? ` · ${selectedSlotLabel}` : ""}`}
+                />
+                <VisitFact
+                  icon={locationType === "client_home" ? "home-outline" : "storefront-outline"}
+                  text={`${visitWhereLabel}${needsHome && address.trim() ? ` · ${address.trim()}` : ""}`}
+                />
+              </BookingCard>
 
-          </>
-        ) : null}
-
-        {step === 2 ? (
-          <View style={styles.section}>
-            <Text variant="heading">Confirm booking</Text>
-            <View style={styles.card}>
-              <Text variant="caption" muted>
-                Artist
-              </Text>
-              <Text variant="heading">{artist.displayName}</Text>
-              <Text variant="caption" muted style={{ marginTop: spacing.sm }}>
-                Services
-              </Text>
-              <Text variant="bodyStrong">
-                {selectedServices.map((s) => s.name).join(" · ")}
-              </Text>
-              <Text variant="caption" muted style={{ marginTop: spacing.sm }}>
-                When
-              </Text>
-              <Text variant="bodyStrong">
-                {date ? formatDayChip(date) : "—"}
-                {selectedSlotLabel ? ` · ${selectedSlotLabel}` : ""}
-              </Text>
-              <Text variant="caption" muted style={{ marginTop: spacing.sm }}>
-                Where
-              </Text>
-              <Text variant="bodyStrong">
-                {visitWhereLabel}
-                {needsHome && address.trim() ? ` · ${address.trim()}` : ""}
-              </Text>
-            </View>
-
-            {quoteMode ? null : (
-            <View style={[styles.card, styles.rewardsCard]}>
-              <Text variant="label" muted>
-                Promo code
-              </Text>
-              {appliedPromoCode ? (
-                <View style={styles.appliedPromo}>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyStrong">{appliedPromoCode}</Text>
-                    {appliedDiscount ? (
-                      <Text variant="caption" muted>
-                        {appliedDiscount.title} · save{" "}
-                        {formatRupees(appliedDiscount.discountAmount)}
-                      </Text>
+              <BookingSectionLabel>{quoteMode ? "Wallet & rewards" : "Offers"}</BookingSectionLabel>
+              <BookingCard>
+                {quoteMode ? null : (
+                  <>
+                    {appliedPromoCode ? (
+                      <View style={styles.appliedPromo}>
+                        <PastelIcon pastel={pastels.mint} name="pricetag-outline" />
+                        <View style={styles.flexCopy}>
+                          <Text style={styles.strong}>{appliedPromoCode}</Text>
+                          {appliedDiscount ? (
+                            <Text style={styles.success}>
+                              {appliedDiscount.title} · save {formatRupees(appliedDiscount.discountAmount)}
+                            </Text>
+                          ) : null}
+                          {cashbackClaim ? (
+                            <Text style={styles.success}>
+                              ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${appliedPromoCode}`}
+                          onPress={clearPromo}
+                          hitSlop={8}
+                        >
+                          <Text style={styles.removeText}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    ) : (
+                      <View style={styles.promoRow}>
+                        <View style={styles.flex}>
+                          <Field
+                            value={promoInput}
+                            onChangeText={(value) => {
+                              setPromoInput(value)
+                              setPromoError(null)
+                            }}
+                            placeholder="Enter promo code"
+                            accessibilityLabel="Promo code"
+                            autoCapitalize="characters"
+                          />
+                        </View>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel="Apply promo code"
+                          accessibilityState={{
+                            disabled: promoInput.trim().length === 0 || promoApplying,
+                            busy: promoApplying,
+                          }}
+                          disabled={promoInput.trim().length === 0 || promoApplying}
+                          onPress={() => {
+                            void applyPromo()
+                          }}
+                          style={({ pressed }) => [
+                            styles.applyBtn,
+                            (promoInput.trim().length === 0 || promoApplying) && styles.applyBtnOff,
+                            pressed && ui.pressed,
+                          ]}
+                        >
+                          {promoApplying ? (
+                            <ActivityIndicator color="#ffffff" size="small" />
+                          ) : (
+                            <Text style={styles.applyText}>Apply</Text>
+                          )}
+                        </Pressable>
+                      </View>
+                    )}
+                    {promoError ? (
+                      <Text style={styles.error}>{promoError}</Text>
                     ) : null}
-                    {cashbackClaim ? (
-                      <Text variant="caption" muted>
-                        ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
+                    {cashbackClaim && !promoError ? (
+                      <Text style={styles.muted}>{cashbackClaim.message}</Text>
+                    ) : appliedDiscount && !promoError ? (
+                      <Text style={styles.muted}>Artist offer applied on service price.</Text>
+                    ) : (
+                      <Text style={styles.muted}>
+                        Artist offer codes and Glammzo cashback codes work here.
                       </Text>
-                    ) : null}
-                  </View>
-                  <Pressable accessibilityRole="button" onPress={clearPromo} hitSlop={8}>
-                    <Text variant="caption" color={colors.destructive}>
-                      Remove
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.promoRow}>
-                  <View style={{ flex: 1 }}>
-                    <Input
-                      value={promoInput}
-                      onChangeText={(value) => {
-                        setPromoInput(value)
-                        setPromoError(null)
-                      }}
-                      placeholder="Enter code"
-                      accessibilityLabel="Promo code"
-                      autoCapitalize="characters"
-                    />
-                  </View>
-                  <Button
-                    label={promoApplying ? "…" : "Apply"}
-                    style={styles.applyBtn}
-                    onPress={() => {
-                      void applyPromo()
-                    }}
-                    loading={promoApplying}
-                    disabled={promoInput.trim().length === 0 || promoApplying}
+                    )}
+                    <Hairline />
+                  </>
+                )}
+                <ToggleRow
+                  pastel={pastels.teal}
+                  icon="wallet-outline"
+                  title="Wallet credit"
+                  caption={
+                    walletBalance > 0
+                      ? `${formatRupees(walletBalance)} available`
+                      : "No wallet balance yet"
+                  }
+                  on={useWallet && walletBalance > 0}
+                  disabled={walletBalance <= 0}
+                  badge={walletBalance <= 0 ? "Unavailable" : null}
+                  onPress={() => {
+                    if (walletBalance <= 0) return
+                    setUseWallet((value) => !value)
+                  }}
+                />
+                <ToggleRow
+                  pastel={pastels.gold}
+                  icon="ribbon-outline"
+                  title="Loyalty reward"
+                  caption={
+                    loyaltyAvailable
+                      ? `Up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off · ${loyalty.freeServiceCredits} credit${loyalty.freeServiceCredits === 1 ? "" : "s"}`
+                      : `Complete ${LOYALTY_VISITS_PER_FREE} services → unlock up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off. ${loyalty.stampsTowardNextFree}/${LOYALTY_VISITS_PER_FREE} completed · ${loyalty.visitsLeft} more to go.`
+                  }
+                  on={useLoyalty && loyaltyAvailable}
+                  disabled={!loyaltyAvailable}
+                  badge={!loyaltyAvailable ? "Locked" : null}
+                  onPress={() => {
+                    if (!loyaltyAvailable) return
+                    setUseLoyalty((value) => !value)
+                  }}
+                />
+              </BookingCard>
+
+              <BookingSectionLabel>Bill summary</BookingSectionLabel>
+              <BookingCard>
+                <ReceiptRow
+                  label={`${quoteMode ? "Quoted price" : "Services"}${needsHome && !quoteMode ? " (home rates)" : ""}`}
+                  value={formatRupees(serviceSubtotal)}
+                />
+                {travelFee > 0 ? (
+                  <ReceiptRow
+                    label={`Travel fee${quote?.distanceKm != null ? ` · ${quote.distanceKm.toFixed(1)} km` : ""}`}
+                    value={formatRupees(travelFee)}
                   />
-                </View>
-              )}
-              {promoError ? (
-                <Text variant="caption" color={colors.destructive}>
-                  {promoError}
-                </Text>
-              ) : null}
-              {cashbackClaim && !promoError ? (
-                <Text variant="caption" muted>
-                  {cashbackClaim.message}
-                </Text>
-              ) : appliedDiscount && !promoError ? (
-                <Text variant="caption" muted>
-                  Artist offer applied on service price.
-                </Text>
-              ) : (
-                <Text variant="caption" muted>
-                  Artist offer codes and Glammzo cashback codes work here.
-                </Text>
-              )}
-            </View>
-            )}
+                ) : null}
+                {promoDiscount > 0 && appliedDiscount ? (
+                  <ReceiptRow
+                    label={`Offer (${appliedDiscount.code})`}
+                    value={`−${formatRupees(promoDiscount)}`}
+                    tone="success"
+                  />
+                ) : null}
+                {cashbackClaim ? (
+                  <ReceiptRow
+                    label={`Cashback (${cashbackClaim.code})`}
+                    value={`+₹${cashbackClaim.cashbackRupees} later`}
+                    tone="muted"
+                  />
+                ) : null}
+                {loyaltyCredit > 0 ? (
+                  <ReceiptRow label="Loyalty" value={`−${formatRupees(loyaltyCredit)}`} tone="success" />
+                ) : null}
+                {walletCredit > 0 ? (
+                  <ReceiptRow label="Wallet" value={`−${formatRupees(walletCredit)}`} tone="success" />
+                ) : null}
+                <ReceiptTotal
+                  label="Total"
+                  value={formatRupees(totalDue)}
+                  caption={
+                    advanceDue > 0
+                      ? null
+                      : quoteMode
+                        ? "Pay the artist at your visit. If this artist takes an advance, you'll see it after you confirm."
+                        : "Pay the artist at your visit."
+                  }
+                />
+                {advanceDue > 0 ? (
+                  <>
+                    <ReceiptRow label="Pay now (advance)" value={formatRupees(advanceDue)} />
+                    <ReceiptRow
+                      label="Pay the artist at your visit"
+                      value={formatRupees(Math.max(0, totalDue - advanceDue))}
+                    />
+                    <Notice tone="peach" icon="time-outline">
+                      Your time is held for 15 minutes while you pay.
+                    </Notice>
+                  </>
+                ) : null}
+              </BookingCard>
 
-            <View style={[styles.card, styles.rewardsCard]}>
-              <Text variant="label" muted>
-                Wallet & loyalty
-              </Text>
-
-              <Pressable
-                accessibilityRole="button"
-                style={[
-                  styles.rewardRow,
-                  useWallet && walletBalance > 0 && styles.rewardRowActive,
-                  walletBalance <= 0 && styles.rewardDisabled,
-                ]}
-                disabled={walletBalance <= 0}
-                onPress={() => {
-                  if (walletBalance <= 0) return
-                  setUseWallet((value) => !value)
-                }}
-              >
-                <View style={styles.rewardIcon}>
-                  <Icon name="wallet-outline" size={20} color={colors.primary} />
-                </View>
-                <View style={styles.rewardCopy}>
-                  <Text variant="bodyStrong">Wallet credit</Text>
-                  <Text variant="caption" muted>
-                    {walletBalance > 0
-                      ? `${formatRupees(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
-                      : "No wallet balance yet"}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.applyChip,
-                    useWallet && walletBalance > 0 && styles.applyChipOn,
-                    walletBalance <= 0 && styles.applyChipDisabled,
-                  ]}
-                >
-                  <Text
-                    variant="caption"
-                    color={
-                      walletBalance <= 0
-                        ? colors.textSubtle
-                        : useWallet
-                          ? colors.primaryFg
-                          : colors.primary
-                    }
-                  >
-                    {walletBalance <= 0 ? "Unavailable" : useWallet ? "Applied" : "Apply"}
-                  </Text>
-                </View>
-              </Pressable>
-
-              <Pressable
-                accessibilityRole="button"
-                style={[
-                  styles.rewardRow,
-                  useLoyalty && loyaltyAvailable && styles.rewardRowActive,
-                  !loyaltyAvailable && styles.rewardDisabled,
-                ]}
-                disabled={!loyaltyAvailable}
-                onPress={() => {
-                  if (!loyaltyAvailable) return
-                  setUseLoyalty((value) => !value)
-                }}
-              >
-                <View style={styles.rewardIcon}>
-                  <Icon name="ribbon-outline" size={20} color={colors.primary} />
-                </View>
-                <View style={styles.rewardCopy}>
-                  <Text variant="bodyStrong">Loyalty reward</Text>
-                  <Text variant="caption" muted>
-                    {loyaltyAvailable
-                      ? `Up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off · ${loyalty.freeServiceCredits} credit${loyalty.freeServiceCredits === 1 ? "" : "s"} · tap to ${useLoyalty ? "remove" : "apply"}`
-                      : `Complete ${LOYALTY_VISITS_PER_FREE} services → unlock up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off. ${loyalty.stampsTowardNextFree}/${LOYALTY_VISITS_PER_FREE} completed · ${loyalty.visitsLeft} more to go.`}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    styles.applyChip,
-                    useLoyalty && loyaltyAvailable && styles.applyChipOn,
-                    !loyaltyAvailable && styles.applyChipDisabled,
-                  ]}
-                >
-                  <Text
-                    variant="caption"
-                    color={
-                      !loyaltyAvailable
-                        ? colors.textSubtle
-                        : useLoyalty
-                          ? colors.primaryFg
-                          : colors.primary
-                    }
-                  >
-                    {!loyaltyAvailable ? "Locked" : useLoyalty ? "Applied" : "Apply"}
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-
-            <View style={[styles.card, styles.rewardsCard]}>
-              <Text variant="label" muted>
-                Payment summary
-              </Text>
-              <View style={styles.summaryRow}>
-                <Text muted>
-                  {quoteMode ? "Quoted price" : "Services"}
-                  {needsHome && !quoteMode ? " (home rates)" : ""}
-                </Text>
-                <Text>{formatRupees(serviceSubtotal)}</Text>
-              </View>
-              {travelFee > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text muted>
-                    Travel fee
-                    {quote?.distanceKm != null
-                      ? ` · ${quote.distanceKm.toFixed(1)} km`
-                      : ""}
-                  </Text>
-                  <Text>{formatRupees(travelFee)}</Text>
+              {advanceDue > 0 && artist.cancellationPolicyLines?.length ? (
+                <View style={styles.policyCard}>
+                  <Text style={styles.policyTitle}>If you cancel</Text>
+                  {artist.cancellationPolicyLines.map((line) => (
+                    <Text key={line} style={styles.muted}>{`• ${line}`}</Text>
+                  ))}
                 </View>
               ) : null}
-              {promoDiscount > 0 && appliedDiscount ? (
-                <View style={styles.summaryRow}>
-                  <Text muted>Offer ({appliedDiscount.code})</Text>
-                  <Text color={colors.success}>−{formatRupees(promoDiscount)}</Text>
+
+              {artist.cancellationPolicyText ? (
+                <View style={styles.policyCard}>
+                  <Text style={styles.muted}>{artist.cancellationPolicyText}</Text>
                 </View>
               ) : null}
-              {cashbackClaim ? (
-                <View style={styles.summaryRow}>
-                  <Text muted>Cashback ({cashbackClaim.code})</Text>
-                  <Text muted>+₹{cashbackClaim.cashbackRupees} later</Text>
-                </View>
-              ) : null}
-              {loyaltyCredit > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text muted>Loyalty</Text>
-                  <Text color={colors.success}>−{formatRupees(loyaltyCredit)}</Text>
-                </View>
-              ) : null}
-              {walletCredit > 0 ? (
-                <View style={styles.summaryRow}>
-                  <Text muted>Wallet</Text>
-                  <Text color={colors.success}>−{formatRupees(walletCredit)}</Text>
-                </View>
-              ) : null}
-              <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text variant="bodyStrong">Total</Text>
-                <Text variant="heading">{formatRupees(totalDue)}</Text>
-              </View>
-              {advanceDue > 0 ? (
-                <>
-                  <View style={styles.summaryRow}>
-                    <Text variant="bodyStrong">Pay now (advance)</Text>
-                    <Text variant="bodyStrong">{formatRupees(advanceDue)}</Text>
-                  </View>
-                  <View style={styles.summaryRow}>
-                    <Text muted>Pay the artist at your visit</Text>
-                    <Text muted>{formatRupees(Math.max(0, totalDue - advanceDue))}</Text>
-                  </View>
-                  <Text variant="caption" muted>
-                    Your time is held for 15 minutes while you pay.
-                  </Text>
-                </>
-              ) : quoteMode ? (
-                <Text variant="caption" muted>
-                  Pay the artist at your visit. If this artist takes an advance, you&apos;ll see it after you
-                  confirm.
-                </Text>
-              ) : (
-                <Text variant="caption" muted>
-                  Pay the artist at your visit.
-                </Text>
-              )}
-            </View>
-
-            {advanceDue > 0 && artist.cancellationPolicyLines?.length ? (
-              <View style={styles.policyCard}>
-                <Text variant="label">If you cancel</Text>
-                {artist.cancellationPolicyLines.map((line) => (
-                  <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
-                ))}
-              </View>
-            ) : null}
-
-            {artist.cancellationPolicyText ? (
-              <View style={styles.policyCard}>
-                <Text variant="caption" muted>
-                  {artist.cancellationPolicyText}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {error ? (
-          <Text variant="caption" color={colors.destructive}>
-            {error}
-          </Text>
-        ) : null}
-      </Screen>
-
-      {step === 2 && advanceDue > 0 ? (
-        <OneTapPayBar
-          amountRupees={advanceDue}
-          reserve={quoteMode ? async () => heldQuote?.token ?? null : createBooking}
-          onPaid={onAdvancePaid}
-          error={error}
-          disabledReason={
-            busy === "session"
-              ? "Getting your booking ready…"
-              : canBook
-                ? null
-                : name.trim().length < 2
-                  ? "Add your name in Profile before booking."
-                  : needsHome && (address.trim().length < 5 || !pin)
-                    ? "Add your address and location for a home visit."
-                    : "Finish the steps above to book."
-          }
-        />
-      ) : (
-        <View
-          style={[
-            styles.ctaBar,
-            step < 2 && styles.ctaBarRow,
-            { paddingBottom: Math.max(insets.bottom, spacing.md) },
-          ]}
-        >
-          {step < 2 ? (
-            <View
-              style={styles.ctaPrice}
-              accessible
-              accessibilityLiveRegion="polite"
-              accessibilityLabel={`Total ${barPrice}. ${barNote}.`}
-            >
-              <Text variant="heading" numberOfLines={1}>
-                {barPrice}
-              </Text>
-              <Text variant="caption" muted numberOfLines={1}>
-                {barNote}
-              </Text>
             </View>
           ) : null}
-          <Button
-            style={step < 2 ? styles.ctaButton : undefined}
+
+          {error && showOneTap ? (
+            <View style={[styles.pad, styles.noticeGap]}>
+              <Notice tone="red" icon="alert-circle-outline">
+                {error}
+              </Notice>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        {showOneTap ? null : (
+          <BookingBar
+            title={step < 2 ? barPrice : formatRupees(totalDue)}
+            caption={step < 2 ? barNote : advanceDue > 0 ? null : "Pay the artist at your visit"}
+            error={error}
             label={
               busy === "book"
                 ? "Booking…"
-                : step === 0
+                : step < 2
                   ? "Continue"
-                  : step === 1
-                    ? "Continue"
-                    : advanceDue > 0
-                      ? `Continue to pay ${formatRupees(advanceDue)}`
-                      : quote
-                        ? `Confirm · ${formatRupees(totalDue)}`
-                        : "Confirm booking"
+                  : advanceDue > 0
+                    ? `Continue to pay ${formatRupees(advanceDue)}`
+                    : "Confirm booking"
             }
             loading={busy === "book" || busy === "session"}
             disabled={
@@ -1424,30 +1302,28 @@ export default function ArtistBookScreen() {
               void onBook()
             }}
           />
-        </View>
-      )}
+        )}
+      </KeyboardAvoidingView>
 
-
-      <BookingDateSheet
-        visible={dateSheetOpen}
-        options={dateOptions}
-        value={date || null}
-        onClose={() => setDateSheetOpen(false)}
-        onSelect={(next) => {
-          autoDate.current = false
-          setDate(next)
-          setSlot(null)
-        }}
-      />
-      <BookingTimeSheet
-        visible={timeSheetOpen}
-        options={timeOptions}
-        value={slot}
-        emptyMessage={slotMessage || "No time slots for this day."}
-        onClose={() => setTimeSheetOpen(false)}
-        onSelect={setSlot}
-        onClear={() => setSlot(null)}
-      />
+      {showOneTap ? (
+        <OneTapPayBar
+          amountRupees={advanceDue}
+          reserve={quoteMode ? async () => heldQuote?.token ?? null : createBooking}
+          onPaid={onAdvancePaid}
+          error={error}
+          disabledReason={
+            busy === "session"
+              ? "Getting your booking ready…"
+              : canBook
+                ? null
+                : name.trim().length < 2
+                  ? "Add your name in Profile before booking."
+                  : needsHome && (address.trim().length < 5 || !pin)
+                    ? "Add your address and location for a home visit."
+                    : "Finish the steps above to book."
+          }
+        />
+      ) : null}
 
       <BottomSheet
         visible={detailService != null}
@@ -1455,244 +1331,187 @@ export default function ArtistBookScreen() {
         onClose={() => setDetailService(null)}
       >
         {detailService ? (
-          <View style={{ gap: spacing.xs, paddingBottom: spacing.md }}>
-            <Text variant="heading">{detailService.name}</Text>
-            <Text muted style={{ marginTop: spacing.xs }}>
+          <View style={styles.detail}>
+            <Text style={styles.detailTitle}>{detailService.name}</Text>
+            <Text style={styles.detailMeta}>
               {formatDuration(detailService.durationMinutes)} ·{" "}
-              {formatRupees(artistServiceUnitPrice(detailService, "studio"))} at
-              studio
+              {formatRupees(artistServiceUnitPrice(detailService, "studio"))} at studio
             </Text>
             {detailService.homeVisitPriceOverride != null ? (
-              <Text variant="caption" muted>
-                {formatRupees(detailService.homeVisitPriceOverride)} if artist
-                comes to your home
+              <Text style={styles.muted}>
+                {formatRupees(detailService.homeVisitPriceOverride)} if artist comes to your home
               </Text>
             ) : null}
             {detailService.description ? (
-              <Text variant="body" muted style={{ marginTop: spacing.lg }}>
-                {detailService.description}
-              </Text>
+              <Text style={styles.detailBody}>{detailService.description}</Text>
             ) : null}
-            <Button
-              label={
-                selectedIds.includes(detailService.id) ? "Remove from bag" : "Add to bag"
-              }
-              variant={selectedIds.includes(detailService.id) ? "secondary" : "primary"}
-              style={{ marginTop: spacing.xxl }}
-              onPress={() => {
-                toggleService(detailService)
-                setDetailService(null)
-              }}
-            />
+            <View style={styles.detailCta}>
+              {selectedIds.includes(detailService.id) ? (
+                <OutlinePill
+                  label="Remove from bag"
+                  onPress={() => {
+                    toggleService(detailService)
+                    setDetailService(null)
+                  }}
+                />
+              ) : (
+                <PrimaryPill
+                  label="Add to bag"
+                  onPress={() => {
+                    toggleService(detailService)
+                    setDetailService(null)
+                  }}
+                />
+              )}
+            </View>
           </View>
         ) : null}
       </BottomSheet>
-
     </View>
   )
 }
 
+function VisitFact({ icon, text }: { icon: IconName; text: string }) {
+  return (
+    <View style={styles.fact}>
+      <Icon name={icon} size={16} color={bk.secondary} />
+      <Text style={styles.factText} numberOfLines={2}>
+        {text}
+      </Text>
+    </View>
+  )
+}
+
+function WhereCard({
+  icon,
+  pastel,
+  title,
+  caption,
+  active,
+  onPress,
+}: {
+  icon: IconName
+  pastel: Pastel
+  title: string
+  caption: string
+  active: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${title}, ${caption}`}
+      style={({ pressed }) => [styles.whereCard, active && styles.whereCardOn, pressed && ui.pressed]}
+    >
+      <PastelIcon pastel={pastel} name={icon} size={44} />
+      <Text style={styles.whereTitle}>{title}</Text>
+      <Text style={styles.whereSub}>{caption}</Text>
+      {active ? (
+        <View style={styles.whereCheck}>
+          <Icon name="checkmark" size={12} color="#ffffff" />
+        </View>
+      ) : null}
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xl,
-    gap: spacing.sm,
-    backgroundColor: colors.bg,
-  },
-  scroll: {
-    paddingBottom: 130,
-    gap: spacing.lg,
-  },
-  gap: {
-    marginTop: spacing.sm,
-  },
-  section: { gap: spacing.md },
-  sectionHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  flex: { flex: 1 },
+  flexCopy: { flex: 1, minWidth: 0, gap: 2 },
+  scrollContent: { flexGrow: 1, paddingBottom: 28 },
+  scrollOneTap: { paddingBottom: 150 },
+  pad: { paddingHorizontal: 16 },
+  quoteWrap: { marginBottom: 4 },
+  noticeGap: { marginTop: 12 },
+  helper: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: bk.secondary,
+    marginBottom: 10,
+    paddingHorizontal: 4,
   },
   serviceList: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: bk.border,
+    backgroundColor: "#ffffff",
     overflow: "hidden",
-    ...shadows.card,
   },
-  whereChoices: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
+  whereChoices: { flexDirection: "row", gap: 10 },
   whereCard: {
     flex: 1,
     alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    minHeight: 104,
-  },
-  whereCardOn: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  whereCardTitle: { textAlign: "center" },
-  whereCardSub: { textAlign: "center" },
-  row: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  policyCard: {
-    backgroundColor: colors.muted,
-    borderRadius: radii.lg,
-    padding: spacing.md,
     gap: 4,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: bk.border,
+    backgroundColor: "#ffffff",
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radii.lg,
-    padding: spacing.lg,
-    gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    ...shadows.card,
+  whereCardOn: { borderWidth: 2, borderColor: bk.text, paddingVertical: 17, paddingHorizontal: 9 },
+  whereTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: bk.text,
+    marginTop: 6,
+    textAlign: "center",
   },
-  artistRow: {
-    flexDirection: "row",
-    gap: spacing.lg,
-    alignItems: "center",
-  },
-  artistAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-  },
-  artistAvatarFallback: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  artistCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  ctaBar: {
+  whereSub: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 16, color: bk.secondary, textAlign: "center" },
+  whereCheck: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    backgroundColor: colors.card,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
-  ctaBarRow: {
-    flexDirection: "row",
+    top: 10,
+    right: 10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: bk.text,
     alignItems: "center",
-    gap: spacing.lg,
+    justifyContent: "center",
   },
-  ctaPrice: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  ctaButton: {
-    flex: 1,
-  },
-  rewardsCard: {
-    gap: spacing.md,
-  },
-  promoRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-  },
-  applyBtn: {
-    minWidth: 96,
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-  },
+  factRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  fact: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  factText: { flex: 1, fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 20, color: bk.text },
+  strong: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: bk.text },
+  muted: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: bk.secondary },
+  success: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 17, color: bk.green },
+  error: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 17, color: bk.red },
   appliedPromo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: "#EEF6F1",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: bk.greenBg,
   },
-  rewardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  removeText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 17,
+    color: bk.red,
+    textDecorationLine: "underline",
   },
-  rewardRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  rewardDisabled: {
-    opacity: 0.55,
-  },
-  rewardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    backgroundColor: "#F1F1F1",
+  promoRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  applyBtn: {
+    height: 48,
+    minWidth: 88,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: bk.text,
     alignItems: "center",
     justifyContent: "center",
   },
-  rewardCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  applyChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-  },
-  applyChipOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  applyChipDisabled: {
-    borderColor: colors.border,
-    backgroundColor: colors.muted,
-  },
-  quoteBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: sp.peachBg,
-  },
-  quoteBannerText: {
-    flex: 1,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  summaryTotal: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
+  applyBtnOff: { backgroundColor: bk.disabled },
+  applyText: { fontFamily: fontFamily.semibold, fontSize: 14, lineHeight: 18, color: "#ffffff" },
+  policyCard: { marginTop: 12, padding: 14, borderRadius: 16, backgroundColor: "#f7f7f7", gap: 2 },
+  policyTitle: { fontFamily: fontFamily.semibold, fontSize: 13, lineHeight: 18, color: bk.text },
+  detail: { gap: 6, paddingBottom: 16 },
+  detailTitle: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, color: bk.text },
+  detailMeta: { fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 20, color: bk.secondary },
+  detailBody: { fontFamily: fontFamily.regular, fontSize: 14, lineHeight: 21, color: bk.body, marginTop: 10 },
+  detailCta: { marginTop: 22 },
 })

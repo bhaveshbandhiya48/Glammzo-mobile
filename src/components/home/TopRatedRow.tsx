@@ -138,8 +138,10 @@ function SkeletonRow() {
       {[0, 1].map((i) => (
         <View key={i} style={styles.card}>
           <View style={[styles.imageWrap, styles.skeleton]} />
-          <View style={[styles.skeletonLine, { width: 180, marginTop: 12 }]} />
-          <View style={[styles.skeletonLine, { width: 120, marginTop: 8 }]} />
+          <View style={styles.textBlock}>
+            <View style={[styles.skeletonLine, { width: 180, marginTop: 4 }]} />
+            <View style={[styles.skeletonLine, { width: 120, marginTop: 10 }]} />
+          </View>
         </View>
       ))}
     </ScrollView>
@@ -287,21 +289,27 @@ function TopCard({ model }: { model: CardModel }) {
           </View>
         ) : null}
       </View>
-      <View style={styles.nameRow}>
-        <Text style={styles.name} numberOfLines={1}>
-          {model.name}
-        </Text>
-        {model.rating != null ? (
-          <View style={styles.rating}>
-            <Text style={styles.ratingText}>{`${model.rating.toFixed(1)}★`}</Text>
-          </View>
-        ) : null}
-      </View>
-      {model.meta ? (
+      {/* Fixed-height text block so every card in the row lines up, with or without meta. */}
+      <View style={styles.textBlock}>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {model.name}
+          </Text>
+          {model.rating != null ? (
+            <View style={styles.rating}>
+              <Icon name="star" size={11} color="#17633e" />
+              <Text style={styles.ratingText}>{model.rating.toFixed(1)}</Text>
+            </View>
+          ) : (
+            <View style={[styles.rating, styles.ratingNew]}>
+              <Text style={[styles.ratingText, styles.ratingNewText]}>New</Text>
+            </View>
+          )}
+        </View>
         <Text style={styles.meta} numberOfLines={1}>
-          {model.meta}
+          {model.meta || " "}
         </Text>
-      ) : null}
+      </View>
     </Pressable>
   )
 }
@@ -356,8 +364,10 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.85,
   },
+  // Salons and artists upload square photos: show them 1:1 so nothing is cropped.
   imageWrap: {
-    height: 160,
+    width: CARD_WIDTH,
+    aspectRatio: 1,
     borderRadius: 20,
     overflow: "hidden",
     backgroundColor: "#f2f2f2",
@@ -410,8 +420,12 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: "#ffffff",
   },
+  textBlock: {
+    height: 56,
+    paddingTop: 10,
+    paddingHorizontal: 2,
+  },
   nameRow: {
-    marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
@@ -425,18 +439,28 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
   rating: {
+    height: 22,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
     backgroundColor: "#e6f5ec",
-    borderRadius: 8,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
+    borderRadius: 999,
+    paddingHorizontal: 8,
   },
   ratingText: {
     fontFamily: fontFamily.semibold,
     fontSize: 12,
+    lineHeight: 16,
     color: "#17633e",
   },
+  ratingNew: {
+    backgroundColor: "#f3f3f3",
+  },
+  ratingNewText: {
+    color: "#595959",
+  },
   meta: {
-    marginTop: 2,
+    marginTop: 4,
     fontFamily: fontFamily.regular,
     fontSize: 13,
     lineHeight: 18,

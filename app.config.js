@@ -38,6 +38,7 @@ const config = {
     supportsTablet: true,
     bundleIdentifier: "com.glammzo.mobile",
     buildNumber: "1",
+    associatedDomains: ["applinks:glammzo.com"],
     infoPlist: {
       // HTTPS + Keychain only — skips App Store Connect export-compliance prompt.
       ITSAppUsesNonExemptEncryption: false,
@@ -61,6 +62,22 @@ const config = {
       monochromeImage: "./assets/android-icon-monochrome.png",
     },
     package: "com.glammzo.mobile",
+    // https://glammzo.com/a/<artist> opens this app when it is installed.
+    // pathPrefix includes the slash so /about and /api stay in the browser.
+    intentFilters: [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        category: ["BROWSABLE", "DEFAULT"],
+        data: [
+          {
+            scheme: "https",
+            host: "glammzo.com",
+            pathPrefix: "/a/",
+          },
+        ],
+      },
+    ],
     ...(googleServicesFile ? { googleServicesFile } : {}),
     ...(mapsApiKeyAndroid
       ? {

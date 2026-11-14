@@ -362,3 +362,89 @@ const styles = StyleSheet.create({
     color: "#111111",
   },
 })
+
+/** Radio option row for the new-style sheets (sort, single-choice filters). */
+export function SheetRadioRow({
+  label,
+  detail,
+  on,
+  onPress,
+  last,
+}: {
+  label: string
+  detail?: string
+  on: boolean
+  onPress: () => void
+  last?: boolean
+}) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected: on, checked: on }}
+      accessibilityLabel={detail ? `${label}. ${detail}` : label}
+      onPress={onPress}
+      style={({ pressed }) => [radioStyles.row, !last && radioStyles.divider, pressed && radioStyles.pressed]}
+    >
+      <View style={radioStyles.text}>
+        <Text style={[radioStyles.label, on && radioStyles.labelOn]}>{label}</Text>
+        {detail ? <Text style={radioStyles.detail}>{detail}</Text> : null}
+      </View>
+      <View style={[radioStyles.ring, on && radioStyles.ringOn]}>{on ? <View style={radioStyles.dot} /> : null}</View>
+    </Pressable>
+  )
+}
+
+const radioStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 54,
+    paddingVertical: 12,
+  },
+  divider: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  text: {
+    flex: 1,
+    minWidth: 0,
+  },
+  label: {
+    fontFamily: fontFamily.regular,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#111111",
+  },
+  labelOn: {
+    fontFamily: fontFamily.semibold,
+  },
+  detail: {
+    marginTop: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+  },
+  ring: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: "#c9c9c9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ringOn: {
+    borderColor: "#111111",
+  },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#111111",
+  },
+})

@@ -10,11 +10,23 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { GradientFill } from "@/components/home/GradientFill"
+import { SEE_ALL_EMPTY_COLORS, SeeAllEmpty } from "@/components/list/SeeAllParts"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
 import type { SearchSuggestions } from "@/lib/search-suggestions"
-import { colors, radii, spacing, typography } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
+
+type RowIcon = "search-outline" | "grid-outline" | "storefront-outline" | "cut-outline"
+
+/** Pastel icon square per suggestion kind. */
+const TINTS: Record<RowIcon, { bg: string; ink: string }> = {
+  "search-outline": { bg: "#fff1ea", ink: "#3b2a24" },
+  "grid-outline": { bg: "#f3eeff", ink: "#2e2447" },
+  "storefront-outline": { bg: "#eaf4fd", ink: "#1f3446" },
+  "cut-outline": { bg: "#ecf7ef", ink: "#1f3a2a" },
+}
 
 type Props = {
   visible: boolean
@@ -80,8 +92,9 @@ export function SearchSuggestionsPanel({
       presentationStyle="fullScreen"
       onRequestClose={close}
     >
-      <View style={[styles.root, { paddingTop: insets.top + spacing.sm }]}>
-        <View style={styles.header}>
+      <View style={styles.root}>
+        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+          <GradientFill colors={["#fdf3ee", "#ffffff"]} angle={180} />
           <Pressable
             onPress={close}
             hitSlop={10}
@@ -89,17 +102,17 @@ export function SearchSuggestionsPanel({
             accessibilityRole="button"
             accessibilityLabel="Back"
           >
-            <Icon name="chevron-back" size={22} color={colors.text} />
+            <Icon name="chevron-back" size={20} color="#111111" />
           </Pressable>
 
           <View style={styles.search}>
-            <Icon name="search-outline" size={18} color={colors.textSubtle} />
+            <Icon name="search-outline" size={18} color="#595959" />
             <TextInput
               ref={inputRef}
               value={draft}
               onChangeText={updateDraft}
               placeholder="Search salons, spa, barber…"
-              placeholderTextColor={colors.textSubtle}
+              placeholderTextColor="#8a8a8a"
               style={styles.searchInput}
               returnKeyType="search"
               autoCorrect={false}
@@ -115,7 +128,7 @@ export function SearchSuggestionsPanel({
                 accessibilityRole="button"
                 accessibilityLabel="Clear search"
               >
-                <Icon name="close-circle" size={18} color={colors.textSubtle} />
+                <Icon name="close-circle" size={18} color="#8a8a8a" />
               </Pressable>
             ) : null}
           </View>
@@ -127,13 +140,13 @@ export function SearchSuggestionsPanel({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
             styles.scroll,
-            { paddingBottom: insets.bottom + spacing.xxl },
+            { paddingBottom: insets.bottom + 40 },
           ]}
         >
           {!trimmed ? (
             popularSearches.length > 0 ? (
               <>
-                <Text variant="label" muted style={styles.sectionLabel}>
+                <Text style={styles.sectionLabel}>
                   Popular searches
                 </Text>
                 {popularSearches.map((item) => (
@@ -146,21 +159,27 @@ export function SearchSuggestionsPanel({
                 ))}
               </>
             ) : (
-              <View style={styles.empty}>
-                <Text variant="bodyStrong">Search salons & services</Text>
-                <Text muted>Try a salon name, service, or area.</Text>
-              </View>
+              <SeeAllEmpty
+                icon="search-outline"
+                colors={SEE_ALL_EMPTY_COLORS.salons}
+                title="Search salons & services"
+                body="Try a salon name, service, or area."
+              />
             )
           ) : !hasResults ? (
-            <View style={styles.empty}>
-              <Text variant="bodyStrong">No matches</Text>
-              <Text muted>Try a salon name, service, or area.</Text>
-            </View>
+            <SeeAllEmpty
+              icon="search-outline"
+              colors={SEE_ALL_EMPTY_COLORS.error}
+              title="No matches"
+              body="Try a salon name, service, or area."
+              actionLabel={`Search “${trimmed}” anyway`}
+              onAction={submit}
+            />
           ) : (
             <>
               {suggestions.categories.length > 0 ? (
                 <>
-                  <Text variant="label" muted style={styles.sectionLabel}>
+                  <Text style={styles.sectionLabel}>
                     Categories
                   </Text>
                   {suggestions.categories.map((cat) => (
@@ -176,7 +195,7 @@ export function SearchSuggestionsPanel({
 
               {suggestions.salons.length > 0 ? (
                 <>
-                  <Text variant="label" muted style={styles.sectionLabel}>
+                  <Text style={styles.sectionLabel}>
                     Salons
                   </Text>
                   {suggestions.salons.map((salon: Salon) => (
@@ -193,7 +212,7 @@ export function SearchSuggestionsPanel({
 
               {suggestions.services.length > 0 ? (
                 <>
-                  <Text variant="label" muted style={styles.sectionLabel}>
+                  <Text style={styles.sectionLabel}>
                     Services
                   </Text>
                   {suggestions.services.map((svc, index) => (
@@ -221,31 +240,33 @@ function SuggestionRow({
   subtitle,
   onPress,
 }: {
-  icon: "search-outline" | "grid-outline" | "storefront-outline" | "cut-outline"
+  icon: RowIcon
   title: string
   subtitle?: string
   onPress: () => void
 }) {
+  const tint = TINTS[icon]
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${title}. ${subtitle}` : title}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      <View style={styles.iconWrap}>
-        <Icon name={icon} size={18} color={colors.textMuted} />
+      <View style={[styles.iconWrap, { backgroundColor: tint.bg }]}>
+        <Icon name={icon} size={18} color={tint.ink} />
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="bodyStrong" numberOfLines={1}>
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
           {title}
         </Text>
         {subtitle ? (
-          <Text variant="caption" muted numberOfLines={1}>
+          <Text style={styles.rowSub} numberOfLines={1}>
             {subtitle}
           </Text>
         ) : null}
       </View>
-      <Icon name="chevron-forward" size={16} color={colors.textSubtle} />
+      <Icon name="chevron-forward" size={16} color="#8a8a8a" />
     </Pressable>
   )
 }
@@ -253,22 +274,22 @@ function SuggestionRow({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: "#ffffff",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -276,51 +297,72 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    minHeight: 48,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.bg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    gap: 8,
+    height: 46,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    backgroundColor: "#ffffff",
   },
   searchInput: {
     flex: 1,
-    minHeight: 48,
+    height: 46,
     paddingVertical: 0,
     fontSize: 15,
-    fontFamily: typography.body.fontFamily,
-    color: colors.text,
+    fontFamily: fontFamily.regular,
+    color: "#111111",
   },
   scroll: {
-    paddingTop: spacing.sm,
+    paddingTop: 4,
   },
   sectionLabel: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 6,
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+    color: "#4b5563",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    minHeight: 56,
+  },
+  rowPressed: {
+    backgroundColor: "#f6f6f6",
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  empty: {
-    padding: spacing.xxl,
-    gap: spacing.sm,
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  rowTitle: {
+    fontFamily: fontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
+    color: "#111111",
+  },
+  rowSub: {
+    marginTop: 1,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
   },
   pressed: {
-    opacity: 0.88,
-    backgroundColor: colors.muted,
+    opacity: 0.7,
   },
 })

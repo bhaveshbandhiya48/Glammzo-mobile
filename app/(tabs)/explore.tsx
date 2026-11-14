@@ -27,6 +27,8 @@ import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
 import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
 import { SalonCarousel } from "@/components/explore/SalonCarousel"
 import { SearchSuggestionsPanel } from "@/components/explore/SearchSuggestionsPanel"
+import { SalonListRow } from "@/components/home/SalonListRow"
+import { SEE_ALL_EMPTY_COLORS, SeeAllEmpty, SheetRadioRow } from "@/components/list/SeeAllParts"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Button } from "@/components/ui/Button"
 import { CartItemsSheet } from "@/components/ui/CartItemsSheet"
@@ -116,7 +118,7 @@ import {
   trackOfferClick,
   trackOfferViews,
 } from "@/lib/glammzo-offers-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
 
 type FilterSectionId =
   | "category"
@@ -978,11 +980,15 @@ export default function ExploreScreen() {
               />
             </>
           ) : searchQuery.trim() && activeFilterCount === 0 && gridSalons.length === 0 ? (
-            <View style={styles.searchEmpty}>
-              <Text variant="bodyStrong">No salons for “{searchQuery.trim()}” nearby</Text>
-              <Text variant="caption" muted>
-                Try another word, like haircut or facial. Solo artists who offer it show below.
-              </Text>
+            <View style={styles.bleed}>
+              <SeeAllEmpty
+                icon="search-outline"
+                colors={SEE_ALL_EMPTY_COLORS.salons}
+                title={`No salons for “${searchQuery.trim()}” nearby`}
+                body="Try another word, like haircut or facial. Solo artists who offer it show below."
+                actionLabel="Clear search"
+                onAction={() => setSearchQuery("")}
+              />
             </View>
           ) : !searchQuery.trim() ? (
             <AllSalonsSection
@@ -1017,7 +1023,25 @@ export default function ExploreScreen() {
             />
           ) : (
             <>
-              {localGridSalons.length > 0 ? (
+              {searchQuery.trim() && localGridSalons.length > 0 ? (
+                <View style={styles.results}>
+                  <View style={styles.resultsHeader}>
+                    <Text style={styles.resultsTitle} accessibilityRole="header" numberOfLines={2}>
+                      {sectionTitle}
+                    </Text>
+                    <Text style={styles.resultsSubtitle} numberOfLines={1}>
+                      {`${localGridSalons.length} ${localGridSalons.length === 1 ? "salon" : "salons"}${
+                        areaName ? ` · ${areaName}` : ""
+                      }`}
+                    </Text>
+                  </View>
+                  {localGridSalons.map((salon) => (
+                    <View key={salon.id} style={styles.resultRow}>
+                      <SalonListRow salon={salon} featured={salon.isFeatured === true} />
+                    </View>
+                  ))}
+                </View>
+              ) : localGridSalons.length > 0 ? (
                 <SalonCarousel
                   title={sectionTitle}
                   subtitle={
@@ -1125,25 +1149,20 @@ export default function ExploreScreen() {
         title="Sort by"
         onClose={() => setSortOpen(false)}
       >
-        {EXPLORE_SORT_FILTERS.map((item) => {
-          const active = filters.sort === item.id
-          return (
-            <Pressable
-              accessibilityRole="button"
+        <View accessibilityRole="radiogroup" accessibilityLabel="Sort by">
+          {EXPLORE_SORT_FILTERS.map((item, index) => (
+            <SheetRadioRow
               key={item.id}
-              style={styles.sheetRow}
+              label={item.label}
+              on={filters.sort === item.id}
+              last={index === EXPLORE_SORT_FILTERS.length - 1}
               onPress={() => {
                 setFilters((prev) => ({ ...prev, sort: item.id }))
                 setSortOpen(false)
               }}
-            >
-              <Text color={active ? colors.primary : colors.text}>{item.label}</Text>
-              {active ? (
-                <Icon name="checkmark" size={18} color={colors.primary} />
-              ) : null}
-            </Pressable>
-          )
-        })}
+            />
+          ))}
+        </View>
       </BottomSheet>
 
       <BottomSheet
@@ -1416,9 +1435,34 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
-  searchEmpty: {
-    gap: 4,
-    paddingVertical: spacing.lg,
+  bleed: {
+    marginHorizontal: -spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  results: {
+    marginHorizontal: -spacing.lg,
+    marginTop: spacing.xs,
+  },
+  resultsHeader: {
+    paddingHorizontal: 20,
+    marginBottom: 6,
+  },
+  resultsTitle: {
+    fontFamily: fontFamily.bold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: "#111111",
+  },
+  resultsSubtitle: {
+    marginTop: 2,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
+  },
+  resultRow: {
+    paddingHorizontal: 20,
   },
   section: {
     marginTop: spacing.lg,

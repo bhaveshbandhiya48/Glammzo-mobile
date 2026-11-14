@@ -1,4 +1,3 @@
-import { Image } from "expo-image"
 import { StatusBar } from "expo-status-bar"
 import { useLocalSearchParams, useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -15,192 +14,61 @@ import {
   View,
   type ScrollViewInstance,
 } from "react-native"
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
+import { AudienceSwitch } from "@/components/home/AudienceSwitch"
 import { Button } from "@/components/ui/Button"
 import { BottomSheet } from "@/components/ui/BottomSheet"
-import { CartStrip } from "@/components/ui/CartStrip"
-import { Icon, type IconName } from "@/components/ui/Icon"
 import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
-import { DetailIntro } from "@/components/detail/DetailIntro"
-import { SectionHeader } from "@/components/detail/SectionHeader"
-import { ReviewPhotos } from "@/components/reviews/ReviewPhotos"
 import { Text } from "@/components/ui/Text"
-import { CatalogServiceRow } from "@/components/salon/CatalogServiceRow"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
 import { SalonOffersCarousel } from "@/components/salon/SalonOffersCarousel"
+import { SalonAboutCard, type AboutRow } from "@/components/salon-page/SalonAboutCard"
+import { CART_BAR_GAP, CART_BAR_HEIGHT, SalonCartBar } from "@/components/salon-page/SalonCartBar"
+import { SalonPackageSheet, SalonServiceSheet } from "@/components/salon-page/SalonDetailSheets"
+import { HERO_HEIGHT, SalonHero } from "@/components/salon-page/SalonHero"
+import { SalonIntro, type QuickAction } from "@/components/salon-page/SalonIntro"
+import { SalonPackageTile } from "@/components/salon-page/SalonPackageTile"
+import { SalonPhotosGrid } from "@/components/salon-page/SalonPhotosGrid"
+import { ReviewSummary, SalonReviewCard } from "@/components/salon-page/SalonReviews"
+import { SalonServiceRow } from "@/components/salon-page/SalonServiceRow"
 import {
-  ServiceQuantityStepper,
-  serviceUsesQuantity,
-} from "@/components/salon/ServiceQuantityStepper"
-import { UnisexAudiencePicker } from "@/components/salon/UnisexAudiencePicker"
+  CHIP_ROW_HEIGHT,
+  SalonCategoryChips,
+  SalonTabBar,
+  TAB_BAR_HEIGHT,
+  type SalonTabKey,
+} from "@/components/salon-page/SalonTabs"
+import { SalonTeamRow } from "@/components/salon-page/SalonTeamRow"
+import { SalonTopBar } from "@/components/salon-page/SalonTopBar"
+import { dialablePhone, parseSalonHours, salonFullGallery, sp, ui } from "@/components/salon-page/theme"
 import { useCart } from "@/context/CartContext"
 import { useFavorites } from "@/context/FavoritesContext"
-import {
-  flattenAmenities,
-  getSalonHeroSlides,
-  salonProfileImageUrl,
-} from "@/data/mocks/salons"
-import type { Salon, SalonPackage, SalonReview, SalonService } from "@/data/types"
+import { flattenAmenities, getSalonHeroSlides, salonProfileImageUrl } from "@/data/mocks/salons"
+import type { Salon, SalonPackage, SalonService } from "@/data/types"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import { openDirections } from "@/lib/visit-links"
-import {
-  fetchGlammzoOffersForSalon,
-  type GlammzoOfferCard,
-} from "@/lib/glammzo-offers-api"
+import { fetchGlammzoOffersForSalon, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { withSalonDistanceFromLocation } from "@/lib/explore-location"
 import {
   filterPackagesByGenderAudience,
   filterServicesByGenderAudience,
   isUnisexSalonBusiness,
-  type ServiceGenderAudience,
 } from "@/lib/gender-audience"
+import { useHomeAudience } from "@/lib/home-audience"
+import { hasOpeningHours, salonAudienceBadge } from "@/lib/home-salon-info"
 import { LEGAL } from "@/lib/legal"
 import { bestOfferForService, formatOfferDiscountBadge } from "@/lib/offer-badges"
-import { resolvePackageBadge } from "@/lib/package-badges"
 import { quantityForService } from "@/lib/pricing-unit"
-import {
-  cartServicesSubtotal,
-  defaultPriceOptionId,
-  formatRupees,
-  formatServicePriceLabel,
-  serviceHasPriceOptions,
-} from "@/lib/service-pricing"
+import { cartServicesSubtotal, defaultPriceOptionId, formatRupees, serviceHasPriceOptions } from "@/lib/service-pricing"
+import type { HomeAudience } from "@/lib/service-tiles"
 import { getSavedLocation } from "@/lib/user"
 import { salonWhatsAppUrl } from "@/lib/whatsapp"
-import { colors, radii, spacing } from "@/theme/tokens"
-import { formatDuration } from "@/lib/booking-display"
+import { fontFamily, spacing } from "@/theme/tokens"
 
 const PACKAGES_CATEGORY = "Packages"
-
-function HeroGradient() {
-  return (
-    <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Defs>
-        <LinearGradient id="heroScrim" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#000000" stopOpacity="0.55" />
-          <Stop offset="0.4" stopColor="#000000" stopOpacity="0.12" />
-          <Stop offset="0.65" stopColor="#000000" stopOpacity="0" />
-        </LinearGradient>
-      </Defs>
-      <Rect x="0" y="0" width="100%" height="100%" fill="url(#heroScrim)" />
-    </Svg>
-  )
-}
-
-function StarRow({ rating }: { rating: number }) {
-  return (
-    <View style={styles.starRow}>
-      {Array.from({ length: 5 }, (_, index) => (
-        <Icon
-          key={index}
-          name={index < Math.round(rating) ? "star" : "star-outline"}
-          size={14}
-          color={index < Math.round(rating) ? colors.primary : colors.textSubtle}
-        />
-      ))}
-    </View>
-  )
-}
-
-/** Address / hours / phone row; tappable when it has an action. */
-function InfoRow({
-  icon,
-  title,
-  actionLabel,
-  onPress,
-  last = false,
-}: {
-  icon: IconName
-  title: string
-  actionLabel?: string
-  onPress?: () => void
-  last?: boolean
-}) {
-  const body = (
-    <>
-      <View style={styles.infoIcon}>
-        <Icon name={icon} size={18} color={colors.text} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text numberOfLines={2}>{title}</Text>
-        {actionLabel ? (
-          <Text variant="caption" style={styles.infoAction}>
-            {actionLabel}
-          </Text>
-        ) : null}
-      </View>
-      {onPress ? <Icon name="chevron-forward" size={16} color={colors.textSubtle} /> : null}
-    </>
-  )
-  return onPress ? (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${actionLabel ?? ""}: ${title}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.infoRow, !last && styles.infoRowDivider, pressed && styles.infoPressed]}
-    >
-      {body}
-    </Pressable>
-  ) : (
-    <View style={[styles.infoRow, !last && styles.infoRowDivider]} accessible accessibilityLabel={title}>
-      {body}
-    </View>
-  )
-}
-
-function ReviewCard({ review }: { review: SalonReview }) {
-  const initials = review.authorName
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase()
-
-  return (
-    <View style={styles.reviewCard}>
-      <View style={styles.reviewHeader}>
-        <View style={styles.reviewAuthor}>
-          <View style={styles.avatar}>
-            <Text variant="caption" color={colors.primary}>
-              {initials}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text variant="bodyStrong">{review.authorName}</Text>
-            <Text variant="caption" muted>
-              {review.date}
-            </Text>
-          </View>
-        </View>
-        <StarRow rating={review.rating} />
-      </View>
-      <Text style={styles.reviewComment} numberOfLines={4}>
-        {review.comment}
-      </Text>
-      <ReviewPhotos urls={review.photoUrls} title={`${review.authorName}'s photos`} />
-      <Text variant="caption" muted>
-        {review.serviceName}
-        {review.staffMember.name ? ` · with ${review.staffMember.name}` : ""}
-        {review.verified ? " · Verified visit" : ""}
-      </Text>
-      {review.ownerReply?.trim() ? (
-        <View style={styles.ownerReply}>
-          <Text variant="label" muted>
-            Response from salon
-          </Text>
-          <Text style={{ marginTop: spacing.sm }}>{review.ownerReply}</Text>
-          {review.ownerReplyDate ? (
-            <Text variant="caption" muted style={{ marginTop: spacing.xs }}>
-              {review.ownerReplyDate}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-    </View>
-  )
-}
+/** Ignore scroll-spy briefly after a tap so the animated scroll doesn't flicker the tabs. */
+const SPY_LOCK_MS = 500
 
 export default function SalonDetailScreen() {
   const router = useRouter()
@@ -211,26 +79,34 @@ export default function SalonDetailScreen() {
   const [loading, setLoading] = useState(true)
   const cart = useCart()
   const { isFavorite, toggle } = useFavorites()
-  const [slideIndex, setSlideIndex] = useState(0)
+  const [homeAudience] = useHomeAudience()
+  const [pickedAudience, setPickedAudience] = useState<HomeAudience | null>(null)
+  const genderAudience = pickedAudience ?? homeAudience
   const [detailService, setDetailService] = useState<SalonService | null>(null)
   const [detailPackage, setDetailPackage] = useState<SalonPackage | null>(null)
-  const [headerSolid, setHeaderSolid] = useState(false)
-  const [activeServiceCategory, setActiveServiceCategory] = useState<string>("")
-  const [expandedServiceCategories, setExpandedServiceCategories] = useState<string[]>([])
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [menuExpandedCategory, setMenuExpandedCategory] = useState<string>("")
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const [amenitiesOpen, setAmenitiesOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
+  const [reviewsOpen, setReviewsOpen] = useState(false)
   const [glammzoOffers, setGlammzoOffers] = useState<GlammzoOfferCard[]>([])
-  const [genderAudience, setGenderAudience] = useState<ServiceGenderAudience>("men")
-  const sliderRef = useRef<ScrollViewInstance>(null)
+
+  // Scroll-driven UI.
+  const [headerSolid, setHeaderSolid] = useState(false)
+  const [showStickyTabs, setShowStickyTabs] = useState(false)
+  const [showStickyChips, setShowStickyChips] = useState(false)
+  const [activeTab, setActiveTab] = useState<SalonTabKey>("services")
+  const [activeCategory, setActiveCategory] = useState("")
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 60)
+
   const pageScrollRef = useRef<ScrollViewInstance>(null)
-  const serviceCategoryOffsets = useRef<Record<string, number>>({})
-  const serviceCategoryBaseOffset = useRef(0)
-  const serviceListOffsets = useRef<Record<string, number>>({})
-  const serviceItemOffsets = useRef<Record<string, number>>({})
-  const packageSectionOffset = useRef(0)
+  const spyLockUntil = useRef(0)
+  const lastScrollY = useRef(0)
+  // Offsets inside the scroll content (y of each block, from onLayout).
+  const tabBarY = useRef(0)
+  const sectionY = useRef<Partial<Record<SalonTabKey, number>>>({})
+  const servicesBottom = useRef(0)
+  const chipsLocalY = useRef<number | null>(null)
+  const listLocalY = useRef(0)
+  const categoryLocalY = useRef<Record<string, number>>({})
 
   useEffect(() => {
     let active = true
@@ -241,28 +117,24 @@ export default function SalonDetailScreen() {
       return
     }
     setLoading(true)
-    Promise.all([getSalonByIdLive(id), getSavedLocation()]).then(
-      ([next, location]) => {
-        if (!active) return
-        const withDistance = next
-          ? withSalonDistanceFromLocation(next, location)
-          : undefined
-        setSalon(withDistance)
-        setLoading(false)
+    Promise.all([getSalonByIdLive(id), getSavedLocation()]).then(([next, location]) => {
+      if (!active) return
+      const withDistance = next ? withSalonDistanceFromLocation(next, location) : undefined
+      setSalon(withDistance)
+      setLoading(false)
 
-        if (!withDistance) {
-          setGlammzoOffers([])
-          return
-        }
+      if (!withDistance) {
+        setGlammzoOffers([])
+        return
+      }
 
-        void fetchGlammzoOffersForSalon({
-          city: withDistance.city,
-          area: withDistance.area,
-        }).then((offers) => {
-          if (active) setGlammzoOffers(offers)
-        })
-      },
-    )
+      void fetchGlammzoOffersForSalon({
+        city: withDistance.city,
+        area: withDistance.area,
+      }).then((offers) => {
+        if (active) setGlammzoOffers(offers)
+      })
+    })
     return () => {
       active = false
     }
@@ -283,11 +155,6 @@ export default function SalonDetailScreen() {
     return filterPackagesByGenderAudience(salon.packages, salon.services, genderAudience)
   }, [genderAudience, isUnisex, salon])
 
-  const selectedServices = useMemo(() => {
-    if (!salon || !salonCart) return []
-    return salon.services.filter((service) => salonCart.serviceIds.includes(service.id))
-  }, [salon, salonCart])
-
   const selectedPackage = useMemo(() => {
     if (!salon || !salonCart?.packageId) return undefined
     return salon.packages.find((item) => item.id === salonCart.packageId)
@@ -303,19 +170,35 @@ export default function SalonDetailScreen() {
       )
     : 0
 
+  /** What the bag would cost at struck-through prices (flat-priced services and the package). */
+  const savings = useMemo(() => {
+    if (!salon || !salonCart) return 0
+    let amount = 0
+    for (const serviceId of salonCart.serviceIds) {
+      const service = salon.services.find((item) => item.id === serviceId)
+      if (!service || serviceHasPriceOptions(service)) continue
+      if (service.compareAtPrice && service.compareAtPrice > service.price) {
+        amount += (service.compareAtPrice - service.price) * quantityForService(service, salonCart.quantities)
+      }
+    }
+    if (selectedPackage && selectedPackage.showComparePrice !== false && selectedPackage.comparePrice > selectedPackage.packagePrice) {
+      amount += selectedPackage.comparePrice - selectedPackage.packagePrice
+    }
+    return amount
+  }, [salon, salonCart, selectedPackage])
+
   const slides = useMemo(() => (salon ? getSalonHeroSlides(salon, 5) : []), [salon])
+  const fullGallery = useMemo(() => (salon ? salonFullGallery(salon) : []), [salon])
   const whatsappUrl = useMemo(
     () =>
       salon
-        ? salonWhatsAppUrl(
-            salon.whatsappPhone,
-            `Hi ${salon.name}, I found you on Glammzo and would like to enquire.`,
-          )
+        ? salonWhatsAppUrl(salon.whatsappPhone, `Hi ${salon.name}, I found you on Glammzo and would like to enquire.`)
         : null,
     [salon],
   )
   const amenityRows = useMemo(() => flattenAmenities(salon?.amenities).slice(0, 10), [salon])
   const customerReviews = salon?.customerReviews ?? []
+
   const serviceGroups = useMemo(() => {
     const groups = new Map<string, SalonService[]>()
     for (const service of catalogServices) {
@@ -349,26 +232,15 @@ export default function SalonDetailScreen() {
     return labels
   }, [salon])
 
+  const tabs = useMemo<SalonTabKey[]>(
+    () => ["services", ...(fullGallery.length > 0 ? (["photos"] as const) : []), "reviews", "about"],
+    [fullGallery.length],
+  )
+
   useEffect(() => {
-    const first = catalogCategories[0] ?? ""
-    setActiveServiceCategory(first)
-    setExpandedServiceCategories(catalogCategories)
-    setMenuExpandedCategory(first)
+    setActiveCategory(catalogCategories[0] ?? "")
+    categoryLocalY.current = {}
   }, [catalogCategories])
-
-  function expandServiceCategory(category: string) {
-    setExpandedServiceCategories((current) =>
-      current.includes(category) ? current : [...current, category]
-    )
-  }
-
-  function toggleServiceCategory(category: string) {
-    setExpandedServiceCategories((current) =>
-      current.includes(category)
-        ? current.filter((item) => item !== category)
-        : [...current, category]
-    )
-  }
 
   function handleToggleService(service: SalonService) {
     if (!salon) return
@@ -391,21 +263,94 @@ export default function SalonDetailScreen() {
     cart.setServicePriceOption(salon.id, service.id, optionId)
   }
 
-  useEffect(() => {
-    if (!menuOpen) return
-    setMenuExpandedCategory(activeServiceCategory || serviceGroups[0]?.category || "")
-  }, [menuOpen])
+  function togglePackage(pkg: SalonPackage) {
+    if (!salon) return
+    // setPackage replaces any other package: one package per bag.
+    cart.setPackage(salon.id, cart.isPackageSelected(salon.id, pkg.id) ? null : pkg.id)
+  }
 
-  function onHeroMomentumEnd(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const next = Math.round(event.nativeEvent.contentOffset.x / Math.max(windowWidth, 1))
-    if (next !== slideIndex) setSlideIndex(next)
+  // ---- Scroll geometry -------------------------------------------------------
+
+  function categoryY(category: string): number | null {
+    const local = categoryLocalY.current[category]
+    const services = sectionY.current.services
+    if (typeof local !== "number" || typeof services !== "number") return null
+    return services + listLocalY.current + local
+  }
+
+  function chipsY(): number | null {
+    const services = sectionY.current.services
+    if (chipsLocalY.current == null || typeof services !== "number") return null
+    return services + chipsLocalY.current
+  }
+
+  function scrollToY(y: number) {
+    spyLockUntil.current = Date.now() + SPY_LOCK_MS
+    pageScrollRef.current?.scrollTo({ y: Math.max(0, y), animated: true })
+  }
+
+  function scrollToTab(tab: SalonTabKey) {
+    setActiveTab(tab)
+    if (tab === "services") {
+      scrollToY(tabBarY.current - headerHeight)
+      return
+    }
+    const y = sectionY.current[tab]
+    if (typeof y === "number") scrollToY(y - headerHeight - TAB_BAR_HEIGHT)
+  }
+
+  function scrollToCategory(category: string) {
+    setActiveCategory(category)
+    setActiveTab("services")
+    const y = categoryY(category)
+    if (y != null) scrollToY(y - headerHeight - TAB_BAR_HEIGHT - CHIP_ROW_HEIGHT - 4)
+  }
+
+  function updateScrollUi(y: number, viewportHeight: number, contentHeight: number) {
+    const solid = y > Math.max(48, insets.top)
+    if (solid !== headerSolid) setHeaderSolid(solid)
+
+    const stickTabs = y + headerHeight >= tabBarY.current && tabBarY.current > 0
+    if (stickTabs !== showStickyTabs) setShowStickyTabs(stickTabs)
+
+    const chipsTop = chipsY()
+    const pinnedTop = y + headerHeight + TAB_BAR_HEIGHT
+    const stickChips =
+      stickTabs &&
+      chipsTop != null &&
+      catalogCategories.length > 1 &&
+      pinnedTop >= chipsTop &&
+      pinnedTop + CHIP_ROW_HEIGHT < servicesBottom.current
+    if (stickChips !== showStickyChips) setShowStickyChips(stickChips)
+
+    if (Date.now() < spyLockUntil.current) return
+
+    // The line just under the pinned bars decides what is "current".
+    const probe = pinnedTop + (stickChips ? CHIP_ROW_HEIGHT : 0) + 12
+    let nextTab: SalonTabKey = tabs[0] ?? "services"
+    for (const tab of tabs) {
+      const top = tab === "services" ? tabBarY.current : sectionY.current[tab]
+      if (typeof top === "number" && top <= probe) nextTab = tab
+    }
+    // Short last section: count it once the page can't scroll further.
+    if (y + viewportHeight >= contentHeight - 4 && y > 0) nextTab = tabs[tabs.length - 1] ?? nextTab
+    if (nextTab !== activeTab) setActiveTab(nextTab)
+
+    let nextCategory = catalogCategories[0] ?? ""
+    for (const category of catalogCategories) {
+      const top = categoryY(category)
+      if (top != null && top <= probe) nextCategory = category
+    }
+    if (nextCategory !== activeCategory) setActiveCategory(nextCategory)
   }
 
   function onPageScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
-    const y = event.nativeEvent.contentOffset.y
-    const next = y > Math.max(48, insets.top)
-    if (next !== headerSolid) setHeaderSolid(next)
+    const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent
+    lastScrollY.current = contentOffset.y
+    updateScrollUi(contentOffset.y, layoutMeasurement.height, contentSize.height)
   }
+
+  // ---- States ----------------------------------------------------------------
 
   if (loading) {
     return <SalonDetailSkeleton />
@@ -415,1072 +360,412 @@ export default function SalonDetailScreen() {
     return (
       <View style={[styles.root, styles.centered]}>
         <Text variant="heading">Salon not found</Text>
-        <Button
-          label="Back to Explore"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/explore")}
-        />
+        <Button label="Back to Explore" style={{ marginTop: spacing.xl }} onPress={() => router.replace("/(tabs)/explore")} />
       </View>
     )
   }
 
-  const offer = salon.offers.find((item) => item.isActive)
+  const currentSalon = salon
   const favorited = isFavorite(salon.id)
-  const galleryPreview = slides
-  const hasCart = cart.itemCountFor(salon.id) > 0
-  const packagesExpanded = expandedServiceCategories.includes(PACKAGES_CATEGORY)
-  const showMenuFab = catalogPackages.length > 0 || serviceGroups.length > 1
-  const profileImage = salonProfileImageUrl(salon)
-  const cartImages = profileImage ? [profileImage] : []
-  const cartPreviewLabel = [
-    ...selectedServices.map((service) => service.name),
-    ...(selectedPackage ? [selectedPackage.name] : []),
+  const itemCount = cart.itemCountFor(salon.id)
+  const hasCart = itemCount > 0
+  const phone = dialablePhone(salon.phone)
+  const hours = parseSalonHours(salon.hours)
+  const scheduled = hasOpeningHours(salon)
+  const locationLine = [salon.area, salon.city].filter(Boolean).join(", ")
+  const subtitle = [salonAudienceBadge(salon), locationLine].filter(Boolean).join(" · ")
+  const hasOffers = glammzoOffers.length > 0 || salon.offers.length > 0
+  const firstServiceName = (salonCart?.serviceIds ?? [])
+    .map((serviceId) => salon.services.find((service) => service.id === serviceId)?.name)
+    .find(Boolean)
+  const firstItemName = firstServiceName ?? selectedPackage?.name
+
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/explore")
+  }
+
+  function shareSalon() {
+    const url = `${LEGAL.siteUrl}/salons/${encodeURIComponent(currentSalon.id)}`
+    const message = [
+      `Check out ${currentSalon.name} on Glammzo`,
+      currentSalon.area ? `${currentSalon.area}${currentSalon.city ? `, ${currentSalon.city}` : ""}` : null,
+      url,
+    ]
+      .filter(Boolean)
+      .join("\n")
+    void Share.share(Platform.OS === "ios" ? { message, url } : { message, title: currentSalon.name }).catch(() => {
+      // User dismissed sheet or share unavailable — ignore.
+    })
+  }
+
+  function toggleFavorite() {
+    void (async () => {
+      const result = await toggle(currentSalon.id)
+      if (result === "auth") {
+        router.push({ pathname: "/login", params: { next: `/salon/${currentSalon.id}` } })
+      }
+    })()
+  }
+
+  function directions() {
+    openDirections({
+      latitude: currentSalon.latitude,
+      longitude: currentSalon.longitude,
+      query: currentSalon.address || [currentSalon.name, currentSalon.area, currentSalon.city].filter(Boolean).join(", "),
+    })
+  }
+
+  function call() {
+    if (phone) void Linking.openURL(`tel:${phone}`)
+  }
+
+  function openGallery(index: number) {
+    setGalleryIndex(index)
+    setGalleryOpen(true)
+  }
+
+  const quickActions: QuickAction[] = [
+    ...(phone ? [{ kind: "call" as const, label: "Call", onPress: call }] : []),
+    ...(whatsappUrl
+      ? [{ kind: "whatsapp" as const, label: "WhatsApp", onPress: () => void Linking.openURL(whatsappUrl) }]
+      : []),
+    { kind: "directions", label: "Directions", onPress: directions },
+    { kind: "share", label: "Share", onPress: shareSalon },
   ]
-    .slice(0, 2)
-    .join(", ")
+
+  const aboutRows: AboutRow[] = [
+    {
+      key: "address",
+      icon: "location-outline",
+      title: salon.address || locationLine || salon.name,
+      subtitle: [salon.city, salon.distanceKm > 0 ? `${salon.distanceKm.toFixed(1)} km away` : null].filter(Boolean).join(" · "),
+      action: { label: "Directions", onPress: directions },
+    },
+    ...(scheduled
+      ? [
+          {
+            key: "hours",
+            icon: "time-outline" as const,
+            title: hours.range
+              ? `${salon.isOpenNow ? "Open today" : "Closed now"} · ${hours.range}`
+              : salon.hours,
+            subtitle: hours.days,
+          },
+        ]
+      : []),
+    ...(phone
+      ? [
+          {
+            key: "phone",
+            icon: "call-outline" as const,
+            title: salon.phone,
+            subtitle: "Call the salon",
+            action: { label: "Call", onPress: call },
+          },
+        ]
+      : []),
+  ]
+
+  const visibleReviews = customerReviews.slice(0, 3)
+  const darkStatus = headerSolid || slides.length === 0
+  const bottomPad = hasCart ? CART_BAR_HEIGHT + CART_BAR_GAP + insets.bottom + 24 : insets.bottom + 32
 
   return (
     <View style={styles.root}>
-      <StatusBar style={headerSolid ? "dark" : "light"} />
+      <StatusBar style={darkStatus ? "dark" : "light"} />
 
-      <View
-        style={[
-          styles.stickyHeader,
-          { paddingTop: insets.top + spacing.sm },
-          headerSolid && styles.stickyHeaderSolid,
-        ]}
-        pointerEvents="box-none"
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          onPress={() => {
-            if (router.canGoBack()) router.back()
-            else router.replace("/(tabs)/explore")
-          }}
-          style={[styles.chromeBtn, headerSolid && styles.chromeBtnSolid]}
-        >
-          <Icon
-            name="chevron-back"
-            size={24}
-            color={headerSolid ? colors.text : colors.primaryFg}
-          />
-        </Pressable>
+      <SalonTopBar
+        topInset={insets.top}
+        solid={headerSolid}
+        title={salon.name}
+        favorited={favorited}
+        onBack={goBack}
+        onShare={shareSalon}
+        onToggleFavorite={toggleFavorite}
+        onLayout={(event) => {
+          const next = Math.round(event.nativeEvent.layout.height)
+          if (next !== headerHeight) setHeaderHeight(next)
+        }}
+      />
 
-        {headerSolid ? (
-          <Text variant="bodyStrong" numberOfLines={1} style={styles.stickyTitle}>
-            {salon.name}
-          </Text>
-        ) : (
-          <View style={styles.stickySpacer} />
-        )}
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={favorited ? "Remove favorite" : "Save salon"}
-          onPress={() => {
-            void (async () => {
-              const result = await toggle(salon.id)
-              if (result === "auth") {
-                router.push({
-                  pathname: "/login",
-                  params: { next: `/salon/${salon.id}` },
-                })
-              }
-            })()
-          }}
-          style={[styles.chromeBtn, headerSolid && styles.chromeBtnSolid]}
-        >
-          <Icon
-            name={favorited ? "heart" : "heart-outline"}
-            size={20}
-            color={
-              favorited ? colors.primary : headerSolid ? colors.text : colors.primaryFg
-            }
-          />
-        </Pressable>
-      </View>
+      {/* Pinned clone of the tab bar (and category chips while in Services). */}
+      {showStickyTabs ? (
+        <View style={[styles.sticky, { top: headerHeight }]}>
+          <SalonTabBar tabs={tabs} active={activeTab} onSelect={scrollToTab} />
+          {showStickyChips ? (
+            <View style={styles.stickyChips}>
+              <SalonCategoryChips categories={catalogCategories} active={activeCategory} onSelect={scrollToCategory} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
 
       <ScrollView
         ref={pageScrollRef}
         style={styles.root}
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={{ paddingBottom: bottomPad }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        bounces
         onScroll={onPageScroll}
         scrollEventThrottle={16}
       >
-        <View style={[styles.heroWrap, { width: windowWidth, height: windowWidth }]}>
-          <ScrollView
-            ref={sliderRef}
-            horizontal
-            pagingEnabled
-            nestedScrollEnabled
-            directionalLockEnabled
-            disableIntervalMomentum
-            showsHorizontalScrollIndicator={false}
-            bounces={false}
-            overScrollMode="never"
-            onMomentumScrollEnd={onHeroMomentumEnd}
-            style={{ width: windowWidth, height: windowWidth }}
-            contentContainerStyle={{ height: windowWidth }}
-          >
-            {slides.map((uri, index) => (
-              <View
-                key={`${uri}-${index}`}
-                style={{ width: windowWidth, height: windowWidth }}
-              >
-                <Image
-                  source={{ uri }}
-                  style={styles.heroImage}
-                  contentFit="cover"
-                  pointerEvents="none"
-                />
-              </View>
-            ))}
-          </ScrollView>
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <HeroGradient />
-          </View>
-          {slides.length > 1 ? (
-            <View style={styles.dots} pointerEvents="none">
-              {slides.map((uri, index) => (
-                <View
-                  key={`${uri}-dot-${index}`}
-                  style={[styles.dot, index === slideIndex && styles.dotActive]}
-                />
-              ))}
-            </View>
-          ) : null}
-          <View style={styles.photoCount} pointerEvents="none">
-            <Text variant="caption" color={colors.primaryFg}>
-              {slideIndex + 1}/{slides.length}
-            </Text>
-          </View>
-        </View>
-
-        <DetailIntro
-          status={
-            salon.isOpenNow
-              ? { label: "Open now", tone: "success" }
-              : { label: "Closed now", tone: "danger" }
-          }
-          offerLabel={offer?.title ?? null}
-          title={salon.name}
-          subtitle={[salon.area, salon.city].filter(Boolean).join(", ")}
-          stats={[
-            salon.reviews > 0
-              ? { value: `★ ${salon.rating.toFixed(1)}`, label: `${salon.reviews} review${salon.reviews === 1 ? "" : "s"}` }
-              : { value: "New", label: "on Glammzo" },
-            ...(salon.distanceKm > 0 ? [{ value: `${salon.distanceKm.toFixed(1)} km`, label: "away" }] : []),
-            ...(salon.priceFrom > 0 ? [{ value: formatRupees(salon.priceFrom), label: "starting price" }] : []),
-          ]}
-          actions={[
-            {
-              icon: "call-outline",
-              label: "Call",
-              onPress: () => void Linking.openURL(`tel:${salon.phone.replace(/\s/g, "")}`),
-            },
-            ...(whatsappUrl
-              ? [{ icon: "logo-whatsapp" as const, label: "WhatsApp", iconColor: "#25D366", onPress: () => void Linking.openURL(whatsappUrl) }]
-              : []),
-            {
-              icon: "navigate-outline",
-              label: "Directions",
-              onPress: () =>
-                openDirections({
-                  latitude: salon.latitude,
-                  longitude: salon.longitude,
-                  query: salon.address || [salon.name, salon.area, salon.city].filter(Boolean).join(", "),
-                }),
-            },
-            {
-              icon: "share-outline",
-              label: "Share",
-              onPress: () => {
-                const url = `${LEGAL.siteUrl}/salons/${encodeURIComponent(salon.id)}`
-                const message = [
-                  `Check out ${salon.name} on Glammzo`,
-                  salon.area ? `${salon.area}${salon.city ? `, ${salon.city}` : ""}` : null,
-                  url,
-                ]
-                  .filter(Boolean)
-                  .join("\n")
-                void Share.share(
-                  Platform.OS === "ios" ? { message, url } : { message, title: salon.name },
-                ).catch(() => {
-                  // User dismissed sheet or share unavailable — ignore.
-                })
-              },
-            },
-          ]}
-          about={salon.description}
+        <SalonHero
+          slides={slides}
+          name={salon.name}
+          width={windowWidth}
+          onOpenPhoto={(index) => openGallery(Math.max(0, fullGallery.indexOf(slides[index] ?? "")))}
         />
 
-        <View style={styles.body}>
+        <SalonIntro
+          name={salon.name}
+          subtitle={subtitle}
+          rating={salon.rating}
+          reviews={salon.reviews}
+          status={scheduled ? (salon.isOpenNow ? { open: true, closes: hours.closes } : { open: false }) : null}
+          distanceKm={salon.distanceKm}
+          actions={quickActions}
+          about={salon.description}
+          onPressRating={() => scrollToTab("reviews")}
+        />
 
-          {glammzoOffers.length > 0 || salon.offers.length > 0 ? (
-            <>
-              <SectionHeader title="Offers for you" first />
-              <SalonOffersCarousel
-                glammzoOffers={glammzoOffers}
-                salonOffers={salon.offers}
-                onPressCta={() => {
-                  const y = serviceCategoryBaseOffset.current || packageSectionOffset.current
-                  pageScrollRef.current?.scrollTo({
-                    y: Math.max(0, y - 140),
-                    animated: true,
-                  })
-                }}
-              />
-            </>
-          ) : null}
-
-          <SectionHeader
-            title="Services"
-            first={glammzoOffers.length === 0 && salon.offers.length === 0}
-          />
-          {isUnisex ? (
-            <UnisexAudiencePicker
-              value={genderAudience}
-              onSelect={setGenderAudience}
+        {hasOffers ? (
+          <>
+            <View style={ui.sectionHead}>
+              <Text style={ui.sectionLabel}>Offers</Text>
+            </View>
+            <SalonOffersCarousel
+              glammzoOffers={glammzoOffers}
+              salonOffers={salon.offers}
+              onPressCta={() => scrollToTab("services")}
             />
+          </>
+        ) : null}
+
+        <View
+          style={styles.tabsInFlow}
+          onLayout={(event) => {
+            tabBarY.current = event.nativeEvent.layout.y
+          }}
+        >
+          <SalonTabBar tabs={tabs} active={activeTab} onSelect={scrollToTab} />
+        </View>
+
+        {/* SERVICES */}
+        <View
+          onLayout={(event) => {
+            sectionY.current.services = event.nativeEvent.layout.y
+            servicesBottom.current = event.nativeEvent.layout.y + event.nativeEvent.layout.height
+          }}
+        >
+          {isUnisex ? (
+            <View style={styles.audienceRow}>
+              <AudienceSwitch value={genderAudience} onChange={setPickedAudience} />
+            </View>
           ) : null}
+
           {catalogCategories.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.serviceCategoryChips}
+            <View
+              onLayout={(event) => {
+                chipsLocalY.current = event.nativeEvent.layout.y
+              }}
             >
-              {catalogCategories.map((category) => {
-                const active = activeServiceCategory === category
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={category}
-                    onPress={() => {
-                      setActiveServiceCategory(category)
-                      expandServiceCategory(category)
-                      const y = serviceCategoryOffsets.current[category]
-                      if (typeof y === "number") {
-                        pageScrollRef.current?.scrollTo({
-                          y: Math.max(0, y - 140),
-                          animated: true,
-                        })
-                      }
-                    }}
-                    style={[
-                      styles.serviceCategoryChip,
-                      active && styles.serviceCategoryChipActive,
-                    ]}
-                  >
-                    <Text
-                      variant="caption"
-                      color={active ? colors.primary : colors.text}
-                    >
-                      {category}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </ScrollView>
+              <SalonCategoryChips categories={catalogCategories} active={activeCategory} onSelect={scrollToCategory} />
+            </View>
           ) : null}
 
           <View
-            style={styles.serviceCategoryList}
+            style={styles.serviceList}
             onLayout={(event) => {
-              serviceCategoryBaseOffset.current = event.nativeEvent.layout.y
+              listLocalY.current = event.nativeEvent.layout.y
             }}
           >
+            {catalogCategories.length === 0 ? (
+              <Text style={styles.emptyText}>Services coming soon</Text>
+            ) : null}
+
             {catalogPackages.length > 0 ? (
               <View
+                style={styles.category}
                 onLayout={(event) => {
-                  const y = serviceCategoryBaseOffset.current + event.nativeEvent.layout.y
-                  serviceCategoryOffsets.current[PACKAGES_CATEGORY] = y
-                  packageSectionOffset.current = y
+                  categoryLocalY.current[PACKAGES_CATEGORY] = event.nativeEvent.layout.y
                 }}
-                style={styles.serviceCategorySection}
               >
-                <Pressable
-                  onPress={() => {
-                    setActiveServiceCategory(PACKAGES_CATEGORY)
-                    toggleServiceCategory(PACKAGES_CATEGORY)
-                  }}
-                  style={styles.serviceCategoryHeader}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: packagesExpanded }}
-                  accessibilityLabel={`Packages, ${catalogPackages.length} ${catalogPackages.length === 1 ? "item" : "items"}`}
-                >
-                  <View style={styles.serviceCategoryHeaderCopy}>
-                    <Text variant="bodyStrong">{PACKAGES_CATEGORY}</Text>
-                    <Text variant="caption" muted>
-                      {catalogPackages.length}{" "}
-                      {catalogPackages.length === 1 ? "item" : "items"}
-                    </Text>
-                  </View>
-                  <Icon
-                    name={packagesExpanded ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color={colors.textSubtle}
-                  />
-                </Pressable>
-
-                {packagesExpanded ? (
-                  <View
-                    style={styles.serviceList}
-                    onLayout={(event) => {
-                      serviceListOffsets.current[PACKAGES_CATEGORY] =
-                        event.nativeEvent.layout.y
-                    }}
-                  >
-                    {catalogPackages.map((pkg, index) => {
-                      const selected = cart.isPackageSelected(salon.id, pkg.id)
-                      const packageBadge = resolvePackageBadge(pkg.badge)
-                      const includedCount = pkg.items.reduce(
-                        (sum, item) => sum + item.quantity,
-                        0,
-                      )
-                      return (
-                        <View
-                          key={pkg.id}
-                          onLayout={(event) => {
-                            serviceItemOffsets.current[pkg.id] =
-                              serviceCategoryOffsets.current[PACKAGES_CATEGORY] +
-                              (serviceListOffsets.current[PACKAGES_CATEGORY] ?? 0) +
-                              event.nativeEvent.layout.y
-                          }}
-                          style={[
-                            styles.serviceRow,
-                            selected && styles.serviceRowSelected,
-                            index === catalogPackages.length - 1 && styles.serviceRowLast,
-                          ]}
-                        >
-                          <Pressable
-                            style={styles.serviceMain}
-                            onPress={() => setDetailPackage(pkg)}
-                            accessibilityRole="button"
-                            accessibilityLabel={`${pkg.name} package details`}
-                          >
-                            <Image
-                              source={{
-                                uri: pkg.imageUrl || salon.imageUrl || salon.coverImageUrl,
-                              }}
-                              style={styles.serviceThumb}
-                              contentFit="cover"
-                            />
-                            <View style={styles.serviceCopy}>
-                              <View style={styles.serviceNameRow}>
-                                <Text variant="bodyStrong" numberOfLines={1} style={{ flexShrink: 1 }}>
-                                  {pkg.name}
-                                </Text>
-                                {packageBadge ? (
-                                  <View style={styles.serviceOfferBadge}>
-                                    <Text
-                                      variant="caption"
-                                      color={colors.primary}
-                                      style={styles.serviceOfferBadgeLabel}
-                                    >
-                                      {packageBadge.label}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
-                              <Text variant="caption" muted numberOfLines={1}>
-                                {pkg.shortDescription ||
-                                  `${includedCount || pkg.items.length || 1} ${(includedCount || pkg.items.length || 1) === 1 ? "service" : "services"}`}
-                              </Text>
-                              <View style={styles.serviceMeta}>
-                                {pkg.totalDurationMin > 0 ? (
-                                  <>
-                                    <Icon name="time-outline" size={13} color={colors.textSubtle} />
-                                    <Text variant="caption" muted>
-                                      {formatDuration(pkg.totalDurationMin)}
-                                    </Text>
-                                    <Text variant="caption" muted>
-                                      ·
-                                    </Text>
-                                  </>
-                                ) : null}
-                                <Text variant="caption" color={colors.text}>
-                                  ₹{pkg.packagePrice}
-                                </Text>
-                                {pkg.showComparePrice !== false &&
-                                pkg.comparePrice > pkg.packagePrice ? (
-                                  <Text variant="caption" muted style={styles.strike}>
-                                    ₹{pkg.comparePrice}
-                                  </Text>
-                                ) : null}
-                              </View>
-                            </View>
-                          </Pressable>
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={selected ? "Remove from bag" : "Add to bag"}
-                            onPress={() => {
-                              cart.setPackage(salon.id, selected ? null : pkg.id)
-                            }}
-                            style={[styles.addBtn, selected && styles.addBtnSelected]}
-                          >
-                            <Text
-                              variant="caption"
-                              color={selected ? colors.text : colors.primaryFg}
-                              style={styles.addBtnLabel}
-                            >
-                              {selected ? "Remove" : "Add"}
-                            </Text>
-                          </Pressable>
-                        </View>
-                      )
-                    })}
-                  </View>
-                ) : null}
+                <CategoryHeader name={PACKAGES_CATEGORY} count={catalogPackages.length} />
+                <View style={styles.packages}>
+                  {catalogPackages.map((pkg, index) => (
+                    <SalonPackageTile
+                      key={pkg.id}
+                      pkg={pkg}
+                      index={index}
+                      selected={cart.isPackageSelected(salon.id, pkg.id)}
+                      onOpen={() => setDetailPackage(pkg)}
+                      onToggle={() => togglePackage(pkg)}
+                    />
+                  ))}
+                </View>
               </View>
             ) : null}
 
-            {serviceGroups.map((group) => {
-              const expanded = expandedServiceCategories.includes(group.category)
-              return (
+            {serviceGroups.map((group) => (
               <View
                 key={group.category}
+                style={styles.category}
                 onLayout={(event) => {
-                  serviceCategoryOffsets.current[group.category] =
-                    serviceCategoryBaseOffset.current + event.nativeEvent.layout.y
+                  categoryLocalY.current[group.category] = event.nativeEvent.layout.y
                 }}
-                style={styles.serviceCategorySection}
               >
-                <Pressable
-                  onPress={() => {
-                    setActiveServiceCategory(group.category)
-                    toggleServiceCategory(group.category)
-                  }}
-                  style={styles.serviceCategoryHeader}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded }}
-                  accessibilityLabel={`${group.category}, ${group.items.length} ${group.items.length === 1 ? "item" : "items"}`}
-                >
-                  <View style={styles.serviceCategoryHeaderCopy}>
-                    <Text variant="bodyStrong">{group.category}</Text>
-                    <Text variant="caption" muted>
-                      {group.items.length} {group.items.length === 1 ? "item" : "items"}
-                    </Text>
-                  </View>
-                  <Icon
-                    name={expanded ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color={colors.textSubtle}
+                <CategoryHeader name={group.category} count={group.items.length} />
+                {group.items.map((service, index) => (
+                  <SalonServiceRow
+                    key={service.id}
+                    service={service}
+                    selected={cart.isServiceSelected(salon.id, service.id)}
+                    quantity={quantityForService(service, salonCart?.quantities)}
+                    selectedOptionId={salonCart?.priceOptionIds[service.id] ?? null}
+                    offerLabel={serviceOfferLabels.get(service.id)}
+                    isLast={index === group.items.length - 1}
+                    onOpenDetail={() => setDetailService(service)}
+                    onToggle={() => handleToggleService(service)}
+                    onQuantityChange={(quantity) => handleServiceQuantity(service, quantity)}
+                    onPriceOptionChange={(optionId) => handleServicePriceOption(service, optionId)}
                   />
-                </Pressable>
-
-                {expanded ? (
-                <View
-                  style={styles.serviceList}
-                  onLayout={(event) => {
-                    serviceListOffsets.current[group.category] = event.nativeEvent.layout.y
-                  }}
-                >
-                  {group.items.map((service, index) => {
-                    const selected = cart.isServiceSelected(salon.id, service.id)
-                    return (
-                      <CatalogServiceRow
-                        key={service.id}
-                        service={service}
-                        selected={selected}
-                        quantity={quantityForService(service, salonCart?.quantities)}
-                        selectedOptionId={salonCart?.priceOptionIds[service.id] ?? null}
-                        offerLabel={serviceOfferLabels.get(service.id)}
-                        isLast={index === group.items.length - 1}
-                        onLayout={(event) => {
-                          serviceItemOffsets.current[service.id] =
-                            serviceCategoryOffsets.current[group.category] +
-                            (serviceListOffsets.current[group.category] ?? 0) +
-                            event.nativeEvent.layout.y
-                        }}
-                        onOpenDetail={() => setDetailService(service)}
-                        onToggle={() => handleToggleService(service)}
-                        onQuantityChange={(quantity) =>
-                          handleServiceQuantity(service, quantity)
-                        }
-                        onPriceOptionChange={(optionId) =>
-                          handleServicePriceOption(service, optionId)
-                        }
-                      />
-                    )
-                  })}
-                </View>
-                ) : null}
-              </View>
-              )
-            })}
-          </View>
-
-          {galleryPreview.length > 0 ? (
-            <>
-              <SectionHeader
-                title="Photos"
-                actionLabel={`See all ${galleryPreview.length}`}
-                onAction={() => {
-                  setGalleryIndex(0)
-                  setGalleryOpen(true)
-                }}
-              />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.bleed}
-                contentContainerStyle={styles.photoStrip}
-              >
-                {galleryPreview.map((uri, index) => (
-                  <Pressable
-                    key={`${uri}-g-${index}`}
-                    accessibilityRole="imagebutton"
-                    accessibilityLabel={`Photo ${index + 1} of ${galleryPreview.length}. Open full screen`}
-                    onPress={() => {
-                      setGalleryIndex(index)
-                      setGalleryOpen(true)
-                    }}
-                  >
-                    <Image source={{ uri }} style={styles.photoTile} contentFit="cover" />
-                  </Pressable>
                 ))}
-              </ScrollView>
-            </>
-          ) : null}
+              </View>
+            ))}
+          </View>
+        </View>
 
-          <SectionHeader title="Location and hours" />
-          <View style={styles.infoCard}>
-            <InfoRow
-              icon="location-outline"
-              title={salon.address}
-              actionLabel="Get directions"
-              onPress={() =>
-                openDirections({
-                  latitude: salon.latitude,
-                  longitude: salon.longitude,
-                  query: salon.address || [salon.name, salon.area, salon.city].filter(Boolean).join(", "),
-                })
-              }
-            />
-            {salon.hours ? <InfoRow icon="time-outline" title={salon.hours} /> : null}
-            {salon.phone ? (
-              <InfoRow
-                icon="call-outline"
-                title={salon.phone}
-                actionLabel="Call"
-                onPress={() => void Linking.openURL(`tel:${salon.phone.replace(/\s/g, "")}`)}
-                last
-              />
+        {/* PHOTOS */}
+        {fullGallery.length > 0 ? (
+          <View
+            onLayout={(event) => {
+              sectionY.current.photos = event.nativeEvent.layout.y
+            }}
+          >
+            <View style={ui.sectionHead}>
+              <Text style={ui.sectionLabel}>Photos</Text>
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => openGallery(0)}>
+                <Text style={ui.seeAll}>See all {fullGallery.length}</Text>
+              </Pressable>
+            </View>
+            <SalonPhotosGrid photos={fullGallery} onOpen={openGallery} />
+          </View>
+        ) : null}
+
+        {/* TEAM */}
+        {salon.team.length > 0 ? (
+          <View>
+            <View style={ui.sectionHead}>
+              <Text style={ui.sectionLabel}>Team</Text>
+            </View>
+            <SalonTeamRow team={salon.team} />
+          </View>
+        ) : null}
+
+        {/* REVIEWS */}
+        <View
+          onLayout={(event) => {
+            sectionY.current.reviews = event.nativeEvent.layout.y
+          }}
+        >
+          <View style={ui.sectionHead}>
+            <Text style={ui.sectionLabel}>Reviews</Text>
+            {customerReviews.length > 3 ? (
+              <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setReviewsOpen(true)}>
+                <Text style={ui.seeAll}>See all {customerReviews.length}</Text>
+              </Pressable>
             ) : null}
           </View>
-
-          {amenityRows.length > 0 ? (
-            <>
-              <SectionHeader title="Amenities" />
-              <View style={styles.amenityChips}>
-                {(amenitiesOpen ? amenityRows : amenityRows.slice(0, 6)).map((row) => (
-                  <View key={row.id} style={styles.amenityChip}>
-                    <Icon name={row.icon} size={16} color={colors.text} />
-                    <Text variant="caption" style={styles.amenityText}>
-                      {row.label}
-                    </Text>
-                  </View>
-                ))}
-                {amenityRows.length > 6 ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setAmenitiesOpen((open) => !open)}
-                    style={[styles.amenityChip, styles.amenityMore]}
-                  >
-                    <Text variant="caption" style={styles.amenityText}>
-                      {amenitiesOpen ? "Show less" : `+${amenityRows.length - 6} more`}
-                    </Text>
-                  </Pressable>
-                ) : null}
+          <View style={styles.reviews}>
+            {salon.reviews > 0 ? <ReviewSummary rating={salon.rating} reviews={salon.reviews} /> : null}
+            {visibleReviews.length > 0 ? (
+              visibleReviews.map((review) => <SalonReviewCard key={review.id} review={review} />)
+            ) : (
+              <View style={styles.emptyReviews}>
+                <Text style={styles.emptyText}>No reviews yet. Be the first after your visit.</Text>
               </View>
-            </>
-          ) : null}
+            )}
+          </View>
+        </View>
 
-          {salon.team.length > 0 ? (
-            <>
-              <SectionHeader title="Team" />
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.bleed}
-                contentContainerStyle={styles.teamRow}
-              >
-                {salon.team.map((member) => (
-                  <View
-                    key={member.id}
-                    style={styles.teamTile}
-                    accessible
-                    accessibilityLabel={`${member.name}, ${member.role}`}
-                  >
-                    {member.imageUrl ? (
-                      <Image source={{ uri: member.imageUrl }} style={styles.teamPhoto} contentFit="cover" transition={200} />
-                    ) : (
-                      <View style={[styles.teamPhoto, styles.teamAvatar]}>
-                        <Icon name="person-outline" size={32} color={colors.textMuted} />
-                      </View>
-                    )}
-                    <Text variant="bodyStrong" numberOfLines={1} style={styles.teamName}>
-                      {member.name}
-                    </Text>
-                    <Text variant="caption" muted numberOfLines={1} style={styles.teamName}>
-                      {member.role}
-                    </Text>
-                  </View>
-                ))}
-              </ScrollView>
-            </>
-          ) : null}
-
-          <SectionHeader title="Reviews" />
-          {salon.reviews > 0 ? (
-            <View style={styles.reviewSummary} accessible accessibilityLabel={`${salon.rating.toFixed(1)} out of 5 from ${salon.reviews} reviews`}>
-              <Text variant="title">{salon.rating.toFixed(1)}</Text>
-              <View>
-                <StarRow rating={salon.rating} />
-                <Text variant="caption" muted style={{ marginTop: 4 }}>
-                  {salon.reviews} review{salon.reviews === 1 ? "" : "s"}
-                </Text>
-              </View>
-            </View>
-          ) : null}
-          {customerReviews.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.bleed}
-              contentContainerStyle={styles.reviewRow}
-            >
-              {customerReviews.map((review) => (
-                <View key={review.id} style={{ width: Math.min(300, windowWidth * 0.8) }}>
-                  <ReviewCard review={review} />
-                </View>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.emptyReviews}>
-              <Text muted>No reviews yet. Be the first after your visit.</Text>
-            </View>
-          )}
+        {/* ABOUT */}
+        <View
+          onLayout={(event) => {
+            sectionY.current.about = event.nativeEvent.layout.y
+          }}
+        >
+          <View style={ui.sectionHead}>
+            <Text style={ui.sectionLabel}>About</Text>
+          </View>
+          <SalonAboutCard rows={aboutRows} amenities={amenityRows} />
         </View>
       </ScrollView>
 
-      <BottomSheet
-        visible={detailService != null}
-        title="Service summary"
+      <SalonServiceSheet
+        service={detailService}
+        selected={detailService ? cart.isServiceSelected(salon.id, detailService.id) : false}
+        quantities={salonCart?.quantities}
+        priceOptionId={detailService ? salonCart?.priceOptionIds[detailService.id] ?? null : null}
+        offerLabel={detailService ? serviceOfferLabels.get(detailService.id) : undefined}
         onClose={() => setDetailService(null)}
-      >
-        {detailService ? (
-          <View style={styles.sheetBody}>
-            {detailService.imageUrl.trim() ? (
-              <Image
-                source={{ uri: detailService.imageUrl }}
-                style={styles.sheetImage}
-                contentFit="cover"
-              />
-            ) : null}
-            <View style={styles.serviceNameRow}>
-              <Text variant="heading" style={{ flexShrink: 1 }}>
-                {detailService.name}
-              </Text>
-              {serviceOfferLabels.get(detailService.id) ? (
-                <View style={styles.serviceOfferBadge}>
-                  <Text
-                    variant="caption"
-                    color={colors.primary}
-                    style={styles.serviceOfferBadgeLabel}
-                  >
-                    {serviceOfferLabels.get(detailService.id)}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-            <Text muted style={{ marginTop: spacing.xs }}>
-              {detailService.category} · {formatDuration(detailService.durationMin)}
-            </Text>
-            <View style={styles.sheetPriceBox}>
-              <Text variant="caption" muted>
-                Price
-              </Text>
-              <View style={styles.sheetPriceRow}>
-                <Text variant="title">
-                  {formatServicePriceLabel(
-                    detailService,
-                    cart.isServiceSelected(salon.id, detailService.id)
-                      ? salonCart?.priceOptionIds[detailService.id]
-                      : undefined,
-                    {
-                      finalPrice: cart.isServiceSelected(salon.id, detailService.id),
-                    },
-                  )}
-                </Text>
-                {detailService.compareAtPrice ? (
-                  <Text muted style={styles.strike}>
-                    ₹{detailService.compareAtPrice}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            {serviceHasPriceOptions(detailService) ? (
-              <View style={{ marginTop: spacing.lg, gap: spacing.xs }}>
-                <Text variant="caption" muted>
-                  Choose a price
-                </Text>
-                {detailService.priceOptions!.map((option) => {
-                  const active =
-                    cart.isServiceSelected(salon.id, detailService.id) &&
-                    (salonCart?.priceOptionIds[detailService.id] ??
-                      defaultPriceOptionId(detailService)) === option.id
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={option.id}
-                      onPress={() => handleServicePriceOption(detailService, option.id)}
-                      style={[
-                        styles.sheetOptionChip,
-                        active && styles.sheetOptionChipActive,
-                      ]}
-                    >
-                      <Text variant="bodyStrong">{option.name}</Text>
-                      <Text variant="bodyStrong">{formatRupees(option.price)}</Text>
-                    </Pressable>
-                  )
-                })}
-              </View>
-            ) : null}
-            {serviceUsesQuantity(detailService) &&
-            cart.isServiceSelected(salon.id, detailService.id) ? (
-              <View style={{ marginTop: spacing.lg }}>
-                <ServiceQuantityStepper
-                  service={detailService}
-                  quantity={quantityForService(detailService, salonCart?.quantities)}
-                  onQuantityChange={(quantity) =>
-                    handleServiceQuantity(detailService, quantity)
-                  }
-                  onRemove={() => handleToggleService(detailService)}
-                  showLabel
-                />
-              </View>
-            ) : null}
-            {detailService.includes.length > 0 ? (
-              <>
-                <Text variant="label" muted style={{ marginTop: spacing.xl }}>
-                  Includes
-                </Text>
-                {detailService.includes.map((item) => (
-                  <View key={item} style={styles.includeRow}>
-                    <Icon name="checkmark-circle" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>{item}</Text>
-                  </View>
-                ))}
-              </>
-            ) : null}
-            <Button
-              label={
-                cart.isServiceSelected(salon.id, detailService.id)
-                  ? "Remove from bag"
-                  : "Add to bag"
-              }
-              variant={
-                cart.isServiceSelected(salon.id, detailService.id)
-                  ? "secondary"
-                  : "primary"
-              }
-              style={{ marginTop: spacing.xxl }}
-              onPress={() => {
-                handleToggleService(detailService)
-                setDetailService(null)
-              }}
-            />
-          </View>
-        ) : null}
-      </BottomSheet>
+        onToggle={handleToggleService}
+        onQuantityChange={handleServiceQuantity}
+        onPriceOptionChange={handleServicePriceOption}
+      />
 
-      <BottomSheet
-        visible={detailPackage != null}
-        title="Package summary"
+      <SalonPackageSheet
+        pkg={detailPackage}
+        fallbackImage={salonProfileImageUrl(salon)}
+        selected={detailPackage ? cart.isPackageSelected(salon.id, detailPackage.id) : false}
         onClose={() => setDetailPackage(null)}
-      >
-        {detailPackage ? (
-          <View style={styles.sheetBody}>
-            <Image
-              source={{
-                uri:
-                  detailPackage.imageUrl ||
-                  salon.imageUrl ||
-                  salon.coverImageUrl,
-              }}
-              style={styles.sheetImage}
-              contentFit="cover"
-            />
-            <Text variant="heading">{detailPackage.name}</Text>
-            <Text muted style={{ marginTop: spacing.xs }}>
-              Package
-              {detailPackage.totalDurationMin > 0
-                ? ` · ${formatDuration(detailPackage.totalDurationMin)}`
-                : ""}
-              {detailPackage.items.length > 0
-                ? ` · ${detailPackage.items.length} services`
-                : ""}
-            </Text>
-            {detailPackage.shortDescription ? (
-              <Text muted style={{ marginTop: spacing.md }}>
-                {detailPackage.shortDescription}
-              </Text>
-            ) : null}
-            <View style={styles.sheetPriceBox}>
-              <Text variant="caption" muted>
-                Price
-              </Text>
-              <View style={styles.sheetPriceRow}>
-                <Text variant="title">₹{detailPackage.packagePrice}</Text>
-                {detailPackage.showComparePrice !== false &&
-                detailPackage.comparePrice > detailPackage.packagePrice ? (
-                  <Text muted style={styles.strike}>
-                    ₹{detailPackage.comparePrice}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            {detailPackage.items.length > 0 ? (
-              <>
-                <Text variant="label" muted style={{ marginTop: spacing.xl }}>
-                  Includes
-                </Text>
-                {detailPackage.items.map((item) => (
-                  <View
-                    key={`${detailPackage.id}-${item.serviceId}`}
-                    style={styles.includeRow}
-                  >
-                    <Icon name="checkmark-circle" size={18} color={colors.primary} />
-                    <Text style={{ flex: 1 }}>
-                      {item.quantity > 1 ? `${item.quantity}× ` : ""}
-                      {item.serviceName}
-                    </Text>
-                  </View>
-                ))}
-              </>
-            ) : null}
-            <Button
-              label={
-                cart.isPackageSelected(salon.id, detailPackage.id)
-                  ? "Remove from bag"
-                  : "Add to bag"
-              }
-              variant={
-                cart.isPackageSelected(salon.id, detailPackage.id)
-                  ? "secondary"
-                  : "primary"
-              }
-              style={{ marginTop: spacing.xxl }}
-              onPress={() => {
-                const selected = cart.isPackageSelected(salon.id, detailPackage.id)
-                cart.setPackage(salon.id, selected ? null : detailPackage.id)
-                setDetailPackage(null)
-              }}
-            />
-          </View>
-        ) : null}
+        onToggle={togglePackage}
+      />
+
+      <BottomSheet visible={reviewsOpen} title={`Reviews (${customerReviews.length})`} onClose={() => setReviewsOpen(false)}>
+        <View style={styles.allReviews}>
+          {customerReviews.map((review) => (
+            <SalonReviewCard key={review.id} review={review} />
+          ))}
+        </View>
       </BottomSheet>
 
       <SalonGalleryLightbox
         visible={galleryOpen}
-        gallery={galleryPreview}
+        gallery={fullGallery}
         salonName={salon.name}
         index={galleryIndex}
         onClose={() => setGalleryOpen(false)}
         onIndexChange={setGalleryIndex}
       />
 
-      {showMenuFab ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open menu categories"
-          onPress={() => setMenuOpen(true)}
-          style={[
-            styles.menuFab,
-            hasCart && styles.menuFabWithCart,
-          ]}
-        >
-          <Icon name="grid-outline" size={18} color={colors.primaryFg} />
-          <Text variant="bodyStrong" color={colors.primaryFg}>
-            Menu
-          </Text>
-        </Pressable>
-      ) : null}
-
-      <BottomSheet
-        visible={menuOpen}
-        title="Browse menu"
-        onClose={() => setMenuOpen(false)}
-        compact
-      >
-        <View style={styles.menuSheetList}>
-          {catalogPackages.length > 0 ? (
-            <View
-              style={[
-                styles.menuSection,
-                menuExpandedCategory === PACKAGES_CATEGORY && styles.menuSectionActive,
-              ]}
-            >
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setMenuExpandedCategory(
-                    menuExpandedCategory === PACKAGES_CATEGORY ? "" : PACKAGES_CATEGORY,
-                  )
-                }}
-                style={styles.menuSheetHeader}
-              >
-                <View style={styles.menuSheetCopy}>
-                  <Text variant="bodyStrong">{PACKAGES_CATEGORY}</Text>
-                  <Text variant="caption" muted>
-                    {catalogPackages.length}{" "}
-                    {catalogPackages.length === 1 ? "item" : "items"}
-                  </Text>
-                </View>
-                <Icon
-                  name={menuExpandedCategory === PACKAGES_CATEGORY ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color={
-                    menuExpandedCategory === PACKAGES_CATEGORY ? colors.primary : colors.textSubtle
-                  }
-                />
-              </Pressable>
-
-              {menuExpandedCategory === PACKAGES_CATEGORY
-                ? catalogPackages.map((pkg, index) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      key={pkg.id}
-                      onPress={() => {
-                        setMenuOpen(false)
-                        setActiveServiceCategory(PACKAGES_CATEGORY)
-                        expandServiceCategory(PACKAGES_CATEGORY)
-                        const y = serviceItemOffsets.current[pkg.id]
-                        if (typeof y === "number") {
-                          pageScrollRef.current?.scrollTo({
-                            y: Math.max(0, y - 140),
-                            animated: true,
-                          })
-                        }
-                      }}
-                      style={[
-                        styles.menuServiceRow,
-                        index === catalogPackages.length - 1 && styles.menuServiceRowLast,
-                      ]}
-                    >
-                      <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>
-                        {pkg.name}
-                      </Text>
-                      <Text variant="caption" muted>
-                        ₹{pkg.packagePrice}
-                      </Text>
-                    </Pressable>
-                  ))
-                : null}
-            </View>
-          ) : null}
-
-          {serviceGroups.map((group) => {
-            const expanded = menuExpandedCategory === group.category
-            return (
-              <View
-                key={group.category}
-                style={[styles.menuSection, expanded && styles.menuSectionActive]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setMenuExpandedCategory(expanded ? "" : group.category)
-                  }}
-                  style={styles.menuSheetHeader}
-                >
-                  <View style={styles.menuSheetCopy}>
-                    <Text variant="bodyStrong">{group.category}</Text>
-                    <Text variant="caption" muted>
-                      {group.items.length} {group.items.length === 1 ? "item" : "items"}
-                    </Text>
-                  </View>
-                  <Icon
-                    name={expanded ? "chevron-up" : "chevron-down"}
-                    size={18}
-                    color={expanded ? colors.primary : colors.textSubtle}
-                  />
-                </Pressable>
-
-                {expanded
-                  ? group.items.map((service, index) => (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={service.id}
-                        onPress={() => {
-                      setMenuOpen(false)
-                      setActiveServiceCategory(group.category)
-                      expandServiceCategory(group.category)
-                      const y = serviceItemOffsets.current[service.id]
-                          if (typeof y === "number") {
-                            pageScrollRef.current?.scrollTo({
-                              y: Math.max(0, y - 140),
-                              animated: true,
-                            })
-                          }
-                        }}
-                        style={[
-                          styles.menuServiceRow,
-                          index === group.items.length - 1 && styles.menuServiceRowLast,
-                        ]}
-                      >
-                        <Text variant="caption" numberOfLines={1} style={{ flex: 1 }}>
-                          {service.name}
-                        </Text>
-                        {serviceOfferLabels.get(service.id) ? (
-                          <View style={styles.serviceOfferBadge}>
-                            <Text
-                              variant="caption"
-                              color={colors.primary}
-                              style={styles.serviceOfferBadgeLabel}
-                            >
-                              {serviceOfferLabels.get(service.id)}
-                            </Text>
-                          </View>
-                        ) : null}
-                        <Text variant="caption" muted>
-                          ₹{service.price}
-                        </Text>
-                      </Pressable>
-                    ))
-                  : null}
-              </View>
-            )
-          })}
-        </View>
-      </BottomSheet>
-
       {hasCart ? (
-        <CartStrip
-          entries={[
-            {
-              salonId: salon.id,
-              salonName: salon.name,
-              itemCount: cart.itemCountFor(salon.id),
-              totalLabel: `${formatRupees(total)}`,
-              imageUrls: cartImages,
-              previewLabel: cartPreviewLabel,
-              ctaLabel: "Checkout",
-              onPress: () =>
-                router.push({
-                  pathname: "/book/[salonId]",
-                  params: { salonId: salon.id },
-                }),
-              onClear: () => cart.clearSalon(salon.id),
-            },
-          ]}
+        <SalonCartBar
+          bottomInset={insets.bottom}
+          totalLabel={formatRupees(total)}
+          compareLabel={savings > 0 ? formatRupees(total + savings) : null}
+          itemCount={itemCount}
+          firstItemName={firstItemName}
+          onContinue={() =>
+            router.push({
+              pathname: "/book/[salonId]",
+              params: { salonId: currentSalon.id },
+            })
+          }
+          onClear={() => cart.clearSalon(currentSalon.id)}
         />
       ) : null}
+    </View>
+  )
+}
+
+function CategoryHeader({ name, count }: { name: string; count: number }) {
+  return (
+    <View style={styles.categoryHeader} accessibilityRole="header">
+      <Text style={styles.categoryName}>{name}</Text>
+      <Text style={styles.categoryCount}>
+        {count} {count === 1 ? "item" : "items"}
+      </Text>
     </View>
   )
 }
@@ -1488,487 +773,85 @@ export default function SalonDetailScreen() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: "#ffffff",
   },
   centered: {
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.xl,
   },
-  scroll: {
-    paddingBottom: 120,
-  },
-  heroWrap: {
-    position: "relative",
-    backgroundColor: colors.muted,
-    overflow: "hidden",
-  },
-  heroImage: {
-    width: "100%",
-    height: "100%",
-  },
-  stickyHeader: {
+  sticky: {
     position: "absolute",
-    top: 0,
     left: 0,
     right: 0,
-    zIndex: 20,
+    zIndex: 28,
+    backgroundColor: "#ffffff",
+  },
+  stickyChips: {
+    borderBottomWidth: 1,
+    borderBottomColor: sp.tabBorder,
+  },
+  tabsInFlow: {
+    marginTop: 24,
+  },
+  audienceRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  stickyHeaderSolid: {
-    backgroundColor: colors.bg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  stickyTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontFamily: "Geist_600SemiBold",
-    fontSize: 16,
-  },
-  menuFab: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.xl,
-    zIndex: 20,
-    minHeight: 46,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
-    backgroundColor: colors.text,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  menuFabWithCart: {
-    bottom: 104,
-  },
-  stickySpacer: {
-    flex: 1,
-  },
-  chromeBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(0, 0, 0, 0.28)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  chromeBtnSolid: {
-    backgroundColor: colors.muted,
-  },
-  dots: {
-    position: "absolute",
-    // Clear of the info card that overlaps the photo by 28.
-    bottom: spacing.lg + 28,
-    alignSelf: "center",
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: "rgba(255,255,255,0.45)",
-  },
-  dotActive: {
-    backgroundColor: colors.primaryFg,
-    width: 16,
-  },
-  photoCount: {
-    position: "absolute",
-    right: spacing.lg,
-    bottom: spacing.lg + 28,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: radii.sm,
-    backgroundColor: "rgba(0,0,0,0.6)",
-  },
-  body: {
-    paddingHorizontal: spacing.xl,
-  },
-  rowCard: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.md,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  rowSelected: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  rowCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  strike: {
-    textDecorationLine: "line-through",
-  },
-  serviceCategoryChips: {
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-  },
-  serviceCategoryChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  serviceCategoryChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  serviceCategoryList: {
-    gap: spacing.xl,
-  },
-  serviceCategorySection: {
-    gap: spacing.sm,
-  },
-  serviceCategoryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  serviceCategoryHeaderCopy: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  menuSheetList: {
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  menuSection: {
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-  },
-  menuSectionActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  menuSheetHeader: {
-    minHeight: 52,
-    paddingHorizontal: spacing.lg,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  menuSheetCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  menuServiceRow: {
-    minHeight: 44,
-    paddingHorizontal: spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  menuServiceRowLast: {
-    paddingBottom: spacing.xs,
+    justifyContent: "flex-end",
+    paddingHorizontal: sp.gutter,
+    paddingTop: 12,
   },
   serviceList: {
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    overflow: "hidden",
+    paddingHorizontal: sp.gutter,
   },
-  serviceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+  category: {
+    paddingTop: 18,
   },
-  serviceRowSelected: {
-    backgroundColor: "#F1F1F1",
-  },
-  serviceRowLast: {
-    borderBottomWidth: 0,
-  },
-  serviceMain: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minWidth: 0,
-  },
-  serviceThumb: {
-    width: 52,
-    height: 52,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  serviceCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  serviceNameRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minWidth: 0,
-  },
-  serviceOfferBadge: {
-    flexShrink: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: radii.pill,
-    backgroundColor: "#F1F1F1",
-  },
-  serviceOfferBadgeLabel: {
-    fontSize: 10,
-    lineHeight: 14,
-  },
-  serviceMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 2,
-  },
-  addBtn: {
-    minHeight: 34,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addBtnSelected: {
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  addBtnLabel: {
-    fontSize: 13,
-  },
-  sheetBody: {
-    gap: spacing.xs,
-  },
-  sheetImage: {
-    width: "100%",
-    aspectRatio: 1,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.lg,
-  },
-  sheetPriceBox: {
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  sheetPriceRow: {
-    marginTop: spacing.xs,
+  categoryHeader: {
     flexDirection: "row",
     alignItems: "baseline",
-    gap: spacing.sm,
-  },
-  includeRow: {
-    marginTop: spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  sheetOptionChip: {
-    flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    gap: 12,
+    marginBottom: 4,
   },
-  sheetOptionChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
+  categoryName: {
+    flexShrink: 1,
+    fontFamily: fontFamily.bold,
+    fontSize: 18,
+    lineHeight: 23,
+    color: sp.text,
   },
-  teamAvatar: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  teamPhoto: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: colors.muted,
-    marginBottom: spacing.sm,
-  },
-  reviewSummary: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.lg,
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  reviewCard: {
-    flex: 1,
-    gap: spacing.sm,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  reviewHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: spacing.md,
-  },
-  reviewAuthor: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.pill,
-    backgroundColor: "#F1F1F1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reviewComment: {
-    marginTop: spacing.xs,
-  },
-  ownerReply: {
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  starRow: {
-    flexDirection: "row",
-    gap: 2,
-  },
-  bleed: {
-    marginHorizontal: -spacing.xl,
-  },
-  photoStrip: {
-    gap: spacing.sm,
-    paddingHorizontal: spacing.xl,
-  },
-  photoTile: {
-    width: 132,
-    height: 132,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  infoCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    minHeight: 56,
-    paddingVertical: spacing.md,
-  },
-  infoRowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  infoPressed: {
-    opacity: 0.7,
-  },
-  infoIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.muted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoAction: {
-    fontFamily: "Geist_600SemiBold",
-    textDecorationLine: "underline",
-  },
-  amenityChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  amenityChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 36,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  amenityMore: {
-    backgroundColor: colors.muted,
-    borderColor: colors.muted,
-  },
-  amenityText: {
+  categoryCount: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
+    lineHeight: 17,
+    color: sp.secondary,
   },
-  teamRow: {
-    gap: spacing.lg,
-    paddingHorizontal: spacing.xl,
+  packages: {
+    gap: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
   },
-  teamTile: {
-    width: 84,
-    alignItems: "center",
+  emptyText: {
+    paddingTop: 20,
+    fontFamily: fontFamily.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: sp.secondary,
   },
-  teamName: {
-    textAlign: "center",
-    maxWidth: 84,
-  },
-  reviewRow: {
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
+  reviews: {
+    paddingHorizontal: sp.gutter,
+    gap: 12,
   },
   emptyReviews: {
-    padding: spacing.xl,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: sp.tabBorder,
     borderStyle: "dashed",
+  },
+  allReviews: {
+    gap: 12,
+    paddingBottom: 12,
   },
 })

@@ -87,6 +87,36 @@ export async function patchProfileOnApi(profile: ConsumerProfile) {
   return next
 }
 
+/**
+ * Sign-up gender pick: PATCH with `{ gender }` only (no email needed yet).
+ * Caches the returned profile the same way a full profile save does.
+ */
+export async function patchGenderOnApi(gender: string) {
+  const data = await apiFetch<{
+    ok: boolean
+    profile: {
+      name: string
+      email: string
+      phone: string
+      gender: string
+      dateOfBirth: string
+      address: string
+    }
+    accessToken?: string
+  }>("/api/mobile/profile", {
+    method: "PATCH",
+    body: { gender },
+  })
+
+  if (data.accessToken) {
+    await setAccessToken(data.accessToken)
+  }
+
+  const next = mapProfile(data.profile)
+  await cacheProfile(next)
+  return next
+}
+
 export async function loadProfilePreferApi(): Promise<ConsumerProfile> {
   try {
     return await fetchProfileFromApi()

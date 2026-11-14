@@ -1,31 +1,46 @@
-import { Image } from "expo-image"
-import { useLocalSearchParams, useRouter, type Href } from "expo-router"
+import { Stack, useLocalSearchParams, useRouter, type Href } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  Keyboard,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   View,
 } from "react-native"
 
 import { BookingConfirmSheet } from "@/components/book/BookingConfirmSheet"
-import { BookingDateSheet } from "@/components/book/BookingDateSheet"
-import { BookingSelectTrigger } from "@/components/book/BookingSelectTrigger"
+import {
+  bk,
+  BookingBar,
+  BookingCard,
+  BookingHeader,
+  BookingSectionLabel,
+  BookingSkeleton,
+  bookingStyles,
+  CheckRow,
+  DayStrip,
+  Hairline,
+  Notice,
+  PlaceRow,
+  ReceiptRow,
+  ReceiptTotal,
+  ServiceLine,
+  StylistPicker,
+  TimeGrid,
+  ToggleRow,
+} from "@/components/book/BookingUi"
 import { WaitlistPrompt } from "@/components/book/WaitlistPrompt"
-import { BookingTimeSheet } from "@/components/book/BookingTimeSheet"
 import {
   PromoSuccessCelebration,
   type PromoCelebrationPayload,
 } from "@/components/book/PromoSuccessCelebration"
-import { Button } from "@/components/ui/Button"
-import { Icon } from "@/components/ui/Icon"
-import { Input } from "@/components/ui/Input"
-import { Screen } from "@/components/ui/Screen"
-import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
+import { PastelIcon } from "@/components/profile/ProfileParts"
+import { EmptyState, Field } from "@/components/profile/ProfileScreenParts"
+import { pastels, ui } from "@/components/salon-page/theme"
+import { Icon, type IconName } from "@/components/ui/Icon"
 import { OneTapPayBar } from "@/components/payments/OneTapPayBar"
-import { StickyCta } from "@/components/ui/StickyCta"
 import { Text } from "@/components/ui/Text"
 import { useCart } from "@/context/CartContext"
 import type { Salon } from "@/data/types"
@@ -69,8 +84,10 @@ import {
   patchConsumerProfileCache,
 } from "@/lib/user"
 import { fetchLoyalty, fetchWallet } from "@/lib/wallet-api"
-import { colors, radii, spacing } from "@/theme/tokens"
+import { fontFamily } from "@/theme/tokens"
 import { formatDuration } from "@/lib/booking-display"
+
+const STEPS = ["Services", "Date & time", "Confirm"]
 
 function formatDayChip(dateKey: string) {
   const date = new Date(`${dateKey}T12:00:00`)
@@ -131,23 +148,18 @@ export default function BookingScreen() {
   const [editingDetails, setEditingDetails] = useState(false)
   /** The held booking's confirmation, for after the one-tap advance payment. */
   const advanceConfirmation = useRef<Record<string, string> | null>(null)
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [step, setStep] = useState(0)
 
-  useEffect(() => {
-    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow"
-    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide"
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardHeight(event.endCoordinates.height)
-    })
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0)
-    })
-    return () => {
-      showSub.remove()
-      hideSub.remove()
-    }
-  }, [])
+  function leaveScreen() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/explore")
+  }
+
+  /** Header back: previous step first, then leave the screen. */
+  function goBack() {
+    if (step > 0) setStep((prev) => prev - 1)
+    else leaveScreen()
+  }
 
   useEffect(() => {
     let active = true
@@ -512,19 +524,30 @@ export default function BookingScreen() {
   ])
 
   if (salonLoading) {
-    return <SalonDetailSkeleton />
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingSkeleton />
+      </>
+    )
   }
 
   if (!salon) {
     return (
-      <Screen>
-        <Text variant="heading">Salon unavailable</Text>
-        <Button
-          label="Browse salons"
-          style={{ marginTop: spacing.xl }}
-          onPress={() => router.replace("/(tabs)/explore")}
-        />
-      </Screen>
+      <View style={bookingStyles.page}>
+        <Stack.Screen options={{ headerShown: false }} />
+        <BookingHeader title="Book your visit" onBack={leaveScreen} />
+        <View style={styles.pad}>
+          <EmptyState
+            pastel={pastels.peach}
+            icon="storefront-outline"
+            title="Salon unavailable"
+            text="This salon can’t take bookings right now."
+            ctaLabel="Browse salons"
+            onCta={() => router.replace("/(tabs)/explore")}
+          />
+        </View>
+      </View>
     )
   }
 
@@ -542,6 +565,7 @@ export default function BookingScreen() {
     label: formatDayChip(day.date),
     disabled: day.availableCount === 0,
   }))
+  const itemCount = selectedPackage ? 1 : selectedServices.length
 
   const confirmServiceLines = selectedPackage
     ? [
@@ -714,683 +738,533 @@ export default function BookingScreen() {
     }
   }
 
+  const phoneDigits = normalizeMobileDigits(phone)
+  const showOneTap = step === 2 && advanceDue > 0
+  const visitWhen =
+    selectedDate && slotValue ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}` : null
+
+  const barDisabled =
+    submitting ||
+    phoneMissing ||
+    (step === 0 && !hasSelection) ||
+    (step === 1 && (!hasSelection || noStaffForServices || !selectedDate || !slotValue)) ||
+    (step === 2 &&
+      (!hasSelection ||
+        noStaffForServices ||
+        !selectedDate ||
+        !slotValue ||
+        name.trim().length < 2 ||
+        phoneDigits.length < 10 ||
+        !isValidEmail(email)))
+
+  const barTitle =
+    step === 0
+      ? hasSelection
+        ? formatRupees(total)
+        : "Your bag is empty"
+      : step === 1
+        ? visitWhen ?? "Pick a date and time"
+        : formatRupees(total)
+
+  const barCaption = phoneMissing
+    ? "Sign in again to restore your verified mobile"
+    : step === 0
+      ? hasSelection
+        ? `${itemCount} ${itemCount === 1 ? "item" : "items"} · Next: date and time`
+        : "Add services on the salon page"
+      : step === 1
+        ? visitWhen
+          ? `${selectedPackage ? "" : selectedStaffName ? `${selectedStaffName} · ` : ""}Next: confirm`
+          : "Choose a day, then a time"
+        : name.trim().length < 2
+          ? "Add your name to book"
+          : !isValidEmail(email)
+            ? "Add a valid email to book. Your invoice goes there."
+            : "Pay at the salon after your visit"
+
+  function onBarPress() {
+    if (step === 0) {
+      if (hasSelection) setStep(1)
+      return
+    }
+    if (step === 1) {
+      if (selectedDate && slotValue) setStep(2)
+      return
+    }
+    setSubmitError(null)
+    setConfirmSheetOpen(true)
+  }
+
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
-    >
-      <Screen
-        scroll
-        contentStyle={[
-          styles.scroll,
-          keyboardHeight > 0
-            ? { paddingBottom: Math.max(130, keyboardHeight + 100) }
-            : null,
-        ]}
+    <View style={bookingStyles.page}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text variant="title">Reserve your visit</Text>
-        <Text muted style={styles.gap}>
-          {step === 0
-            ? "Review your services"
-            : step === 1
-              ? "Pick a date and time"
-              : "Confirm and book"}
-        </Text>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={[styles.scrollContent, showOneTap && styles.scrollOneTap]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          showsVerticalScrollIndicator={false}
+        >
+          <BookingHeader
+            title="Book your visit"
+            subtitle={salon.name}
+            step={step}
+            steps={STEPS}
+            onBack={goBack}
+            backLabel={step > 0 ? `Back to ${STEPS[step - 1]}` : "Go back"}
+          />
 
-        {step === 0 ? (
-        <>
-        <View style={styles.card}>
-          <View style={styles.salonRow}>
-            <Image
-              source={{ uri: salon.imageUrl || salon.coverImageUrl }}
-              style={styles.salonAvatar}
-              contentFit="cover"
-              transition={200}
-            />
-            <View style={styles.salonCopy}>
-              <Text variant="label" muted>
-                Salon
-              </Text>
-              <Text variant="heading" numberOfLines={1}>
-                {salon.name}
-              </Text>
-              <Text muted numberOfLines={1}>
-                {salon.area}, {salon.city}
-              </Text>
-              <Text variant="caption" muted numberOfLines={2}>
-                {salon.address}
-              </Text>
-            </View>
-          </View>
-        </View>
+          {step === 0 ? (
+            <View style={styles.pad}>
+              <BookingSectionLabel first>Your salon</BookingSectionLabel>
+              <BookingCard>
+                <PlaceRow
+                  imageUrl={salon.imageUrl || salon.coverImageUrl}
+                  name={salon.name}
+                  caption={`${salon.area}, ${salon.city}`}
+                  meta={salon.address}
+                />
+              </BookingCard>
 
-        <View style={styles.card}>
-          <View style={styles.sectionHead}>
-            <Text variant="label" muted>
-              Services / package
-            </Text>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
-              }
-            >
-              <Text variant="caption" color={colors.primary}>
-                Edit
-              </Text>
-            </Pressable>
-          </View>
-
-          {selectedPackage ? (
-            <View style={styles.serviceCard}>
-              <Image
-                source={{ uri: selectedPackage.imageUrl || salon.imageUrl }}
-                style={styles.serviceThumb}
-                contentFit="cover"
-                transition={200}
-              />
-              <View style={styles.serviceCopy}>
-                <Text variant="bodyStrong">{selectedPackage.name}</Text>
-                <Text variant="caption" muted>
-                  Package
-                  {selectedPackage.totalDurationMin > 0
-                    ? ` · ${formatDuration(selectedPackage.totalDurationMin)}`
-                    : ""}
-                </Text>
-                <Text variant="bodyStrong">₹{selectedPackage.packagePrice}</Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${selectedPackage.name}`}
-                hitSlop={8}
-                onPress={() => cart.setPackage(salon.id, null)}
-                style={styles.removeBtn}
-              >
-                <Icon name="close" size={16} color={colors.textSubtle} />
-              </Pressable>
-            </View>
-          ) : null}
-
-          {selectedServices.map((service) => {
-            const optionId = salonCart?.priceOptionIds[service.id] ?? null
-            return (
-            <View key={service.id} style={styles.serviceCard}>
-              <Image
-                source={{ uri: service.imageUrl || salon.imageUrl }}
-                style={styles.serviceThumb}
-                contentFit="cover"
-                transition={200}
-              />
-              <View style={styles.serviceCopy}>
-                <Text variant="bodyStrong">{service.name}</Text>
-                <Text variant="caption" muted>
-                  {serviceCartCaption(service, salonCart?.quantities, optionId)}
-                </Text>
-                <Text variant="bodyStrong">
-                  {formatRupees(
-                    serviceLineAmount(service, salonCart?.quantities, optionId),
-                  )}
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${service.name}`}
-                hitSlop={8}
-                onPress={() => cart.toggleService(salon.id, service.id)}
-                style={styles.removeBtn}
-              >
-                <Icon name="close" size={16} color={colors.textSubtle} />
-              </Pressable>
-            </View>
-            )
-          })}
-
-          {!hasSelection ? (
-            <>
-              <Text muted>Select services on the salon page to continue.</Text>
-              <Button
-                label="Browse services"
-                variant="secondary"
-                onPress={() =>
-                  router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
+              <BookingSectionLabel
+                action={
+                  hasSelection
+                    ? {
+                        label: "Add more",
+                        onPress: () =>
+                          router.push({ pathname: "/salon/[id]", params: { id: salon.id } }),
+                      }
+                    : undefined
                 }
-              />
-            </>
-          ) : null}
-        </View>
-        </>
-        ) : null}
-
-        {step === 2 ? (
-        <>
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Your visit
-          </Text>
-          <Text variant="bodyStrong" numberOfLines={2}>
-            {selectedPackage
-              ? selectedPackage.name
-              : selectedServices.map((s) => s.name).join(" · ") || "Services"}
-          </Text>
-          <Text variant="caption" muted style={{ marginTop: 4 }}>
-            {selectedDate && slotValue
-              ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-              : "Date and time"}
-            {selectedPackage
-              ? ""
-              : selectedStaffName
-                ? ` · ${selectedStaffName}`
-                : " · Any specialist"}
-          </Text>
-        </View>
-        <View style={styles.card}>
-          {detailsFromProfile && !editingDetails ? (
-            <View style={styles.bookingFor}>
-              <View style={styles.bookingForCopy}>
-                <Text variant="caption" muted>
-                  Booking for
-                </Text>
-                <Text variant="bodyStrong" numberOfLines={1}>
-                  {name.trim()}
-                  {normalizeMobileDigits(phone).length >= 10 ? ` · +91 ${normalizeMobileDigits(phone)}` : ""}
-                </Text>
-                <Text variant="caption" muted numberOfLines={1}>
-                  Invoice to {email.trim()}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => setEditingDetails(true)}
-                accessibilityRole="button"
-                accessibilityLabel="Edit your name or email"
-                hitSlop={8}
-                style={styles.bookingForEdit}
               >
-                <Text variant="bodyStrong">Edit</Text>
-              </Pressable>
-            </View>
-          ) : (
-          <>
-          <Text variant="label" muted>
-            Customer info
-          </Text>
-          <Input
-            label="Name"
-            value={name}
-            onChangeText={setName}
-            placeholder="Your name"
-            autoComplete="name"
-          />
-          <Input
-            label="Phone"
-            value={
-              normalizeMobileDigits(phone).length >= 10
-                ? `+91 ${normalizeMobileDigits(phone)}`
-                : phone
-            }
-            editable={false}
-            selectTextOnFocus={false}
-            keyboardType="phone-pad"
-            placeholder="Verified mobile"
-            style={styles.lockedInput}
-          />
-          <Input
-            label="Email (required)"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoComplete="email"
-            placeholder="you@email.com"
-            hint="We'll send your invoice to this email."
-            error={email.trim() && !isValidEmail(email) ? "Check the email, it doesn't look complete." : null}
-          />
-          </>
-          )}
-          <Pressable
-            onPress={() => setMarketingOptIn((value) => !value)}
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: marketingOptIn }}
-            accessibilityLabel={`Send me offers and updates from ${salon.name} on WhatsApp`}
-            style={({ pressed }) => [
-              styles.optInRow,
-              marketingOptIn && styles.optInRowActive,
-              pressed && styles.optInPressed,
-            ]}
-          >
-            <Icon
-              name={marketingOptIn ? "checkbox" : "square-outline"}
-              size={22}
-              color={marketingOptIn ? colors.primary : colors.textSubtle}
-            />
-            <View style={styles.optInCopy}>
-              <Text variant="bodyStrong">
-                Send me offers and updates from {salon.name} on WhatsApp
-              </Text>
-              <Text variant="caption" muted>
-                Promotional messages only. Booking confirmations and reminders are always sent when you book.
-              </Text>
-            </View>
-          </Pressable>
-        </View>
-        </>
-        ) : null}
-
-        {step === 1 ? (
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Appointment
-          </Text>
-          {!selectedPackage ? (
-            <>
-              <Text variant="caption" muted>
-                Preferred specialist
-              </Text>
-              {noStaffForServices ? (
-                <Text variant="caption" color={colors.destructive}>
-                  {slotsMessage?.trim() || NO_STAFF_MESSAGE}
-                </Text>
-              ) : (
-                <View style={styles.chips}>
-                  {bookableStaff.length > 1 ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      style={[styles.chip, !staffId && styles.chipActive]}
-                      onPress={() => setStaffId(null)}
-                    >
-                      <View style={styles.staffChip}>
-                        <View style={styles.staffAnyAvatar}>
-                          <Icon
-                            name="people-outline"
-                            size={16}
-                            color={!staffId ? colors.primary : colors.textMuted}
-                          />
-                        </View>
-                        <View style={{ minWidth: 0, maxWidth: 120 }}>
-                          <Text variant="caption" numberOfLines={1}>
-                            Any
-                          </Text>
-                          <Text variant="caption" muted numberOfLines={1}>
-                            Available
-                          </Text>
-                        </View>
-                      </View>
-                    </Pressable>
+                Your bag
+              </BookingSectionLabel>
+              {hasSelection ? (
+                <BookingCard>
+                  {selectedPackage ? (
+                    <ServiceLine
+                      imageUrl={selectedPackage.imageUrl || salon.imageUrl}
+                      tag="Package"
+                      title={selectedPackage.name}
+                      caption={
+                        selectedPackage.totalDurationMin > 0
+                          ? formatDuration(selectedPackage.totalDurationMin)
+                          : null
+                      }
+                      price={`₹${selectedPackage.packagePrice}`}
+                      onRemove={() => cart.setPackage(salon.id, null)}
+                    />
                   ) : null}
-                  {bookableStaff.map((member) => {
-                    const photo = member.imageUrl
+                  {selectedServices.map((service, index) => {
+                    const optionId = salonCart?.priceOptionIds[service.id] ?? null
                     return (
-                      <Pressable
-                        accessibilityRole="button"
-                        key={member.id}
-                        style={[
-                          styles.chip,
-                          staffId === member.id && styles.chipActive,
-                        ]}
-                        onPress={() => setStaffId(member.id)}
-                      >
-                        <View style={styles.staffChip}>
-                          {photo ? (
-                            <Image
-                              source={{ uri: photo }}
-                              style={styles.staffPhoto}
-                              contentFit="cover"
-                              transition={200}
-                            />
-                          ) : (
-                            <View style={styles.staffAnyAvatar}>
-                              <Icon
-                                name="person-outline"
-                                size={16}
-                                color={staffId === member.id ? colors.primary : colors.textMuted}
-                              />
-                            </View>
+                      <View key={service.id} style={styles.lineGap}>
+                        {index > 0 || selectedPackage ? <Hairline /> : null}
+                        <ServiceLine
+                          imageUrl={service.imageUrl || salon.imageUrl}
+                          title={service.name}
+                          caption={serviceCartCaption(service, salonCart?.quantities, optionId)}
+                          price={formatRupees(
+                            serviceLineAmount(service, salonCart?.quantities, optionId),
                           )}
-                          <View style={{ minWidth: 0, maxWidth: 120 }}>
-                            <Text variant="caption" numberOfLines={1}>
-                              {member.name}
-                            </Text>
-                            {member.role ? (
-                              <Text variant="caption" muted numberOfLines={1}>
-                                {member.role}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      </Pressable>
+                          onRemove={() => cart.toggleService(salon.id, service.id)}
+                        />
+                      </View>
                     )
                   })}
-                </View>
+                  <ReceiptTotal
+                    label="Subtotal"
+                    value={formatRupees(subtotal)}
+                    caption="Offers, wallet and taxes on the last step"
+                  />
+                </BookingCard>
+              ) : (
+                <EmptyState
+                  pastel={pastels.pink}
+                  icon="bag-handle-outline"
+                  title="Your bag is empty"
+                  text="Select services on the salon page to continue."
+                  ctaLabel="Browse services"
+                  onCta={() =>
+                    router.push({ pathname: "/salon/[id]", params: { id: salon.id } })
+                  }
+                />
               )}
-            </>
-          ) : null}
-          <BookingSelectTrigger
-            label="Date"
-            icon="calendar-outline"
-            value={selectedDate && !noStaffForServices ? formatDayChip(selectedDate) : ""}
-            placeholder={
-              !hasSelection
-                ? "Select services first"
-                : noStaffForServices
-                  ? "Unavailable"
-                  : "Select date"
-            }
-            disabled={!hasSelection || noStaffForServices || availabilityDays.length === 0}
-            onPress={() => setDateSheetOpen(true)}
-          />
-          <BookingSelectTrigger
-            label="Time"
-            icon="time-outline"
-            value={
-              slotValue && !noStaffForServices
-                ? slots.find((slot) => slot.value === slotValue)?.label ??
-                  slotValue
-                : ""
-            }
-            placeholder={
-              noStaffForServices
-                ? "Unavailable"
-                : !selectedDate
-                  ? "Pick a date first"
-                  : slotsLoading
-                    ? "Loading available times…"
-                    : slotsMessage
-                      ? slotsMessage
-                      : slots.length === 0
-                        ? "No times available"
-                        : "Select time"
-            }
-            disabled={
-              !hasSelection ||
-              noStaffForServices ||
-              !selectedDate ||
-              slotsLoading ||
-              Boolean(slotsMessage) ||
-              slots.length === 0
-            }
-            onPress={() => setTimeSheetOpen(true)}
-          />
-          {selectedDate && !slotsLoading && !noStaffForServices && hasSelection && slots.length === 0 && salonId ? (
-            <WaitlistPrompt
-              kind="salon"
-              provider={salonId}
-              date={selectedDate}
-              serviceIds={cart.getCart(salonId)?.serviceIds ?? []}
-            />
-          ) : null}
-          <Input
-            label="Notes"
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Anything we should know"
-          />
-        </View>
-        ) : null}
-
-        {step === 2 ? (
-        <>
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Promo code
-          </Text>
-          {appliedPromoCode ? (
-            <View style={styles.appliedPromo}>
-              <View style={{ flex: 1 }}>
-                <Text variant="bodyStrong">{appliedPromoCode}</Text>
-                {appliedDiscount ? (
-                  <Text variant="caption" muted>
-                    {appliedDiscount.title} · −{formatRupees(promoDiscount)}
-                  </Text>
-                ) : cashbackClaim ? (
-                  <Text variant="caption" muted>
-                    ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
-                  </Text>
-                ) : null}
-              </View>
-              <Pressable accessibilityRole="button" onPress={clearPromo} hitSlop={8} style={styles.removePromo}>
-                <Text variant="caption" color={colors.destructive}>
-                  Remove
-                </Text>
-              </Pressable>
             </View>
-          ) : (
-            <View style={styles.promoRow}>
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={promoInput}
-                  onChangeText={(value) => {
-                    setPromoInput(value)
-                    setPromoError(null)
+          ) : null}
+
+          {step === 1 ? (
+            <>
+              {!selectedPackage ? (
+                <>
+                  <View style={styles.pad}>
+                    <BookingSectionLabel first>Choose your stylist</BookingSectionLabel>
+                  </View>
+                  {noStaffForServices ? (
+                    <View style={styles.pad}>
+                      <Notice tone="red" icon="alert-circle-outline">
+                        {slotsMessage?.trim() || NO_STAFF_MESSAGE}
+                      </Notice>
+                    </View>
+                  ) : bookableStaff.length > 0 ? (
+                    <StylistPicker
+                      staff={bookableStaff}
+                      value={staffId}
+                      onSelect={setStaffId}
+                      showAny={bookableStaff.length > 1}
+                    />
+                  ) : (
+                    <View style={styles.pad}>
+                      <View style={styles.ghostRow} />
+                    </View>
+                  )}
+                </>
+              ) : null}
+
+              <View style={styles.pad}>
+                <BookingSectionLabel first={Boolean(selectedPackage)}>Pick a day</BookingSectionLabel>
+              </View>
+              {!hasSelection ? (
+                <View style={styles.pad}>
+                  <Notice tone="grey">Select services first.</Notice>
+                </View>
+              ) : noStaffForServices ? (
+                <View style={styles.pad}>
+                  <Notice tone="grey">Dates aren’t available for these services.</Notice>
+                </View>
+              ) : dateOptions.length === 0 ? (
+                <View style={styles.pad}>
+                  {slotsLoading ? (
+                    <View style={styles.ghostRow} />
+                  ) : (
+                    <Notice tone="grey">No dates available for this booking yet.</Notice>
+                  )}
+                </View>
+              ) : (
+                <DayStrip
+                  options={dateOptions}
+                  value={selectedDate}
+                  onSelect={(date) => {
+                    setSlotValue(null)
+                    setDateOverride(date)
                   }}
-                  placeholder="Enter code"
-                  accessibilityLabel="Promo code"
-                  autoCapitalize="characters"
+                />
+              )}
+
+              <View style={styles.pad}>
+                <BookingSectionLabel>Pick a time</BookingSectionLabel>
+                {!hasSelection || noStaffForServices ? (
+                  <Notice tone="grey">Times show up once a day is picked.</Notice>
+                ) : !selectedDate && !slotsLoading ? (
+                  <Notice tone="grey">Pick a day first.</Notice>
+                ) : slotsMessage && !slotsLoading ? (
+                  <Notice tone="peach" icon="time-outline">
+                    {slotsMessage}
+                  </Notice>
+                ) : (
+                  <TimeGrid
+                    options={slots.map((slot) => ({ value: slot.value, label: slot.label }))}
+                    value={slotValue}
+                    onSelect={setSlotValue}
+                    loading={slotsLoading}
+                    emptyMessage="No time slots for this day."
+                  />
+                )}
+                {selectedDate &&
+                !slotsLoading &&
+                !noStaffForServices &&
+                hasSelection &&
+                slots.length === 0 &&
+                salonId ? (
+                  <View style={styles.waitlist}>
+                    <WaitlistPrompt
+                      kind="salon"
+                      provider={salonId}
+                      date={selectedDate}
+                      serviceIds={cart.getCart(salonId)?.serviceIds ?? []}
+                    />
+                  </View>
+                ) : null}
+
+                <BookingSectionLabel>Notes for the salon</BookingSectionLabel>
+                <Field
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="Anything we should know (optional)"
+                  accessibilityLabel="Notes"
+                  multiline
                 />
               </View>
-              <Button
-                label={promoApplying ? "…" : "Apply"}
-                style={styles.applyBtn}
-                onPress={() => {
-                  void applyPromo()
-                }}
-                loading={promoApplying}
-                disabled={promoInput.trim().length === 0 || promoApplying}
-              />
-            </View>
-          )}
-          {promoError ? (
-            <Text variant="caption" color={colors.destructive}>
-              {promoError}
-            </Text>
-          ) : null}
-          {cashbackClaim && !promoError ? (
-            <Text variant="caption" muted>
-              {cashbackClaim.message}
-            </Text>
-          ) : null}
-        </View>
-
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Wallet & loyalty
-          </Text>
-
-          <Pressable
-            accessibilityRole="button"
-            style={[
-              styles.rewardRow,
-              useWallet && walletBalance > 0 && styles.rewardRowActive,
-              walletBalance <= 0 && styles.rewardDisabled,
-            ]}
-            disabled={walletBalance <= 0}
-            onPress={() => {
-              if (walletBalance <= 0) return
-              setUseWallet((value) => !value)
-            }}
-          >
-            <View style={styles.rewardIcon}>
-              <Icon name="wallet-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rewardCopy}>
-              <Text variant="bodyStrong">Wallet credit</Text>
-              <Text variant="caption" muted>
-                {walletBalance > 0
-                  ? `${formatRupees(walletBalance)} available · tap to ${useWallet ? "remove" : "apply"}`
-                  : "No wallet balance yet"}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.applyChip,
-                useWallet && walletBalance > 0 && styles.applyChipOn,
-                walletBalance <= 0 && styles.applyChipDisabled,
-              ]}
-            >
-              <Text
-                variant="caption"
-                color={
-                  walletBalance <= 0
-                    ? colors.textSubtle
-                    : useWallet
-                      ? colors.primaryFg
-                      : colors.primary
-                }
-              >
-                {walletBalance <= 0 ? "Unavailable" : useWallet ? "Applied" : "Apply"}
-              </Text>
-            </View>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            style={[
-              styles.rewardRow,
-              useLoyalty && loyaltyAvailable && styles.rewardRowActive,
-              (!loyaltyAvailable || selectedPackage) && styles.rewardDisabled,
-            ]}
-            disabled={!loyaltyAvailable || Boolean(selectedPackage)}
-            onPress={() => {
-              if (!loyaltyAvailable || selectedPackage) return
-              setUseLoyalty((value) => !value)
-            }}
-          >
-            <View style={styles.rewardIcon}>
-              <Icon name="ribbon-outline" size={20} color={colors.primary} />
-            </View>
-            <View style={styles.rewardCopy}>
-              <Text variant="bodyStrong">Loyalty reward</Text>
-              <Text variant="caption" muted>
-                {selectedPackage
-                  ? "Not available with packages"
-                  : loyaltyAvailable
-                    ? `Up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off · ${loyalty.freeServiceCredits} credit${loyalty.freeServiceCredits === 1 ? "" : "s"} · tap to ${useLoyalty ? "remove" : "apply"}`
-                    : `Complete ${LOYALTY_VISITS_PER_FREE} services → unlock up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off. ${loyalty.stampsTowardNextFree}/${LOYALTY_VISITS_PER_FREE} completed · ${loyalty.visitsLeft} more to go.`}
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.applyChip,
-                useLoyalty && loyaltyAvailable && styles.applyChipOn,
-                (!loyaltyAvailable || selectedPackage) && styles.applyChipDisabled,
-              ]}
-            >
-              <Text
-                variant="caption"
-                color={
-                  !loyaltyAvailable || selectedPackage
-                    ? colors.textSubtle
-                    : useLoyalty
-                      ? colors.primaryFg
-                      : colors.primary
-                }
-              >
-                {!loyaltyAvailable
-                  ? "Locked"
-                  : useLoyalty
-                    ? "Applied"
-                    : "Apply"}
-              </Text>
-            </View>
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text variant="label" muted>
-            Payment summary
-          </Text>
-          <View style={styles.summaryRow}>
-            <Text muted>Subtotal</Text>
-            <Text>{formatRupees(subtotal)}</Text>
-          </View>
-          {promoDiscount > 0 && appliedDiscount ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Promo ({appliedDiscount.code})</Text>
-              <Text color={colors.success}>−{formatRupees(promoDiscount)}</Text>
-            </View>
-          ) : null}
-          {cashbackClaim ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Cashback ({cashbackClaim.code})</Text>
-              <Text muted>+₹{cashbackClaim.cashbackRupees} later</Text>
-            </View>
-          ) : null}
-          {loyaltyCredit > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Loyalty</Text>
-              <Text color={colors.success}>−₹{loyaltyCredit}</Text>
-            </View>
-          ) : null}
-          {gstAmount > 0 && salonTax ? (
-            <View style={styles.summaryRow}>
-              <Text muted>
-                GST (
-                {Number.isInteger(salonTax.ratePercent)
-                  ? salonTax.ratePercent
-                  : salonTax.ratePercent.toFixed(2)}
-                %)
-              </Text>
-              <Text>{formatRupees(gstAmount)}</Text>
-            </View>
-          ) : null}
-          {walletCredit > 0 ? (
-            <View style={styles.summaryRow}>
-              <Text muted>Wallet</Text>
-              <Text color={colors.success}>−₹{walletCredit}</Text>
-            </View>
-          ) : null}
-          {advanceDue > 0 && advanceConfig ? (
-            <>
-              <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text variant="bodyStrong">Pay now to confirm</Text>
-                <Text variant="heading">{formatRupees(advanceDue)}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text muted>Pay at salon</Text>
-                <Text>{formatRupees(Math.max(0, total - advanceDue))}</Text>
-              </View>
-              <View style={{ gap: 2, marginTop: 4 }}>
-                <Text variant="caption" muted>
-                  You&apos;ll pay the advance right after booking. Your time is held for 15 minutes.
-                </Text>
-                <Text variant="label">If you cancel</Text>
-                {salonAdvancePolicyLines(advanceConfig.policy).map((line) => (
-                  <Text key={line} variant="caption" muted>{`• ${line}`}</Text>
-                ))}
-              </View>
             </>
-          ) : (
-            <View style={[styles.summaryRow, styles.summaryTotal]}>
-              <Text variant="bodyStrong">Pay at salon</Text>
-              <Text variant="heading">{formatRupees(total)}</Text>
-            </View>
-          )}
-        </View>
-        </>
-        ) : null}
-      </Screen>
+          ) : null}
 
-      <BookingDateSheet
-        visible={dateSheetOpen}
-        options={dateOptions}
-        value={selectedDate}
-        onClose={() => setDateSheetOpen(false)}
-        onSelect={(date) => {
-          setSlotValue(null)
-          setDateOverride(date)
-        }}
-      />
-      <BookingTimeSheet
-        visible={timeSheetOpen}
-        options={slots.map((slot) => ({
-          value: slot.value,
-          label: slot.label,
-        }))}
-        value={slotValue}
-        emptyMessage={slotsMessage || "No time slots for this day."}
-        onClose={() => setTimeSheetOpen(false)}
-        onSelect={setSlotValue}
-        onClear={() => setSlotValue(null)}
-      />
+          {step === 2 ? (
+            <View style={styles.pad}>
+              <BookingSectionLabel first action={{ label: "Change", onPress: () => setStep(1) }}>
+                Your visit
+              </BookingSectionLabel>
+              <BookingCard>
+                <PlaceRow
+                  imageUrl={salon.imageUrl || salon.coverImageUrl}
+                  name={salon.name}
+                  caption={`${salon.area}, ${salon.city}`}
+                />
+                <Hairline />
+                <VisitFact
+                  icon="sparkles-outline"
+                  text={
+                    selectedPackage
+                      ? selectedPackage.name
+                      : selectedServices.map((s) => s.name).join(" · ") || "Services"
+                  }
+                />
+                <VisitFact icon="calendar-outline" text={visitWhen ?? "Date and time"} />
+                {!selectedPackage ? (
+                  <VisitFact icon="person-outline" text={selectedStaffName ?? "Any specialist"} />
+                ) : null}
+              </BookingCard>
+
+              <BookingSectionLabel
+                action={
+                  detailsFromProfile && !editingDetails
+                    ? { label: "Edit", onPress: () => setEditingDetails(true) }
+                    : undefined
+                }
+              >
+                Booking for
+              </BookingSectionLabel>
+              <BookingCard>
+                {detailsFromProfile && !editingDetails ? (
+                  <View style={styles.bookingFor}>
+                    <PastelIcon pastel={pastels.lavender} name="person-outline" />
+                    <View style={styles.bookingForCopy}>
+                      <Text style={styles.strong} numberOfLines={1}>
+                        {name.trim()}
+                        {phoneDigits.length >= 10 ? ` · +91 ${phoneDigits}` : ""}
+                      </Text>
+                      <Text style={styles.muted} numberOfLines={1}>
+                        Invoice to {email.trim()}
+                      </Text>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={bookingStyles.fieldStack}>
+                    <Field
+                      label="Name"
+                      value={name}
+                      onChangeText={setName}
+                      placeholder="Your name"
+                      autoComplete="name"
+                    />
+                    <Field
+                      label="Phone"
+                      value={phoneDigits.length >= 10 ? `+91 ${phoneDigits}` : phone}
+                      editable={false}
+                      selectTextOnFocus={false}
+                      keyboardType="phone-pad"
+                      placeholder="Verified mobile"
+                      style={styles.lockedInput}
+                    />
+                    <Field
+                      label="Email"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      placeholder="you@email.com"
+                      hint="We'll send your invoice to this email."
+                      error={
+                        email.trim() && !isValidEmail(email)
+                          ? "Check the email, it doesn't look complete."
+                          : null
+                      }
+                    />
+                  </View>
+                )}
+                <Hairline />
+                <CheckRow
+                  checked={marketingOptIn}
+                  onPress={() => setMarketingOptIn((value) => !value)}
+                  title={`Send me offers and updates from ${salon.name} on WhatsApp`}
+                  caption="Promotional messages only. Booking confirmations and reminders are always sent when you book."
+                  accessibilityLabel={`Send me offers and updates from ${salon.name} on WhatsApp`}
+                />
+              </BookingCard>
+
+              <BookingSectionLabel>Offers</BookingSectionLabel>
+              <BookingCard>
+                {appliedPromoCode ? (
+                  <View style={styles.appliedPromo}>
+                    <PastelIcon pastel={pastels.mint} name="pricetag-outline" />
+                    <View style={styles.bookingForCopy}>
+                      <Text style={styles.strong}>{appliedPromoCode}</Text>
+                      {appliedDiscount ? (
+                        <Text style={styles.success}>
+                          {appliedDiscount.title} · −{formatRupees(promoDiscount)}
+                        </Text>
+                      ) : cashbackClaim ? (
+                        <Text style={styles.success}>
+                          ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${appliedPromoCode}`}
+                      onPress={clearPromo}
+                      hitSlop={8}
+                    >
+                      <Text style={styles.removeText}>Remove</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.promoRow}>
+                    <View style={styles.flex}>
+                      <Field
+                        value={promoInput}
+                        onChangeText={(value) => {
+                          setPromoInput(value)
+                          setPromoError(null)
+                        }}
+                        placeholder="Enter promo code"
+                        accessibilityLabel="Promo code"
+                        autoCapitalize="characters"
+                        error={promoError}
+                      />
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Apply promo code"
+                      accessibilityState={{
+                        disabled: promoInput.trim().length === 0 || promoApplying,
+                        busy: promoApplying,
+                      }}
+                      disabled={promoInput.trim().length === 0 || promoApplying}
+                      onPress={() => {
+                        void applyPromo()
+                      }}
+                      style={({ pressed }) => [
+                        styles.applyBtn,
+                        (promoInput.trim().length === 0 || promoApplying) && styles.applyBtnOff,
+                        pressed && ui.pressed,
+                      ]}
+                    >
+                      {promoApplying ? (
+                        <ActivityIndicator color="#ffffff" size="small" />
+                      ) : (
+                        <Text style={styles.applyText}>Apply</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                )}
+                {promoError && appliedPromoCode ? (
+                  <Text style={styles.error}>{promoError}</Text>
+                ) : null}
+                {cashbackClaim && !promoError ? (
+                  <Text style={styles.muted}>{cashbackClaim.message}</Text>
+                ) : null}
+                <Hairline />
+                <ToggleRow
+                  pastel={pastels.teal}
+                  icon="wallet-outline"
+                  title="Wallet credit"
+                  caption={
+                    walletBalance > 0
+                      ? `${formatRupees(walletBalance)} available`
+                      : "No wallet balance yet"
+                  }
+                  on={useWallet && walletBalance > 0}
+                  disabled={walletBalance <= 0}
+                  badge={walletBalance <= 0 ? "Unavailable" : null}
+                  onPress={() => {
+                    if (walletBalance <= 0) return
+                    setUseWallet((value) => !value)
+                  }}
+                />
+                <ToggleRow
+                  pastel={pastels.gold}
+                  icon="ribbon-outline"
+                  title="Loyalty reward"
+                  caption={
+                    selectedPackage
+                      ? "Not available with packages"
+                      : loyaltyAvailable
+                        ? `Up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off · ${loyalty.freeServiceCredits} credit${loyalty.freeServiceCredits === 1 ? "" : "s"}`
+                        : `Complete ${LOYALTY_VISITS_PER_FREE} services → unlock up to ₹${LOYALTY_DISCOUNT_CAP_RUPEES} off. ${loyalty.stampsTowardNextFree}/${LOYALTY_VISITS_PER_FREE} completed · ${loyalty.visitsLeft} more to go.`
+                  }
+                  on={useLoyalty && loyaltyAvailable}
+                  disabled={!loyaltyAvailable || Boolean(selectedPackage)}
+                  badge={!loyaltyAvailable ? "Locked" : selectedPackage ? "N/A" : null}
+                  onPress={() => {
+                    if (!loyaltyAvailable || selectedPackage) return
+                    setUseLoyalty((value) => !value)
+                  }}
+                />
+              </BookingCard>
+
+              <BookingSectionLabel>Bill summary</BookingSectionLabel>
+              <BookingCard>
+                {confirmPriceLines.map((line) => (
+                  <ReceiptRow
+                    key={line.label}
+                    label={line.label}
+                    value={line.value}
+                    tone={
+                      "success" in line && line.success
+                        ? "success"
+                        : "muted" in line && line.muted
+                          ? "muted"
+                          : "default"
+                    }
+                  />
+                ))}
+                {advanceDue > 0 && advanceConfig ? (
+                  <>
+                    <ReceiptTotal label="Pay now to confirm" value={formatRupees(advanceDue)} />
+                    <ReceiptRow
+                      label="Pay at salon"
+                      value={formatRupees(Math.max(0, total - advanceDue))}
+                    />
+                    <Notice tone="peach" icon="time-outline">
+                      You&apos;ll pay the advance right after booking. Your time is held for 15 minutes.
+                    </Notice>
+                    <View style={styles.policy}>
+                      <Text style={styles.policyTitle}>If you cancel</Text>
+                      {salonAdvancePolicyLines(advanceConfig.policy).map((line) => (
+                        <Text key={line} style={styles.muted}>{`• ${line}`}</Text>
+                      ))}
+                    </View>
+                  </>
+                ) : (
+                  <ReceiptTotal
+                    label="Pay at salon"
+                    value={formatRupees(total)}
+                    caption="Nothing to pay now"
+                  />
+                )}
+              </BookingCard>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        {showOneTap ? null : (
+          <BookingBar
+            title={barTitle}
+            caption={barCaption}
+            label={
+              step < 2 ? "Continue" : advanceDue > 0 ? `Book and pay ${formatRupees(advanceDue)}` : "Book"
+            }
+            error={step === 2 && !confirmSheetOpen ? submitError : null}
+            disabled={barDisabled}
+            onPress={onBarPress}
+          />
+        )}
+      </KeyboardAvoidingView>
 
       <BookingConfirmSheet
         visible={confirmSheetOpen}
@@ -1407,11 +1281,7 @@ export default function BookingScreen() {
         timeLabel={selectedSlotLabel}
         staffLabel={selectedPackage ? null : selectedStaffName}
         customerName={name.trim() || "—"}
-        customerPhone={
-          normalizeMobileDigits(phone).length >= 10
-            ? `+91 ${normalizeMobileDigits(phone)}`
-            : phone || "—"
-        }
+        customerPhone={phoneDigits.length >= 10 ? `+91 ${phoneDigits}` : phone || "—"}
         customerEmail={email.trim() || "—"}
         notes={notes.trim() || null}
         priceLines={confirmPriceLines}
@@ -1429,7 +1299,7 @@ export default function BookingScreen() {
         onClose={() => setPromoCelebration(null)}
       />
 
-      {step === 2 && advanceDue > 0 ? (
+      {showOneTap ? (
         <OneTapPayBar
           amountRupees={advanceDue}
           reserve={reserveForAdvance}
@@ -1447,302 +1317,66 @@ export default function BookingScreen() {
                     : null
           }
         />
-      ) : (
-        <StickyCta
-          title={
-            step === 0
-              ? hasSelection
-                ? `Continue · ${formatRupees(total)}`
-                : "Select services to continue"
-              : step === 1
-                ? selectedDate && slotValue
-                  ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-                  : "Pick a date and time"
-                : `Book · pay at salon ${formatRupees(total)}`
-          }
-          subtitle={
-            phoneMissing
-              ? "Sign in again to restore your verified mobile"
-              : step === 0
-                ? "Next · choose date and time"
-                : step === 1
-                  ? "Next · confirm your booking"
-                  : name.trim().length < 2
-                    ? "Add your name to book"
-                    : !isValidEmail(email)
-                      ? "Add a valid email to book. Your invoice goes there."
-                      : hasSelection && selectedDate && slotValue
-                    ? `${formatDayChip(selectedDate)} · ${selectedSlotLabel}`
-                    : "Review details below"
-          }
-          error={step === 2 && !confirmSheetOpen ? submitError : null}
-          label={step < 2 ? "Continue" : advanceDue > 0 ? `Book and pay ${formatRupees(advanceDue)}` : "Book"}
-          bottomOffset={keyboardHeight}
-          disabled={
-            submitting ||
-            phoneMissing ||
-            (step === 0 && !hasSelection) ||
-            (step === 1 &&
-              (!hasSelection ||
-                noStaffForServices ||
-                !selectedDate ||
-                !slotValue)) ||
-            (step === 2 &&
-              (!hasSelection ||
-                noStaffForServices ||
-                !selectedDate ||
-                !slotValue ||
-                name.trim().length < 2 ||
-                normalizeMobileDigits(phone).length < 10 ||
-                !isValidEmail(email)))
-          }
-          onPress={() => {
-            if (step === 0) {
-              if (hasSelection) setStep(1)
-              return
-            }
-            if (step === 1) {
-              if (selectedDate && slotValue) setStep(2)
-              return
-            }
-            setSubmitError(null)
-            setConfirmSheetOpen(true)
-          }}
-        />
-      )}
-    </KeyboardAvoidingView>
+      ) : null}
+    </View>
+  )
+}
+
+function VisitFact({ icon, text }: { icon: IconName; text: string }) {
+  return (
+    <View style={styles.fact}>
+      <Icon name={icon} size={16} color={bk.secondary} />
+      <Text style={styles.factText} numberOfLines={2}>
+        {text}
+      </Text>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scroll: {
-    paddingBottom: 130,
-    paddingTop: 0,
-  },
-  gap: {
-    marginTop: spacing.sm,
-  },
-  bookingFor: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  bookingForCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  bookingForEdit: {
-    minHeight: 44,
-    minWidth: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  lockedInput: {
-    backgroundColor: colors.muted,
-    color: colors.textMuted,
-  },
-  optInRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  optInRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  optInPressed: {
-    opacity: 0.94,
-  },
-  optInCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  card: {
-    marginTop: spacing.xl,
-    gap: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-  },
-  salonRow: {
-    flexDirection: "row",
-    gap: spacing.lg,
-    alignItems: "center",
-  },
-  salonAvatar: {
-    width: 84,
-    height: 84,
-    borderRadius: radii.lg,
-    backgroundColor: colors.muted,
-  },
-  salonCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  sectionHead: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  serviceCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.sm,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-  },
-  serviceThumb: {
-    width: 72,
-    height: 72,
-    borderRadius: radii.md,
-    backgroundColor: colors.muted,
-  },
-  serviceCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  removeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: radii.pill,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.muted,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  chip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  chipDisabled: {
-    opacity: 0.45,
-  },
-  staffChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  staffPhoto: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.pill,
-    backgroundColor: colors.muted,
-  },
-  staffAnyAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: radii.pill,
-    backgroundColor: colors.muted,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  promoRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.sm,
-  },
-  applyBtn: {
-    minWidth: 96,
-    minHeight: 48,
-    paddingHorizontal: spacing.lg,
-  },
+  flex: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingBottom: 28 },
+  scrollOneTap: { paddingBottom: 150 },
+  pad: { paddingHorizontal: 16 },
+  lineGap: { gap: 14 },
+  ghostRow: { height: 96, borderRadius: 16, backgroundColor: bk.grey },
+  waitlist: { marginTop: 12 },
+  fact: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  factText: { flex: 1, fontFamily: fontFamily.medium, fontSize: 14, lineHeight: 20, color: bk.text },
+  bookingFor: { flexDirection: "row", alignItems: "center", gap: 12 },
+  bookingForCopy: { flex: 1, minWidth: 0, gap: 2 },
+  strong: { fontFamily: fontFamily.semibold, fontSize: 15, lineHeight: 20, color: bk.text },
+  muted: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: bk.secondary },
+  success: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 17, color: bk.green },
+  error: { fontFamily: fontFamily.medium, fontSize: 12, lineHeight: 17, color: bk.red },
+  lockedInput: { backgroundColor: "#f3f3f3", color: bk.muted },
   appliedPromo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: "#EEF6F1",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: bk.greenBg,
   },
-  removePromo: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+  removeText: {
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
+    lineHeight: 17,
+    color: bk.red,
+    textDecorationLine: "underline",
   },
-  rewardRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  rewardRowActive: {
-    borderColor: colors.primary,
-    backgroundColor: "#F1F1F1",
-  },
-  rewardDisabled: {
-    opacity: 0.55,
-  },
-  rewardIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radii.md,
-    backgroundColor: "#F1F1F1",
+  promoRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  applyBtn: {
+    height: 48,
+    minWidth: 88,
+    paddingHorizontal: 18,
+    borderRadius: 999,
+    backgroundColor: bk.text,
     alignItems: "center",
     justifyContent: "center",
   },
-  rewardCopy: {
-    flex: 1,
-    gap: 2,
-    minWidth: 0,
-  },
-  applyChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primary,
-    backgroundColor: colors.surface,
-  },
-  applyChipOn: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  applyChipDisabled: {
-    borderColor: colors.border,
-    backgroundColor: colors.muted,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  summaryTotal: {
-    marginTop: spacing.sm,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-  },
+  applyBtnOff: { backgroundColor: bk.disabled },
+  applyText: { fontFamily: fontFamily.semibold, fontSize: 14, lineHeight: 18, color: "#ffffff" },
+  policy: { gap: 2 },
+  policyTitle: { fontFamily: fontFamily.semibold, fontSize: 13, lineHeight: 18, color: bk.text },
 })

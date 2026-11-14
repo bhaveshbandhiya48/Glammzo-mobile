@@ -1,23 +1,22 @@
-import { useLocalSearchParams, useRouter, type Href } from "expo-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import {
-  ActivityIndicator,
-  Dimensions,
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from "react-native"
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ActivityIndicator, FlatList, StyleSheet, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import {
   ArtistsFilterSheet,
   type ArtistsFilterDraft,
 } from "@/components/artists/ArtistsFilterSheet"
-import { ArtistCard } from "@/components/ui/ArtistCard"
-import { Icon } from "@/components/ui/Icon"
-import { SkeletonBone } from "@/components/ui/Skeleton"
+import { ArtistListRow, ArtistListRowSkeleton } from "@/components/home/ArtistListRow"
+import {
+  SEE_ALL_EMPTY_COLORS,
+  SeeAllChip,
+  SeeAllChipRow,
+  SeeAllClearLink,
+  SeeAllEmpty,
+  SeeAllHeader,
+  SeeAllSearch,
+} from "@/components/list/SeeAllParts"
 import { Text } from "@/components/ui/Text"
 import {
   fetchArtistCategories,
@@ -29,10 +28,9 @@ import {
   type ArtistWhere,
 } from "@/lib/artists-api"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
+import { getServiceTile } from "@/lib/service-tiles"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
-import { colors, radii, spacing } from "@/theme/tokens"
-
-const GRID_ITEM_WIDTH = (Dimensions.get("window").width - spacing.lg * 2 - spacing.md) / 2
+import { fontFamily } from "@/theme/tokens"
 
 const WHERE_OPTIONS: Array<{ id: ArtistWhere; label: string }> = [
   { id: "any", label: "Anywhere" },
@@ -54,63 +52,32 @@ const DEFAULT_FILTERS: ArtistsFilterDraft = {
   sort: "recommended",
 }
 
-function FilterPill({
-  label,
-  selected,
-  onPress,
-  onClear,
-}: {
-  label: string
-  selected?: boolean
-  onPress: () => void
-  onClear?: () => void
-}) {
-  return (
-    <View style={[styles.pill, selected && styles.pillOn]}>
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityState={{ selected: Boolean(selected) }}
-        style={styles.pillMain}
-      >
-        <Text
-          variant="caption"
-          color={selected ? colors.primary : colors.text}
-          style={{ fontFamily: selected ? "Geist_600SemiBold" : "Geist_500Medium" }}
-        >
-          {label}
-        </Text>
-        {!selected || !onClear ? (
-          <Icon
-            name="chevron-down"
-            size={14}
-            color={selected ? colors.primary : colors.textMuted}
-          />
-        ) : null}
-      </Pressable>
-      {selected && onClear ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={onClear}
-          hitSlop={8}
-          accessibilityLabel={`Clear ${label}`}
-          style={styles.pillClear}
-        >
-          <Icon name="close" size={14} color={colors.primary} />
-        </Pressable>
-      ) : null}
-    </View>
-  )
-}
+type Item =
+  | { kind: "search" }
+  | { kind: "chips" }
+  | { kind: "note" }
+  | { kind: "artist"; artist: ArtistCardData }
+  | { kind: "skeleton"; id: number }
+  | { kind: "empty" }
 
+/** "Artists near you": solo artists near the saved location, as Home list rows, with paging. */
 export default function ArtistsScreen() {
   const router = useRouter()
-  // Home "Top rated" See all: /artists?where=home or ?sort=nearest.
-  const params = useLocalSearchParams<{ where?: string; sort?: string }>()
+  const navigation = useNavigation()
+  const insets = useSafeAreaInsets()
+  // From Home (see `artistsSeeAllParams`): ?where=home|studio, ?sort=nearest, ?service=<tile key>.
+  // ?audience is accepted too, but artists have no women / men data yet, so it doesn't filter.
+  const params = useLocalSearchParams<{ where?: string; sort?: string; service?: string; audience?: string }>()
   const initialFilters = useMemo<ArtistsFilterDraft>(() => {
     const where = WHERE_OPTIONS.find((option) => option.id === params.where)?.id
     const sort = SORTS.find((option) => option.id === params.sort)?.id
-    return { ...DEFAULT_FILTERS, ...(where ? { where } : {}), ...(sort ? { sort } : {}) }
+    const category = getServiceTile(params.service ?? null)?.artistCategory ?? null
+    return {
+      ...DEFAULT_FILTERS,
+      ...(where ? { where } : {}),
+      ...(sort ? { sort } : {}),
+      ...(category ? { category } : {}),
+    }
     // Only the params the screen opened with.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -126,17 +93,29 @@ export default function ArtistsScreen() {
   const [search, setSearch] = useState("")
   const [debounced, setDebounced] = useState("")
   const [artists, setArtists] = useState<ArtistCardData[] | null>(null)
+  const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const requestRef = useRef(0)
 
-  useEffect(() => {
+  // This screen draws its own peach header.
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false })
+  }, [navigation])
+
+  const loadCatalog = useCallback(() => {
+    setCatalog(undefined)
     void fetchArtistCategories().then(setCatalog)
+  }, [])
+
+  useEffect(() => {
+    loadCatalog()
     void getSavedLocation()
       .then(setLocation)
       .catch(() => {})
-  }, [])
+  }, [loadCatalog])
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search), 300)
@@ -144,8 +123,8 @@ export default function ArtistsScreen() {
   }, [search])
 
   const hasPin = location?.latitude !== undefined && location?.longitude !== undefined
-  const labelOf = useCallback(
-    (id: string) => catalog?.categories.find((c) => c.id === id)?.label ?? id,
+  const labels = useMemo(
+    () => Object.fromEntries((catalog?.categories ?? []).map((c) => [c.id, c.label])) as Record<string, string>,
     [catalog],
   )
   const effectiveSort: ArtistSort =
@@ -175,16 +154,18 @@ export default function ArtistsScreen() {
       .then((res) => {
         if (id !== requestRef.current) return
         setArtists(res.artists)
+        setTotal(res.total)
         setHasMore(res.hasMore)
       })
       .catch(() => {
         if (id === requestRef.current) {
           setArtists([])
+          setTotal(0)
           setError(true)
         }
       })
     return () => controller.abort()
-  }, [catalog, query])
+  }, [catalog, query, reloadKey])
 
   async function loadMore() {
     if (!hasMore || loadingMore || !artists) return
@@ -203,24 +184,43 @@ export default function ArtistsScreen() {
   const visibleCategories = catalog?.categories.filter((c) => c.count > 0) ?? []
   const visibleOccasions = catalog?.occasions.filter((o) => o.count > 0) ?? []
 
+  const sortActive = filters.sort !== "recommended" && !(filters.sort === "nearest" && !hasPin)
   const activeFilterCount = [
     filters.category != null,
     filters.occasion != null,
     filters.where !== "any",
-    filters.sort !== "recommended" && !(filters.sort === "nearest" && !hasPin),
+    sortActive,
   ].filter(Boolean).length
 
   const categoryLabel =
     filters.category != null
-      ? (visibleCategories.find((c) => c.id === filters.category)?.label ?? "Category")
-      : "Category"
-  const whereLabel =
-    WHERE_OPTIONS.find((o) => o.id === filters.where)?.label ?? "Location"
-  const sortLabel = SORTS.find((s) => s.id === effectiveSort)?.label ?? "Sort"
+      ? (catalog?.categories.find((c) => c.id === filters.category)?.label ?? "Category")
+      : null
   const occasionLabel =
     filters.occasion != null
       ? (visibleOccasions.find((o) => o.id === filters.occasion)?.label ?? "Occasion")
-      : "Occasion"
+      : null
+  const sortLabel = SORTS.find((s) => s.id === effectiveSort)?.label ?? "Sort"
+
+  // Subtitle (same rules as Home "All near you", commit 53f1f19): with location off the API
+  // returns recommended artists with no distances, so don't claim a radius.
+  const loading = catalog === undefined || (catalog !== null && catalog.total > 0 && artists === null)
+  const count = total || artists?.length || 0
+  const noun = count === 1 ? "artist" : "artists"
+  const hasDistances = (artists ?? []).some((artist) => artist.distanceKm != null)
+  const city = location?.city?.trim()
+  const subtitle = loading
+    ? `Artists within ${NEARBY_RADIUS_KM} km`
+    : hasDistances || (count === 0 && hasPin)
+      ? `${count} ${noun} within ${NEARBY_RADIUS_KM} km`
+      : city
+        ? `${count} ${noun} in ${city}`
+        : `${count} recommended ${noun}`
+
+  function goBack() {
+    if (router.canGoBack()) router.back()
+    else router.replace("/(tabs)/explore")
+  }
 
   function openFilters() {
     setDraft(filters)
@@ -238,211 +238,167 @@ export default function ArtistsScreen() {
     setFilterOpen(false)
   }
 
-  const header = (
-    <View style={styles.header}>
-      <Text variant="body" muted>
-        {location?.label ? `Near ${location.label}` : "Makeup, hair, mehendi and more. At your place or theirs."}
-      </Text>
+  function toggleWhere(where: ArtistWhere) {
+    setFilters((prev) => ({ ...prev, where: prev.where === where ? "any" : where }))
+  }
 
-      <View style={styles.search}>
-        <Icon name="search-outline" size={18} color={colors.textSubtle} />
-        <TextInput
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search by name, area or service"
-          accessibilityLabel="Search artists"
-          placeholderTextColor={colors.textSubtle}
-          style={styles.searchInput}
-          autoCorrect={false}
-          returnKeyType="search"
+  const data: Item[] = useMemo(() => {
+    const head: Item[] = [{ kind: "search" }, { kind: "chips" }]
+    if (filters.where === "home" && !hasPin) head.push({ kind: "note" })
+    if (loading) return [...head, ...[0, 1, 2, 3].map((id) => ({ kind: "skeleton" as const, id }))]
+    if (!artists || artists.length === 0 || catalog === null || catalog?.total === 0) {
+      return [...head, { kind: "empty" }]
+    }
+    return [...head, ...artists.map((artist) => ({ kind: "artist" as const, artist }))]
+  }, [artists, catalog, filters.where, hasPin, loading])
+
+  function renderEmpty() {
+    if (catalog === null || error) {
+      return (
+        <SeeAllEmpty
+          icon="cloud-offline-outline"
+          colors={SEE_ALL_EMPTY_COLORS.error}
+          title="Couldn't load artists"
+          body="Check your connection and try again."
+          actionLabel="Try again"
+          onAction={() => (catalog === null ? loadCatalog() : setReloadKey((key) => key + 1))}
         />
-        {search ? (
-          <Pressable accessibilityRole="button" onPress={() => setSearch("")} hitSlop={8}>
-            <Icon name="close-circle" size={18} color={colors.textSubtle} />
-          </Pressable>
-        ) : null}
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pillRow}
-      >
-        <Pressable
-          onPress={openFilters}
-          accessibilityRole="button"
-          accessibilityLabel="Open filters"
-          style={[styles.filterBtn, activeFilterCount > 0 && styles.filterBtnOn]}
-        >
-          <Icon
-            name="options-outline"
-            size={18}
-            color={activeFilterCount > 0 ? colors.primary : colors.text}
-          />
-          <Text
-            variant="caption"
-            color={activeFilterCount > 0 ? colors.primary : colors.text}
-            style={{ fontFamily: "Geist_600SemiBold" }}
-          >
-            Filters
-          </Text>
-          {activeFilterCount > 0 ? (
-            <View style={styles.badge}>
-              <Text variant="caption" color={colors.primaryFg} style={styles.badgeText}>
-                {activeFilterCount}
-              </Text>
-            </View>
-          ) : null}
-        </Pressable>
-
-        <FilterPill
-          label={categoryLabel}
-          selected={filters.category != null}
-          onPress={openFilters}
-          onClear={
-            filters.category != null
-              ? () => setFilters((prev) => ({ ...prev, category: null }))
-              : undefined
-          }
+      )
+    }
+    if (catalog?.total === 0) {
+      return (
+        <SeeAllEmpty
+          icon="sparkles-outline"
+          colors={SEE_ALL_EMPTY_COLORS.artists}
+          title="No artists near you"
+          body="Solo makeup, hair and mehendi artists will appear here. Check back shortly."
         />
-        <FilterPill
-          label={whereLabel}
-          selected={filters.where !== "any"}
-          onPress={openFilters}
-          onClear={
-            filters.where !== "any"
-              ? () => setFilters((prev) => ({ ...prev, where: "any" }))
-              : undefined
-          }
+      )
+    }
+    if (activeFilterCount > 0 || debounced.trim()) {
+      return (
+        <SeeAllEmpty
+          icon="options-outline"
+          colors={SEE_ALL_EMPTY_COLORS.artists}
+          title="No artists match"
+          body="Try clearing filters or searching something else."
+          actionLabel="Clear filters"
+          onAction={() => {
+            clearFilters()
+            setSearch("")
+          }}
         />
-        {visibleOccasions.length > 0 ? (
-          <FilterPill
-            label={occasionLabel}
-            selected={filters.occasion != null}
-            onPress={openFilters}
-            onClear={
-              filters.occasion != null
-                ? () => setFilters((prev) => ({ ...prev, occasion: null }))
-                : undefined
-            }
-          />
-        ) : null}
-        <FilterPill
-          label={sortLabel}
-          selected={effectiveSort !== "recommended"}
-          onPress={openFilters}
-          onClear={
-            effectiveSort !== "recommended"
-              ? () => setFilters((prev) => ({ ...prev, sort: "recommended" }))
-              : undefined
-          }
-        />
-      </ScrollView>
-
-      {filters.where === "home" && !hasPin ? (
-        <Text variant="caption" muted>
-          Set your location on the Explore screen to see only artists who travel to you.
-        </Text>
-      ) : null}
-    </View>
-  )
-
-  if (catalog === undefined) {
+      )
+    }
     return (
-      <View style={[styles.root, styles.skeletonRoot]}>
-        {[0, 1, 2].map((i) => (
-          <View key={i} style={styles.gridRow}>
-            <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-            <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-          </View>
-        ))}
-      </View>
+      <SeeAllEmpty
+        icon="person-outline"
+        colors={SEE_ALL_EMPTY_COLORS.artists}
+        title={`No artists near ${location?.label ?? "you"}`}
+        body={`We show artists within ${NEARBY_RADIUS_KM} km. Try another location from Home.`}
+      />
     )
   }
 
-  if (catalog === null || catalog.total === 0) {
-    return (
-      <View style={[styles.root, styles.empty]}>
-        <Icon name="sparkles-outline" size={40} color={colors.primary} />
-        <Text variant="heading" style={{ textAlign: "center" }}>
-          No artists near you
-        </Text>
-        <Text variant="body" muted style={{ textAlign: "center" }}>
-          Solo makeup, hair and mehendi artists will appear here. Check back shortly.
-        </Text>
-      </View>
-    )
+  function renderItem({ item }: { item: Item }) {
+    switch (item.kind) {
+      case "search":
+        return <SeeAllSearch value={search} onChange={setSearch} label="Search artists" />
+      case "chips":
+        return (
+          <SeeAllChipRow>
+            <SeeAllChip
+              icon="options-outline"
+              label={activeFilterCount > 0 ? `Filters · ${activeFilterCount}` : "Filters"}
+              on={activeFilterCount > 0}
+              onPress={openFilters}
+              a11y="Open filters"
+            />
+            <SeeAllChip
+              icon="swap-vertical-outline"
+              label={sortLabel}
+              on={sortActive}
+              onPress={openFilters}
+              a11y={`Sort: ${sortLabel}`}
+              trailing="chevron-down"
+            />
+            {categoryLabel ? (
+              <SeeAllChip
+                label={categoryLabel}
+                on
+                onPress={() => setFilters((prev) => ({ ...prev, category: null }))}
+                a11y={`${categoryLabel}. Tap to clear`}
+                trailing="close"
+              />
+            ) : visibleCategories.length > 0 ? (
+              <SeeAllChip label="Category" on={false} onPress={openFilters} trailing="chevron-down" />
+            ) : null}
+            <SeeAllChip
+              icon="home-outline"
+              label="At home"
+              on={filters.where === "home"}
+              onPress={() => toggleWhere("home")}
+            />
+            <SeeAllChip
+              icon="storefront-outline"
+              label="Studio"
+              on={filters.where === "studio"}
+              onPress={() => toggleWhere("studio")}
+            />
+            {occasionLabel ? (
+              <SeeAllChip
+                label={occasionLabel}
+                on
+                onPress={() => setFilters((prev) => ({ ...prev, occasion: null }))}
+                a11y={`${occasionLabel}. Tap to clear`}
+                trailing="close"
+              />
+            ) : null}
+            {activeFilterCount > 0 ? <SeeAllClearLink onPress={clearFilters} /> : null}
+          </SeeAllChipRow>
+        )
+      case "note":
+        return (
+          <Text style={styles.note}>
+            Set your location on the Explore screen to see only artists who travel to you.
+          </Text>
+        )
+      case "skeleton":
+        return (
+          <View style={styles.pad}>
+            <ArtistListRowSkeleton />
+          </View>
+        )
+      case "empty":
+        return renderEmpty()
+      case "artist":
+        return (
+          <View style={styles.pad}>
+            <ArtistListRow artist={item.artist} labels={labels} />
+          </View>
+        )
+    }
   }
 
   return (
-    <>
+    <View style={styles.root}>
+      <SeeAllHeader title="Artists near you" subtitle={subtitle} onBack={goBack} />
       <FlatList
         style={styles.root}
-        contentContainerStyle={styles.list}
-        data={artists ?? []}
-        keyExtractor={(item) => item.slug}
-        numColumns={2}
-        columnWrapperStyle={styles.gridRow}
-        ListHeaderComponent={header}
-        renderItem={({ item }) => (
-          <View style={styles.gridItem}>
-            <ArtistCard
-              artist={item}
-              categoryLabel={labelOf}
-              grid
-              onPress={() =>
-                router.push({
-                  pathname: "/artist/[slug]",
-                  params: { slug: item.slug, name: item.displayName },
-                } as Href)
-              }
-            />
-          </View>
-        )}
-        ListEmptyComponent={
-          artists === null ? (
-            <View style={{ gap: spacing.md }}>
-              {[0, 1, 2].map((i) => (
-                <View key={i} style={styles.gridRow}>
-                  <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-                  <SkeletonBone height={168} radius={radii.lg} style={styles.gridCell} />
-                </View>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.emptyList}>
-              <Text variant="heading" style={{ textAlign: "center" }}>
-                {error
-                  ? "Couldn't load artists"
-                  : activeFilterCount > 0 || debounced.trim()
-                    ? "No artists match"
-                    : `No artists near ${location?.label ?? "you"}`}
-              </Text>
-              <Text variant="body" muted style={{ textAlign: "center" }}>
-                {error
-                  ? "Check your connection and try again."
-                  : activeFilterCount > 0 || debounced.trim()
-                    ? "Try clearing filters or searching something else."
-                    : `We show artists within ${NEARBY_RADIUS_KM} km. Try another location from Home.`}
-              </Text>
-              {activeFilterCount > 0 && !error ? (
-                <Pressable accessibilityRole="button" onPress={clearFilters} style={styles.clearLink}>
-                  <Text variant="bodyStrong" color={colors.primary}>
-                    Clear all filters
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          )
+        contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
+        data={data}
+        keyExtractor={(item) =>
+          item.kind === "artist" ? item.artist.slug : item.kind === "skeleton" ? `skeleton-${item.id}` : item.kind
         }
+        renderItem={renderItem}
+        stickyHeaderIndices={[1]}
         ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
-          ) : undefined
+          loadingMore ? <ActivityIndicator color="#111111" style={styles.more} /> : undefined
         }
         onEndReached={() => void loadMore()}
         onEndReachedThreshold={0.6}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       />
 
@@ -459,130 +415,20 @@ export default function ArtistsScreen() {
         onApply={applyFilters}
         onClear={clearFilters}
       />
-    </>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  skeletonRoot: {
-    padding: spacing.lg,
-    gap: spacing.md,
+  root: { flex: 1, backgroundColor: "#ffffff" },
+  pad: { paddingHorizontal: 20 },
+  note: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#595959",
   },
-  list: { padding: spacing.lg, paddingBottom: spacing.xxxl },
-  gridRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing.md,
-  },
-  gridCell: {
-    flex: 1,
-  },
-  // Fixed width, so a lone card in the last row stays half width.
-  gridItem: {
-    width: GRID_ITEM_WIDTH,
-  },
-  header: { gap: spacing.md, marginBottom: spacing.lg },
-  search: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    minHeight: 48,
-    ...shadows(),
-  },
-  searchInput: {
-    flex: 1,
-    fontFamily: "Geist_400Regular",
-    fontSize: 15,
-    color: colors.text,
-    paddingVertical: 10,
-  },
-  pillRow: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-    alignItems: "center",
-  },
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 40,
-    paddingHorizontal: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-  },
-  filterBtnOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  badge: {
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    paddingHorizontal: 5,
-    backgroundColor: colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    fontSize: 11,
-    fontFamily: "Geist_600SemiBold",
-    lineHeight: 14,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 40,
-    borderRadius: radii.pill,
-    backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    overflow: "hidden",
-  },
-  pillOn: {
-    backgroundColor: "#F1F1F1",
-    borderColor: colors.primary,
-  },
-  pillMain: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  pillClear: {
-    paddingRight: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xxl,
-    gap: spacing.md,
-  },
-  emptyList: {
-    alignItems: "center",
-    paddingVertical: spacing.xxl,
-    gap: spacing.sm,
-  },
-  clearLink: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
+  more: { marginVertical: 20 },
 })
-
-function shadows() {
-  return {
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  }
-}

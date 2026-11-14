@@ -18,6 +18,8 @@ import {
   getHomeArtistsSnapshot,
   type ArtistCardData,
 } from "@/lib/artists-api"
+import { useHomeAudience } from "@/lib/home-audience"
+import { artistsSeeAllParams } from "@/lib/see-all-params"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { colors, spacing } from "@/theme/tokens"
 
@@ -34,6 +36,7 @@ type Props = {
 
 export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0, onCount }: Props) {
   const router = useRouter()
+  const [audience] = useHomeAudience()
   const { width: windowWidth } = useWindowDimensions()
   const lat = latitude ?? undefined
   const lng = longitude ?? undefined
@@ -116,7 +119,12 @@ export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0, on
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="See all artists"
-          onPress={() => router.push("/artists" as Href)}
+          onPress={() =>
+            router.push({
+              pathname: "/artists",
+              params: artistsSeeAllParams({ sort: "nearest", audience }),
+            } as Href)
+          }
           hitSlop={8}
           style={styles.seeAll}
         >

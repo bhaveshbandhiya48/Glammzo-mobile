@@ -48,6 +48,143 @@ index 2e711ef..c82a5f0 100644
          versionCode 1
          versionName "1.0"
      }
+diff --git a/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayCustomModule.java b/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayCustomModule.java
+index 7d27c25..626d865 100644
+--- a/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayCustomModule.java
++++ b/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayCustomModule.java
+@@ -546,10 +546,16 @@ public class RazorpayCustomModule extends ReactContextBaseJavaModule implements
+   }
+ 
+   public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
+-    if(requestCode == RazorpayPaymentActivity.RZP_REQUEST_CODE && resultCode == RazorpayPaymentActivity.RZP_RESULT_CODE){
++    if(requestCode == RazorpayPaymentActivity.RZP_REQUEST_CODE && resultCode == RazorpayPaymentActivity.RZP_RESULT_CODE && data != null){
+       onActivityResult(requestCode, resultCode, data);
+       return;
+     }
++    // Glammzo: the payment screen closed without a result (the client came back through the app
++    // icon or Recents, or the system closed it). Without this the app waits forever.
++    if(requestCode == RazorpayPaymentActivity.RZP_REQUEST_CODE){
++      onPaymentError(RazorpayPaymentActivity.RZP_SCREEN_LOST_ERROR_CODE, "Payment screen closed", new JSONObject());
++      return;
++    }
+     // Headless OTP Assist listener: the SMS-consent result (990) arrives at the
+     // host activity — forward it so the plugin receives the approved SMS.
+     try {
+@@ -583,9 +589,14 @@ public class RazorpayCustomModule extends ReactContextBaseJavaModule implements
+   }
+ 
+   private void sendEvent(String eventName, WritableMap params) {
+-  reactContext
+-      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+-      .emit(eventName, params);
++    // Glammzo: after Android restarts the app, a result can arrive before JS is running.
++    try {
++      reactContext
++          .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
++          .emit(eventName, params);
++    } catch (Exception e) {
++      Log.e("RazorpayCustomModule", "Could not send " + eventName, e);
++    }
+   }
+ 
+ 
+diff --git a/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayPaymentActivity.java b/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayPaymentActivity.java
+index 965ac69..fcabc6f 100644
+--- a/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayPaymentActivity.java
++++ b/node_modules/react-native-customui/android/src/main/java/com/razorpay/rn/custom/RazorpayPaymentActivity.java
+@@ -18,6 +18,11 @@ import android.app.AlertDialog;
+ import android.app.Dialog;
+ import android.content.DialogInterface;
+ import android.util.Log;
++import android.graphics.Color;
++import android.view.Gravity;
++import android.widget.FrameLayout;
++import android.widget.ProgressBar;
++import android.widget.TextView;
+ 
+ public class RazorpayPaymentActivity extends Activity implements PaymentResultWithDataListener {
+     private Razorpay razorpay;
+@@ -29,6 +34,9 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
+     public static final int RZP_RESULT_CODE = 62443;
+     public static final int RZP_USER_BACK_PRESSED_ERROR_CODE = 5;
+     public static final int RZP_UNKNOWN_ERROR_CODE = 6;
++    // Glammzo: the screen lost its payment (Android restarted it, or it closed without a result).
++    // The app checks with its server instead of trusting this as a failure.
++    public static final int RZP_SCREEN_LOST_ERROR_CODE = 1001;
+     private boolean isPaymentInProgress = false;
+ 
+     private static final String KEY_OPTIONS_STRING = "com.razorpay.rn.saved_options_string";
+@@ -111,6 +119,15 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
+                 }
+             }
+         }
++        // Glammzo: rebuilt after Android closed the app mid-payment. A fresh Razorpay object knows
++        // nothing about the payment, so the UPI app's answer would be dropped and the screen would
++        // stay blank. Close and let the app confirm with its server.
++        if (savedInstanceState != null && isPaymentInProgress) {
++            Log.w(TAG, "Payment screen restarted mid-payment; handing back to the app.");
++            returnErrorCallback(RZP_SCREEN_LOST_ERROR_CODE, "Payment screen was restarted", new PaymentData());
++            return;
++        }
++
+         // Validate we have the options string
+         if (optionsString == null || optionsString.trim().isEmpty()) {
+             Log.e(TAG, "Options string not available. Cannot proceed with payment.");
+@@ -161,6 +178,7 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
+         webview.setLayoutParams(params);
+         rootview.addView(webview);
+         razorpay.setWebView(webview);
++        addUpiWaitingCover(rootview);
+ 
+         // Arm OTP Assist only when the merchant called enableOtpAssist() for this payment
+         try {
+@@ -172,6 +190,46 @@ public class RazorpayPaymentActivity extends Activity implements PaymentResultWi
+         }
+     }
+ 
++    /**
++     * Glammzo: UPI intent payments never need the web view on screen; it would only show as a blank
++     * white page while Razorpay confirms. Cover it with a short message. Net banking and cards keep
++     * the web view visible because the bank's page loads in it.
++     */
++    private void addUpiWaitingCover(ViewGroup rootview) {
++        try {
++            if (payload == null || !"upi".equals(payload.optString("method"))) return;
++            float density = getResources().getDisplayMetrics().density;
++            FrameLayout cover = new FrameLayout(this);
++            cover.setBackgroundColor(Color.parseColor("#FAFAFA"));
++            cover.setClickable(true);
++            LinearLayout column = new LinearLayout(this);
++            column.setOrientation(LinearLayout.VERTICAL);
++            column.setGravity(Gravity.CENTER_HORIZONTAL);
++            ProgressBar spinner = new ProgressBar(this);
++            column.addView(spinner);
++            TextView label = new TextView(this);
++            label.setText("Confirming your payment\u2026");
++            label.setTextColor(Color.parseColor("#1A1A1A"));
++            label.setTextSize(16);
++            label.setGravity(Gravity.CENTER_HORIZONTAL);
++            label.setPadding(0, (int) (16 * density), 0, 0);
++            column.addView(label);
++            TextView hint = new TextView(this);
++            hint.setText("Please don't close the app.");
++            hint.setTextColor(Color.parseColor("#6B6B6B"));
++            hint.setTextSize(13);
++            hint.setGravity(Gravity.CENTER_HORIZONTAL);
++            hint.setPadding(0, (int) (4 * density), 0, 0);
++            column.addView(hint);
++            cover.addView(column, new FrameLayout.LayoutParams(
++                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
++            rootview.addView(cover, new ViewGroup.LayoutParams(
++                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
++        } catch (Throwable t) {
++            Log.e(TAG, "Could not add the waiting cover", t);
++        }
++    }
++
+     private void sendRequest() {
+         try {
+             isPaymentInProgress = true;
 diff --git a/node_modules/react-native-customui/ios/RazorpayCustomui.h b/node_modules/react-native-customui/ios/RazorpayCustomui.h
 index 577cac2..aa427a4 100644
 --- a/node_modules/react-native-customui/ios/RazorpayCustomui.h

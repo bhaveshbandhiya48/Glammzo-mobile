@@ -40,6 +40,7 @@ const CANCEL_REASON_IDS = [
   "change_of_plans",
   "found_another",
   "different_time",
+  "artist_asked",
   "other",
 ] as const
 
@@ -53,6 +54,10 @@ function cancelReasonsFor(kind: "salon" | "artist") {
       label: kind === "artist" ? "Found another artist" : "Found another salon",
     },
     { id: "different_time" as const, label: "Timing no longer works" },
+    // Artist bookings only: Glammzo counts it as the artist's cancellation.
+    ...(kind === "artist"
+      ? [{ id: "artist_asked" as const, label: "Artist asked me to cancel / book outside the app" }]
+      : []),
     { id: "other" as const, label: "Other" },
   ]
 }
@@ -474,6 +479,7 @@ export default function BookingsScreen() {
                     await cancelArtistPublicBooking({
                       publicToken: token,
                       reason: details ? `${reasonLabel}: ${details}` : reasonLabel,
+                      reasonId: cancelReason,
                     })
                   } else {
                     await cancelBooking(selected.id, {

@@ -495,10 +495,12 @@ export async function verifyArtistBookingOtp(input: {
 export async function cancelArtistPublicBooking(input: {
   publicToken: string
   reason?: string
+  /** Reason chip id; "artist_asked" makes Glammzo count it as the artist's cancellation. */
+  reasonId?: string
 }) {
   return crmPost<{ cancelled: boolean; alreadyCancelled?: boolean }>(
     `/api/public/bookings/${encodeURIComponent(input.publicToken)}/cancel`,
-    { reason: input.reason ?? undefined },
+    { reason: input.reason ?? undefined, reasonId: input.reasonId ?? undefined },
   )
 }
 

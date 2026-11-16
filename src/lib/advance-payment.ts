@@ -350,6 +350,15 @@ export async function payAdvance(input: {
   await savePendingPayment({ token: input.token, orderId: order.orderId, amountPaise: order.amountPaise })
   paymentInFlight = true
   try {
+    if (method.method === "upi") {
+      const direct = await payByUpiIntent(input.token, order, method.packageName, input.onConfirming)
+      if (direct) {
+        if (direct.kind === "paid" || direct.kind === "refunding") await clearPendingPayment(input.token)
+        return direct
+      }
+      // The server or this phone can't do UPI intent: use Razorpay's payment screen as before.
+    }
+
     const opened = await openPaymentScreen(sdk, {
       key_id: order.keyId,
       order_id: order.orderId,
@@ -371,6 +380,128 @@ export async function payAdvance(input: {
   } finally {
     paymentInFlight = false
   }
+}
+
+type UpiLauncher = {
+  openUpiApp: (url: string, packageName: string) => Promise<{ resultCode?: number; response?: string } | null>
+}
+
+/** Our Android patch's launcher: opens a link in one named app and resolves when the client is back. */
+function upiLauncher(): UpiLauncher | null {
+  const native = NativeModules.RazorpayCustomui as Partial<UpiLauncher> | undefined
+  return Platform.OS === "android" && typeof native?.openUpiApp === "function" ? (native as UpiLauncher) : null
+}
+
+/**
+ * iOS can't hand a `upi://` link to one chosen app, so it goes through that app's own link.
+ * Codes are the ones Razorpay's iOS SDK lists; the schemes are declared in app.config.js.
+ */
+const IOS_UPI_PREFIXES: Record<string, string> = {
+  google_pay: "tez://upi/",
+  phonepe: "phonepe://",
+  paytm: "paytmmp://",
+  bhim: "bhim://upi/",
+  cred: "credpay://upi/",
+}
+
+export function iosUpiLink(link: string, appCode: string) {
+  const prefix = IOS_UPI_PREFIXES[appCode]
+  return prefix && link.startsWith("upi://") ? prefix + link.slice("upi://".length) : null
+}
+
+type IntentStart = { kind: "link"; link: string } | { kind: "unsupported" } | { kind: "error"; message: string }
+
+/** Asks the server for a `upi://pay` link for this order. Servers without the route answer "unsupported". */
+async function startUpiIntent(token: string, orderId: string): Promise<IntentStart> {
+  try {
+    const response = await fetch(`${advanceEndpoint(token)}/upi`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId }),
+    })
+    const data = (await response.json().catch(() => ({}))) as { link?: string; error?: string }
+    if (response.ok && data.link?.startsWith("upi://")) return { kind: "link", link: data.link }
+    // A booking problem (hold ended, already paid) is the client's answer; anything else falls back.
+    if (response.status === 400 && data.error) return { kind: "error", message: data.error }
+    return { kind: "unsupported" }
+  } catch {
+    return { kind: "unsupported" }
+  }
+}
+
+/** Waits until the client has left for another app and come back to ours. */
+function waitForReturn(): Promise<void> {
+  return new Promise((resolve) => {
+    let left = AppState.currentState !== "active"
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") {
+        left = true
+        return
+      }
+      if (!left) return
+      sub.remove()
+      resolve()
+    })
+  })
+}
+
+/**
+ * Opens the client's UPI app straight on the PIN screen, with no Razorpay screen first. The server
+ * then confirms the payment with Razorpay. Returns null when this can't be done here, so the caller
+ * uses Razorpay's payment screen instead.
+ */
+async function payByUpiIntent(
+  token: string,
+  order: AdvanceOrder,
+  appCode: string,
+  onConfirming?: () => void,
+): Promise<PayOutcome | null> {
+  const android = upiLauncher()
+  if (!android && Platform.OS !== "ios") return null
+  if (Platform.OS === "ios" && !IOS_UPI_PREFIXES[appCode]) return null
+
+  const started = await startUpiIntent(token, order.orderId)
+  if (started.kind === "unsupported") return null
+  if (started.kind === "error") return { kind: "not_paid", message: started.message }
+
+  let clientGaveUp = false
+  try {
+    if (android) {
+      const result = await android.openUpiApp(started.link, appCode)
+      clientGaveUp = upiAppSaysNotPaid(result)
+    } else {
+      const url = iosUpiLink(started.link, appCode)
+      if (!url) return null
+      const back = waitForReturn()
+      await Linking.openURL(url)
+      await back
+    }
+  } catch (error) {
+    const code = RECORD(error).code
+    return {
+      kind: "not_paid",
+      message: code === "app_not_found" ? "That UPI app isn't installed. Please choose another." : "We couldn't open your UPI app. Please try again.",
+    }
+  }
+
+  onConfirming?.()
+  // UPI apps hand back before the bank has always answered, so give it up to about 30 seconds.
+  // If the app says the client backed out, a short check is enough before letting them try again.
+  const status = await waitForAdvanceStatus(token, clientGaveUp ? 2 : 15)
+  if (status === "failed" || (clientGaveUp && status === "pending")) {
+    return { kind: "not_paid", message: "The payment wasn't completed. You can try again." }
+  }
+  return fromStatus(status) ?? { kind: "checking" }
+}
+
+/**
+ * What the UPI app said when it handed back (Android). Only used to shorten the wait: the server
+ * still decides, and a payment that did go through is confirmed later by the server.
+ */
+export function upiAppSaysNotPaid(result: { resultCode?: number; response?: string } | null) {
+  // Only an explicit FAILURE counts: some UPI apps hand back nothing even when the payment worked.
+  const status = /(?:^|&)status=([^&]*)/i.exec(result?.response ?? "")?.[1]?.toLowerCase()
+  return status === "failure" || status === "failed"
 }
 
 /** True from opening the payment screen until its result is settled. */

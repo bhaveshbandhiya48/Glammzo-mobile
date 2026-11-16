@@ -26,6 +26,7 @@ import { FILTER_LABELS, isArtistBooking } from "@/lib/booking-display"
 import { cancelArtistPublicBooking } from "@/lib/artists-api"
 import { cancelBooking, fetchBookings, withPaymentStatus } from "@/lib/bookings-api"
 import { useCart } from "@/context/CartContext"
+import { bookingPhotoUrl } from "@/lib/booking-photo"
 import { canRescheduleWithNotice } from "@/lib/reschedule-policy"
 import { openDirections } from "@/lib/visit-links"
 import { getAccessToken } from "@/lib/session"
@@ -248,17 +249,28 @@ export default function BookingsScreen() {
 
   function openReview(booking: Booking) {
     setSelected(null)
+    const photo = bookingPhotoUrl(booking)
     if (isArtistBooking(booking)) {
       router.push({
         pathname: "/review",
-        params: { kind: "artist", artistPublicToken: artistToken(booking), salonName: booking.salonName },
+        params: {
+          kind: "artist",
+          artistPublicToken: artistToken(booking),
+          salonName: booking.salonName,
+          ...(photo ? { imageUrl: photo } : {}),
+        },
       })
       return
     }
     const staffName = booking.staffName?.trim() || ""
     router.push({
       pathname: "/review",
-      params: { appointmentId: booking.id, salonName: booking.salonName, ...(staffName ? { staffName } : {}) },
+      params: {
+        appointmentId: booking.id,
+        salonName: booking.salonName,
+        ...(staffName ? { staffName } : {}),
+        ...(photo ? { imageUrl: photo } : {}),
+      },
     })
   }
 

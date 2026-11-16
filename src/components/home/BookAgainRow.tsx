@@ -4,9 +4,9 @@ import { Pressable, ScrollView, StyleSheet, View } from "react-native"
 import { ThumbOrFallback } from "@/components/home/PhotoFallback"
 import { SectionLabel } from "@/components/home/ServiceTiles"
 import { Text } from "@/components/ui/Text"
-import { salonProfileImageUrl } from "@/data/mocks/salons"
 import type { Booking } from "@/data/types"
 import { serviceSummary } from "@/lib/booking-display"
+import { bookingPhotoUrl } from "@/lib/booking-photo"
 import { resolveSalonById } from "@/lib/salons-api"
 import { formatRupees } from "@/lib/service-pricing"
 import { fontFamily } from "@/theme/tokens"
@@ -30,7 +30,7 @@ export function BookAgainRow({ bookings }: { bookings: Booking[] }) {
         {bookings.map((booking) => {
           const isArtist = booking.kind === "artist"
           const salon = isArtist ? undefined : resolveSalonById(booking.salonId)
-          const image = salon ? salonProfileImageUrl(salon) : ""
+          const image = bookingPhotoUrl(booking)
           const name = salon?.name ?? booking.salonName
           const detail = [serviceSummary(booking), booking.price > 0 ? formatRupees(booking.price) : null]
             .filter(Boolean)

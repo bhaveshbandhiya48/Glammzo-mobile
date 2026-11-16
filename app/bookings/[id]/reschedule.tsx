@@ -33,6 +33,7 @@ import {
   type AvailabilitySlot,
 } from "@/lib/availability-api"
 import { formatBookingWhen, isArtistBooking, serviceSummary } from "@/lib/booking-display"
+import { bookingPhotoUrl } from "@/lib/booking-photo"
 import { fetchBookingById, rescheduleBooking } from "@/lib/bookings-api"
 import {
   canRescheduleWithNotice,
@@ -245,7 +246,12 @@ export default function RescheduleScreen() {
         >
           <BookingSectionLabel first>Your booking</BookingSectionLabel>
           <BookingCard style={styles.summary}>
-            <PlaceRow name={booking.salonName} caption={booking.salonArea || null} meta={services || null} />
+            <PlaceRow
+              imageUrl={bookingPhotoUrl(booking)}
+              name={booking.salonName}
+              caption={booking.salonArea || null}
+              meta={services || null}
+            />
             <Hairline />
             <View style={styles.currentRow}>
               <Icon name="calendar-outline" size={16} color={bk.secondary} />

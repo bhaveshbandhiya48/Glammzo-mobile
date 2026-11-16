@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from "react-native"
 import { BookingPayStrip } from "@/components/bookings/BookingPayStrip"
 import { BookingTags, StatusPill } from "@/components/bookings/BookingPills"
 import { bookingServiceLine, bookingWhenLine } from "@/components/bookings/bookingGroups"
-import { PhotoFallback, ThumbOrFallback } from "@/components/home/PhotoFallback"
+import { PhotoOrFallback, ThumbOrFallback } from "@/components/home/PhotoFallback"
 import { sp, ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
@@ -16,6 +16,7 @@ import {
   relativeBookingDay,
   visitTypeLabel,
 } from "@/lib/booking-display"
+import { bookingPhotoUrl } from "@/lib/booking-photo"
 import { formatRupees } from "@/lib/service-pricing"
 import { fontFamily } from "@/theme/tokens"
 
@@ -59,7 +60,7 @@ export function BookingHeroCard({ booking, onPress, onPaymentExpired, actions }:
       style={({ pressed }) => [styles.card, pressed && ui.pressed]}
     >
       <View style={styles.heroPhoto}>
-        <PhotoFallback name={booking.salonName} />
+        <PhotoOrFallback uri={bookingPhotoUrl(booking)} name={booking.salonName} />
         <View style={styles.heroBadges}>
           <StatusPill status={booking.status} />
         </View>
@@ -113,7 +114,7 @@ export function BookingCompactCard({ booking, onPress, onPaymentExpired, actions
       style={({ pressed }) => [styles.card, styles.compact, pressed && ui.pressed]}
     >
       <View style={styles.compactTop}>
-        <ThumbOrFallback name={booking.salonName} style={styles.thumb} />
+        <ThumbOrFallback uri={bookingPhotoUrl(booking)} name={booking.salonName} style={styles.thumb} />
         <View style={styles.compactText}>
           <Text style={styles.compactName} numberOfLines={1}>
             {booking.salonName}

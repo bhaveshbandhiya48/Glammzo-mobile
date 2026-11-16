@@ -143,6 +143,8 @@ export type Booking = {
   salonId: string
   salonName: string
   salonArea: string
+  /** Salon list photo, or the solo artist's profile photo. */
+  salonImageUrl?: string
   /** CRM appointment id when booked via Supabase. */
   crmAppointmentId?: string
   /** True only when CRM appointment status is `completed`. */

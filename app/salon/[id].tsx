@@ -64,7 +64,7 @@ import { cartServicesSubtotal, defaultPriceOptionId, formatRupees, serviceHasPri
 import type { HomeAudience } from "@/lib/service-tiles"
 import { getSavedLocation } from "@/lib/user"
 import { salonWhatsAppUrl } from "@/lib/whatsapp"
-import { fontFamily, spacing } from "@/theme/tokens"
+import { colors, fontFamily, spacing } from "@/theme/tokens"
 
 const PACKAGES_CATEGORY = "Packages"
 /** Ignore scroll-spy briefly after a tap so the animated scroll doesn't flicker the tabs. */
@@ -237,9 +237,12 @@ export default function SalonDetailScreen() {
     [fullGallery.length],
   )
 
+  // Don't clear categoryLocalY here: the category blocks report their position in
+  // onLayout, which can run before this effect, and only again when their layout changes.
+  // Clearing it left the chips with nowhere to scroll. Entries are keyed by category name,
+  // and the onLayout of each rendered block keeps its own entry current.
   useEffect(() => {
     setActiveCategory(catalogCategories[0] ?? "")
-    categoryLocalY.current = {}
   }, [catalogCategories])
 
   function handleToggleService(service: SalonService) {
@@ -303,7 +306,8 @@ export default function SalonDetailScreen() {
     setActiveCategory(category)
     setActiveTab("services")
     const y = categoryY(category)
-    if (y != null) scrollToY(y - headerHeight - TAB_BAR_HEIGHT - CHIP_ROW_HEIGHT - 4)
+    // Land with the category's heading band just under the pinned chips.
+    if (y != null) scrollToY(y + CATEGORY_TOP_GAP - headerHeight - TAB_BAR_HEIGHT - CHIP_ROW_HEIGHT - 4)
   }
 
   function updateScrollUi(y: number, viewportHeight: number, contentHeight: number) {
@@ -759,16 +763,27 @@ export default function SalonDetailScreen() {
   )
 }
 
+/** Tinted band with an accent bar, so a category reads apart from the service rows under it. */
 function CategoryHeader({ name, count }: { name: string; count: number }) {
   return (
     <View style={styles.categoryHeader} accessibilityRole="header">
-      <Text style={styles.categoryName}>{name}</Text>
-      <Text style={styles.categoryCount}>
-        {count} {count === 1 ? "item" : "items"}
+      <View style={styles.categoryAccent} />
+      <Text style={styles.categoryName} numberOfLines={1}>
+        {name}
       </Text>
+      <View style={styles.categoryCountPill}>
+        <Text style={styles.categoryCount}>
+          {count} {count === 1 ? "item" : "items"}
+        </Text>
+      </View>
     </View>
   )
 }
+
+/** Soft warm grey behind each menu category heading. */
+const CATEGORY_BAND = "#f7f5f2"
+/** Space above each category block, before its heading band. */
+const CATEGORY_TOP_GAP = 24
 
 const styles = StyleSheet.create({
   root: {
@@ -804,26 +819,48 @@ const styles = StyleSheet.create({
     paddingHorizontal: sp.gutter,
   },
   category: {
-    paddingTop: 18,
+    paddingTop: CATEGORY_TOP_GAP,
   },
   categoryHeader: {
     flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    gap: 12,
-    marginBottom: 4,
+    alignItems: "center",
+    gap: 10,
+    // Runs edge to edge past the list gutter.
+    marginHorizontal: -sp.gutter,
+    paddingHorizontal: sp.gutter,
+    paddingVertical: 12,
+    marginBottom: 2,
+    backgroundColor: CATEGORY_BAND,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: sp.tabBorder,
+  },
+  categoryAccent: {
+    width: 4,
+    height: 20,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
   },
   categoryName: {
-    flexShrink: 1,
+    flex: 1,
     fontFamily: fontFamily.bold,
-    fontSize: 18,
-    lineHeight: 23,
+    fontSize: 17,
+    lineHeight: 22,
+    letterSpacing: 0.2,
     color: sp.text,
   },
+  categoryCountPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: sp.border,
+  },
   categoryCount: {
-    fontFamily: fontFamily.regular,
-    fontSize: 13,
-    lineHeight: 17,
+    fontFamily: fontFamily.semibold,
+    fontSize: 12,
+    lineHeight: 16,
     color: sp.secondary,
   },
   packages: {

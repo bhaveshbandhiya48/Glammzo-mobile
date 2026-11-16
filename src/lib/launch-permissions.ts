@@ -5,6 +5,7 @@ import {
   getDeviceCoordinates,
   resolvePlaceFromCoordinates,
 } from "@/lib/device-location"
+import { haversineKm } from "@/lib/geo"
 import { ensureAndroidChannel, registerPushTokenWithServer } from "@/lib/push"
 import {
   DEFAULT_SAVED_LOCATION,
@@ -15,11 +16,15 @@ import {
 
 /** Shared in-flight work so concurrent callers await the same GPS resolve. */
 let bootstrapPromise: Promise<SavedLocation> | null = null
+/** The launch location alone, without waiting for the notification prompt after it. */
+let launchLocationPromise: Promise<SavedLocation> | null = null
 let locationPromise: Promise<SavedLocation> | null = null
 let lastGpsAt = 0
 let lastResolved: SavedLocation | null = null
 
 const GPS_REFRESH_MS = 45_000
+/** Within this distance of the saved place, launch keeps its name instead of geocoding again. */
+const SAME_PLACE_KM = 0.5
 
 type LocationListener = (location: SavedLocation) => void
 const listeners = new Set<LocationListener>()
@@ -94,9 +99,22 @@ async function hasForegroundLocationAccess(): Promise<boolean> {
  */
 export async function bootstrapLaunchPermissions(): Promise<SavedLocation> {
   if (!bootstrapPromise) {
-    bootstrapPromise = runLaunchBootstrap()
+    launchLocationPromise = resolveLaunchLocation()
+    bootstrapPromise = launchLocationPromise.then(async (location) => {
+      await requestLaunchNotifications()
+      return location
+    })
   }
   return bootstrapPromise
+}
+
+/**
+ * The first-launch location, for Home. Resolves as soon as the place is known:
+ * Home does not wait for the notification prompt or push registration that follow.
+ */
+export async function bootstrapLaunchLocation(): Promise<SavedLocation> {
+  void bootstrapLaunchPermissions()
+  return launchLocationPromise ?? bootstrapLaunchPermissions()
 }
 
 /**
@@ -119,12 +137,6 @@ export async function refreshLaunchLocation(): Promise<SavedLocation> {
   }
 
   return resolveLaunchLocation()
-}
-
-async function runLaunchBootstrap(): Promise<SavedLocation> {
-  const location = await resolveLaunchLocation()
-  await requestLaunchNotifications()
-  return location
 }
 
 async function resolveLaunchLocation(): Promise<SavedLocation> {
@@ -150,7 +162,7 @@ async function resolveLaunchLocationInner(): Promise<SavedLocation> {
       return deniedOrUnavailableLocation(existing)
     }
 
-    const coords = await getDeviceCoordinates({ promptIfNeeded: false })
+    const coords = await getDeviceCoordinates({ promptIfNeeded: false, preferLastKnown: true })
     if (!coords) {
       return deniedOrUnavailableLocation(existing)
     }
@@ -163,6 +175,20 @@ async function resolveLaunchLocationInner(): Promise<SavedLocation> {
         emitLaunchLocation(manual)
         return manual
       }
+    }
+
+    // Same spot as last time: keep the saved name and skip the reverse-geocode round trip.
+    if (
+      existing &&
+      existing.scope !== "city" &&
+      !isLegacyDefaultLocation(existing) &&
+      existing.latitude != null &&
+      existing.longitude != null &&
+      haversineKm(existing.latitude, existing.longitude, coords.latitude, coords.longitude) <=
+        SAME_PLACE_KM
+    ) {
+      emitLaunchLocation(existing)
+      return existing
     }
 
     const place = await resolvePlaceFromCoordinates(coords)

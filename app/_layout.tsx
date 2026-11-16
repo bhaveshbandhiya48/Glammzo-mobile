@@ -168,7 +168,9 @@ export default function RootLayout() {
     return () => clearTimeout(t)
   }, [])
 
-  const showApp = fontsLoaded && splashDone
+  // Mount the app under the brand splash as soon as fonts are in, so Home starts loading
+  // its location, salons and artists while the logo is still showing.
+  const showApp = fontsLoaded
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>

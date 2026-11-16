@@ -1,5 +1,4 @@
 import { formatRatingLabel, formatRupees } from "@/lib/service-pricing"
-import { Image } from "expo-image"
 import { useRouter } from "expo-router"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -19,6 +18,10 @@ import { useFavorites } from "@/context/FavoritesContext"
 import { getSalonCardImages } from "@/data/mocks/salons"
 import type { Salon } from "@/data/types"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { RemoteImage } from "@/components/ui/RemoteImage"
+
+/** Download size for card photos when the card has not been measured yet. */
+const CARD_IMAGE_WIDTH = 320
 
 type Props = {
   salon: Salon
@@ -113,8 +116,9 @@ function CardImageSlider({
   if (!hasMultiple) {
     return (
       <Pressable accessibilityRole="button" onPress={onPress} style={styles.imageFill}>
-        <Image
-          source={{ uri: images[0] }}
+        <RemoteImage
+          uri={images[0]}
+          displayWidth={CARD_IMAGE_WIDTH}
           style={styles.image}
           contentFit="cover"
           accessibilityLabel={`${salonName} photo`}
@@ -161,8 +165,9 @@ function CardImageSlider({
             onPress={handlePress}
             style={{ width: width || undefined, flexGrow: width ? 0 : 1 }}
           >
-            <Image
-              source={{ uri }}
+            <RemoteImage
+              uri={uri}
+              displayWidth={CARD_IMAGE_WIDTH}
               style={[
                 styles.image,
                 width > 0 && height > 0 ? { width, height } : null,

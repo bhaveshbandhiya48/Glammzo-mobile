@@ -8,8 +8,11 @@ type Props = {
   onFinish: () => void
 }
 
-/** Brief brand hold, then fade into the app (no native video — avoids Android release crashes). */
-const SPLASH_VISIBLE_MS = 1_600
+/**
+ * Brief brand hold, then fade into the app (no native video — avoids Android release crashes).
+ * Home is already mounted and loading underneath, so this is kept short.
+ */
+const SPLASH_VISIBLE_MS = 900
 
 /**
  * Full-screen cream splash with logo. Avoids expo-video on the cold-start path:

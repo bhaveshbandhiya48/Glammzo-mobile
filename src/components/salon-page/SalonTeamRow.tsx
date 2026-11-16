@@ -1,4 +1,3 @@
-import { Image } from "expo-image"
 import { ScrollView, StyleSheet, View } from "react-native"
 
 import { GradientFill } from "@/components/home/GradientFill"
@@ -8,6 +7,7 @@ import type { Salon } from "@/data/types"
 import { fontFamily } from "@/theme/tokens"
 
 import { sp } from "./theme"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 
 export function SalonTeamRow({ team }: { team: Salon["team"] }) {
   return (
@@ -19,7 +19,7 @@ export function SalonTeamRow({ team }: { team: Salon["team"] }) {
           <View key={member.id} style={styles.item} accessible accessibilityLabel={`${member.name}, ${member.role}`}>
             <View style={styles.squircle}>
               {photo ? (
-                <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                <RemoteImage uri={photo} displayWidth={64} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
               ) : (
                 <>
                   <GradientFill colors={pastel.gradient} angle={150} radius={22} />

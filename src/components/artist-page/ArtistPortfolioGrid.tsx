@@ -1,10 +1,10 @@
-import { Image } from "expo-image"
 import { Pressable, StyleSheet, View } from "react-native"
 
 import { sp } from "@/components/salon-page/theme"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistPortfolioItem } from "@/lib/artists-api"
 import { fontFamily } from "@/theme/tokens"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 
 const GAP = 8
 const MAX_TILES = 9
@@ -41,7 +41,7 @@ export function ArtistPortfolioGrid({
             onPress={() => onOpen(index)}
             style={({ pressed }) => [styles.tile, { width: tile, height: tile }, pressed && { opacity: 0.88 }]}
           >
-            <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+            <RemoteImage uri={uri} displayWidth={tile} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
             {extra > 0 ? (
               <View style={styles.moreScrim}>
                 <Text style={styles.moreText}>+{extra}</Text>

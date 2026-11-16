@@ -57,12 +57,14 @@ export default function ReviewScreen() {
     staffName?: string | string[]
     kind?: string | string[]
     artistPublicToken?: string | string[]
+    imageUrl?: string | string[]
   }>()
   const appointmentId = firstParam(params.appointmentId)
   const salonName = firstParam(params.salonName)
   const stylist = firstParam(params.staffName)
   const kind = firstParam(params.kind)
   const artistPublicToken = firstParam(params.artistPublicToken)
+  const placePhoto = firstParam(params.imageUrl)
   const isArtist = kind === "artist" || Boolean(artistPublicToken)
 
   const [rating, setRating] = useState(5)
@@ -193,6 +195,7 @@ export default function ReviewScreen() {
         >
           <BookingCard style={styles.placeCard}>
             <PlaceRow
+              imageUrl={placePhoto}
               name={title}
               caption={isArtist ? "Solo artist" : stylist ? `With ${stylist}` : "Salon visit"}
             />

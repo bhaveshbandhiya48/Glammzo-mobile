@@ -108,7 +108,7 @@ import {
   type SavedLocation,
 } from "@/lib/user"
 import {
-  bootstrapLaunchPermissions,
+  bootstrapLaunchLocation,
   markSessionLocationManual,
   subscribeLaunchLocation,
 } from "@/lib/launch-permissions"
@@ -134,6 +134,9 @@ const FILTER_SECTIONS: Array<{ id: FilterSectionId; label: string }> = [
   { id: "radius", label: "Distance" },
   { id: "availability", label: "Availability" },
 ]
+
+/** Longest the pull-to-refresh spinner stays up while the salon list reloads. */
+const REFRESH_SPINNER_MAX_MS = 6_000
 
 export default function ExploreScreen() {
   // Floating bar height + its gap over the safe-area inset; content ends ~16pt above it.
@@ -244,8 +247,10 @@ export default function ExploreScreen() {
 
     const cached = getCatalogSnapshot()
     if (cached.length > 0) {
+      // Show the last catalog right away; the live list replaces it when it arrives.
       setCatalog(cached)
       setCatalogLoading(false)
+      setCatalogReady(true)
     } else {
       setCatalogLoading(true)
     }
@@ -287,8 +292,16 @@ export default function ExploreScreen() {
       })()
 
       void (async () => {
+        // Returning customer: open Home on the last place now; GPS updates it when ready.
+        const existing = await getSavedLocation()
+        if (cancelled) return
+        if (existing) {
+          setSavedLocationState((current) => current ?? existing)
+          setLaunchSettled(true)
+        }
         // First visit: GPS bootstrap. Later visits: keep saved/manual pick for this session.
-        await bootstrapLaunchPermissions()
+        // Only the location: Home doesn't wait for the notification prompt after it.
+        await bootstrapLaunchLocation()
         if (cancelled) return
         const saved = (await getSavedLocation()) ?? DEFAULT_SAVED_LOCATION
         if (!cancelled) {
@@ -369,13 +382,20 @@ export default function ExploreScreen() {
     setRefreshing(true)
     // Bump first so artists + next booking refetch in parallel with the catalog.
     setHomeRefreshKey((key) => key + 1)
+    // Offers and the greeting update in place when they land; the spinner doesn't wait on them.
+    void loadOfferBanners().catch(() => {})
+    void getSignedInDisplayName()
+      .then((name) => {
+        if (name) setUsername(name)
+      })
+      .catch(() => {})
     try {
-      const [, , name] = await Promise.all([
+      // The spinner follows the salon list, capped so a slow network can't hold it for the
+      // full request timeout. A late list still replaces the current one when it arrives.
+      await Promise.race([
         loadCatalog(true),
-        loadOfferBanners().catch(() => {}),
-        getSignedInDisplayName().catch(() => null),
+        new Promise<void>((resolve) => setTimeout(resolve, REFRESH_SPINNER_MAX_MS)),
       ])
-      if (name) setUsername(name)
     } finally {
       setRefreshing(false)
       refreshLock.current = false

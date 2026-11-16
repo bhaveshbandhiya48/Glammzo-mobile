@@ -1,7 +1,7 @@
-import { Image } from "expo-image"
 import { StatusBar } from "expo-status-bar"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Pressable,
@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 import { Icon } from "@/components/ui/Icon"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 import { Text } from "@/components/ui/Text"
 import { colors, radii, spacing } from "@/theme/tokens"
 
@@ -148,10 +149,15 @@ export function SalonGalleryLightbox({
             }}
             renderItem={({ item, index: itemIndex }) => (
               <View style={[styles.slide, { width }]}>
-                <Image
-                  source={{ uri: item }}
+                {/* Shows until the photo paints over it. */}
+                <ActivityIndicator color="rgba(255,255,255,0.7)" style={styles.loader} />
+                <RemoteImage
+                  uri={item}
+                  // Same size as the page's hero, so a photo opened from there is already cached.
+                  displayWidth={width}
                   style={styles.image}
                   contentFit="contain"
+                  transition={120}
                   accessibilityLabel={`${salonName} gallery photo ${itemIndex + 1}`}
                 />
               </View>
@@ -232,6 +238,9 @@ const styles = StyleSheet.create({
   image: {
     width: "100%",
     height: "100%",
+  },
+  loader: {
+    position: "absolute",
   },
   navBtn: {
     position: "absolute",

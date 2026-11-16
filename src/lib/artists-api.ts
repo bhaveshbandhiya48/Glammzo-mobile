@@ -95,6 +95,11 @@ export type PublicArtistService = {
   price: number
   locationMode: "studio" | "client_home" | "both"
   homeVisitPriceOverride: number | null
+  /** Two or more: the customer picks one. Each has its own price and time. */
+  priceOptions?: Array<{ id: string; name: string; price: number; durationMinutes: number }>
+  /** Nails / Mehendi: the price (or each option price) is for one finger or one hand. */
+  pricingUnit?: "per_finger" | "per_hand" | null
+  minQuantity?: number | null
   /** Discounted studio list price when a live auto-offer applies. */
   offerPrice?: number | null
   offerDealLabel?: string | null
@@ -448,6 +453,8 @@ export async function fetchArtistSlots(input: {
   locationType: ArtistLocationType
   lat?: number
   lng?: number
+  /** `svc:option:qty,…`: picked price options and finger / hand counts. */
+  choices?: string
   signal?: AbortSignal
 }) {
   const ids = input.serviceIds.map((id) => id.trim()).filter(Boolean)
@@ -457,6 +464,7 @@ export async function fetchArtistSlots(input: {
   })
   if (ids.length === 1) params.set("serviceId", ids[0]!)
   else params.set("serviceIds", ids.join(","))
+  if (input.choices) params.set("choices", input.choices)
   if (input.lat != null && input.lng != null) {
     params.set("lat", String(input.lat))
     params.set("lng", String(input.lng))
@@ -508,6 +516,8 @@ export async function cancelArtistPublicBooking(input: {
 export async function createArtistBookingWithRewards(input: {
   slug: string
   serviceIds: string[]
+  /** Price option and finger / hand count per service; the server prices them. */
+  serviceChoices?: Array<{ serviceId: string; priceOptionId?: string | null; quantity?: number | null }>
   startAt: string
   locationType: ArtistLocationType
   address?: string

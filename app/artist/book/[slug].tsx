@@ -73,6 +73,12 @@ import {
   type PromoCashbackClaim,
 } from "@/lib/promo-api"
 import { formatRupees } from "@/lib/service-pricing"
+import {
+  artistPriceLine,
+  defaultArtistChoice,
+  serializeArtistChoices,
+  type ArtistServiceChoice,
+} from "@/lib/artist-service-pricing"
 import { getAccessToken } from "@/lib/session"
 import {
   getSavedLocation,
@@ -147,6 +153,8 @@ export default function ArtistBookScreen() {
   const [loading, setLoading] = useState(true)
 
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /** Price option and finger / hand count per service (cheapest option, both hands by default). */
+  const [choices, setChoices] = useState<Record<string, ArtistServiceChoice>>({})
   const [locationType, setLocationType] = useState<ArtistLocationType>("studio")
   const [address, setAddress] = useState("")
   const [landmark, setLandmark] = useState("")
@@ -382,6 +390,13 @@ export default function ArtistBookScreen() {
     if (!artist) return [] as PublicArtistService[]
     return artist.services.filter((s) => selectedIds.includes(s.id))
   }, [artist, selectedIds])
+  const choiceFor = (s: PublicArtistService) => choices[s.id] ?? defaultArtistChoice(s)
+  const pickedChoices = selectedServices.map(choiceFor)
+  const choicesKey = serializeArtistChoices(pickedChoices)
+  const setChoice = (s: PublicArtistService, patch: Partial<ArtistServiceChoice>) => {
+    setChoices((all) => ({ ...all, [s.id]: { ...(all[s.id] ?? defaultArtistChoice(s)), ...patch } }))
+    setSlot(null)
+  }
 
   const locationScope = selectedServices.length > 0 ? selectedServices : artist?.services ?? []
   const serviceAllowsStudio = (s: PublicArtistService) =>
@@ -450,6 +465,7 @@ export default function ArtistBookScreen() {
       locationType,
       lat: pin?.lat,
       lng: pin?.lng,
+      choices: choicesKey || undefined,
       signal: controller.signal,
     })
       .then((data) => {
@@ -476,6 +492,7 @@ export default function ArtistBookScreen() {
   }, [
     artist,
     selectedIds,
+    choicesKey,
     date,
     locationType,
     pin?.lat,
@@ -639,6 +656,7 @@ export default function ArtistBookScreen() {
       const res = await createArtistBookingWithRewards({
         slug: artist.slug,
         serviceIds: bookedIds,
+        ...(choicesKey ? { serviceChoices: pickedChoices } : {}),
         startAt: slot,
         locationType,
         address: address.trim(),
@@ -662,7 +680,12 @@ export default function ArtistBookScreen() {
         slot: formatSlot(res.booking.startsAt, timezone),
         name: name.trim(),
         date: dateKey,
-        services: selectedServices.map((s) => s.name).join(" · "),
+        services: selectedServices
+          .map((s) => {
+            const detail = artistPriceLine(s, choiceFor(s)).detail
+            return detail ? `${s.name} (${detail})` : s.name
+          })
+          .join(" · "),
         visitType: locationType === "client_home" ? "Home visit" : "Studio visit",
         area: [artist.area, artist.city].filter(Boolean).join(", "),
         providerName: artist.displayName,
@@ -781,7 +804,7 @@ export default function ArtistBookScreen() {
 
   const whereLine = [artist.area, artist.city].filter(Boolean).join(", ")
   const servicesSubtotal = selectedServices.reduce(
-    (sum, s) => sum + artistServiceUnitPrice(s, "studio"),
+    (sum, s) => sum + artistPriceLine(s, choiceFor(s), artistServiceUnitPrice(s, "studio")).total,
     0,
   )
   const visitWhereLabel =
@@ -882,6 +905,8 @@ export default function ArtistBookScreen() {
                       isLast={index === list.length - 1}
                       onOpenDetail={() => setDetailService(s)}
                       onToggle={() => toggleService(s)}
+                      choice={choiceFor(s)}
+                      onChoiceChange={(patch) => setChoice(s, patch)}
                     />
                   ))}
                 </View>
@@ -1054,7 +1079,14 @@ export default function ArtistBookScreen() {
                   caption={whereLine || "Solo artist"}
                 />
                 <Hairline />
-                <VisitFact icon="sparkles-outline" text={selectedServices.map((s) => s.name).join(" · ") || "Services"} />
+                <VisitFact icon="sparkles-outline" text={
+                    selectedServices
+                      .map((s) => {
+                        const detail = artistPriceLine(s, choiceFor(s)).detail
+                        return detail ? `${s.name} (${detail})` : s.name
+                      })
+                      .join(" · ") || "Services"
+                  } />
                 <VisitFact
                   icon="calendar-outline"
                   text={`${date ? formatDayChip(date) : "—"}${selectedSlotLabel ? ` · ${selectedSlotLabel}` : ""}`}

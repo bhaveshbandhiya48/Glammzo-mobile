@@ -496,7 +496,17 @@ export async function fetchSalons(options?: {
   if (!options?.force && cacheFresh() && cache) {
     return { salons: cache.salons, source: cache.source, fromCache: false }
   }
+  // Launch can ask for the catalog from several places at once: share one request.
+  if (salonsInFlight) return salonsInFlight
+  salonsInFlight = fetchSalonsFromNetwork().finally(() => {
+    salonsInFlight = null
+  })
+  return salonsInFlight
+}
 
+let salonsInFlight: Promise<FetchSalonsResult> | null = null
+
+async function fetchSalonsFromNetwork(): Promise<FetchSalonsResult> {
   try {
     const payload = await apiFetch<unknown>("/api/salons", { auth: false })
     if (!Array.isArray(payload)) {

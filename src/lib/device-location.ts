@@ -105,11 +105,20 @@ async function ensureLocationServicesDetailed(
 async function readCoordinates(options: {
   promptSettingsDialog: boolean
   timeoutMs: number
+  preferLastKnown?: boolean
 }): Promise<{ latitude: number; longitude: number } | null> {
   const recent = await Location.getLastKnownPositionAsync({
     maxAge: LAST_KNOWN_MAX_AGE_MS,
     requiredAccuracy: 1000,
   }).catch(() => null)
+
+  // A fix from the last few minutes is close enough to pick the area, and costs no wait.
+  if (options.preferLastKnown && recent) {
+    return {
+      latitude: recent.coords.latitude,
+      longitude: recent.coords.longitude,
+    }
+  }
 
   try {
     const current = await withTimeout(
@@ -147,6 +156,8 @@ async function readCoordinates(options: {
 export async function getDeviceCoordinates(options?: {
   promptIfNeeded?: boolean
   timeoutMs?: number
+  /** Use a recent last-known fix instead of waiting for a new one (app launch). */
+  preferLastKnown?: boolean
 }): Promise<{ latitude: number; longitude: number } | null> {
   const prompt = options?.promptIfNeeded ?? false
   const granted = await ensureForegroundLocationPermission(prompt)
@@ -160,6 +171,7 @@ export async function getDeviceCoordinates(options?: {
     promptSettingsDialog: prompt && !services.justEnabled,
     timeoutMs:
       options?.timeoutMs ?? (services.justEnabled ? FRESH_GPS_TIMEOUT_MS : GPS_TIMEOUT_MS),
+    preferLastKnown: options?.preferLastKnown,
   })
 }
 

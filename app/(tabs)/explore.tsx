@@ -108,7 +108,7 @@ import {
   type SavedLocation,
 } from "@/lib/user"
 import {
-  bootstrapLaunchPermissions,
+  bootstrapLaunchLocation,
   markSessionLocationManual,
   subscribeLaunchLocation,
 } from "@/lib/launch-permissions"
@@ -244,8 +244,10 @@ export default function ExploreScreen() {
 
     const cached = getCatalogSnapshot()
     if (cached.length > 0) {
+      // Show the last catalog right away; the live list replaces it when it arrives.
       setCatalog(cached)
       setCatalogLoading(false)
+      setCatalogReady(true)
     } else {
       setCatalogLoading(true)
     }
@@ -287,8 +289,16 @@ export default function ExploreScreen() {
       })()
 
       void (async () => {
+        // Returning customer: open Home on the last place now; GPS updates it when ready.
+        const existing = await getSavedLocation()
+        if (cancelled) return
+        if (existing) {
+          setSavedLocationState((current) => current ?? existing)
+          setLaunchSettled(true)
+        }
         // First visit: GPS bootstrap. Later visits: keep saved/manual pick for this session.
-        await bootstrapLaunchPermissions()
+        // Only the location: Home doesn't wait for the notification prompt after it.
+        await bootstrapLaunchLocation()
         if (cancelled) return
         const saved = (await getSavedLocation()) ?? DEFAULT_SAVED_LOCATION
         if (!cancelled) {

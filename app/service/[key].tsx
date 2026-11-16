@@ -26,7 +26,7 @@ import {
 import { sortExploreSalons } from "@/lib/explore-filters"
 import { parseHomeAudience } from "@/lib/home-audience"
 import { salonsForTile } from "@/lib/home-salon-info"
-import { bootstrapLaunchPermissions } from "@/lib/launch-permissions"
+import { bootstrapLaunchLocation } from "@/lib/launch-permissions"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { getServiceTile, type HomeAudience } from "@/lib/service-tiles"
 import { isGetQuotesEnabled } from "@/lib/get-quotes"
@@ -78,7 +78,7 @@ export default function ServiceScreen() {
     useCallback(() => {
       let active = true
       void (async () => {
-        await bootstrapLaunchPermissions()
+        await bootstrapLaunchLocation()
         const saved = (await getSavedLocation()) ?? DEFAULT_SAVED_LOCATION
         if (!active) return
         setLocation(saved)

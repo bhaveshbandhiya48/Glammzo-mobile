@@ -1,4 +1,3 @@
-import { Image } from "expo-image"
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native"
 
 import { ArtistLevelBadge } from "@/components/artists/ArtistLevelBadge"
@@ -11,6 +10,7 @@ import {
 import type { ArtistCardData } from "@/lib/artists-api"
 import { formatRupees } from "@/lib/service-pricing"
 import { colors, radii, shadows, spacing } from "@/theme/tokens"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -93,7 +93,7 @@ export function ArtistCard({
         ]}
       >
         {cover ? (
-          <Image source={{ uri: cover }} style={styles.photoImage} contentFit="cover" transition={150} />
+          <RemoteImage uri={cover} displayWidth={grid ? 200 : 320} style={styles.photoImage} contentFit="cover" transition={150} />
         ) : (
           <View style={[styles.photoImage, styles.photoFallback]}>
             <Text variant={grid ? "bodyStrong" : "title"} color={colors.textMuted}>
@@ -122,8 +122,9 @@ export function ArtistCard({
             ]}
           >
             {artist.profilePhotoUrl ? (
-              <Image
-                source={{ uri: artist.profilePhotoUrl }}
+              <RemoteImage
+                uri={artist.profilePhotoUrl}
+                displayWidth={avatarSize}
                 style={{
                   width: avatarSize,
                   height: avatarSize,

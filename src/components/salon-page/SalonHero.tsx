@@ -1,4 +1,3 @@
-import { Image } from "expo-image"
 import { useState } from "react"
 import {
   NativeScrollEvent,
@@ -14,6 +13,7 @@ import { GradientFill } from "@/components/home/GradientFill"
 import { pastelForName } from "@/components/home/PhotoFallback"
 import { Text } from "@/components/ui/Text"
 import { fontFamily } from "@/theme/tokens"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 
 export const HERO_HEIGHT = 300
 
@@ -90,7 +90,14 @@ export function SalonHero({ slides, name, width, onOpenPhoto }: Props) {
                 onPress={() => onOpenPhoto(slideIndex)}
                 style={{ width, height: HERO_HEIGHT }}
               >
-                <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+                <RemoteImage
+                  uri={uri}
+                  displayWidth={width}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  transition={150}
+                  priority={slideIndex === 0 ? "high" : "normal"}
+                />
               </Pressable>
             ))}
           </ScrollView>

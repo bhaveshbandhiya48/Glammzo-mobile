@@ -1,16 +1,17 @@
-import { Image } from "expo-image"
-import { Pressable, StyleSheet, View } from "react-native"
+import { Pressable, StyleSheet, useWindowDimensions, View } from "react-native"
 
 import { Text } from "@/components/ui/Text"
 import { fontFamily } from "@/theme/tokens"
 
 import { sp } from "./theme"
+import { RemoteImage } from "@/components/ui/RemoteImage"
 
 const ROW = 90
 const GAP = 8
 
 /** One large tile (2fr, two rows) plus up to two small tiles; the last shows +N. */
 export function SalonPhotosGrid({ photos, onOpen }: { photos: string[]; onOpen: (index: number) => void }) {
+  const { width } = useWindowDimensions()
   const [first, ...rest] = photos
   if (!first) return null
   const small = rest.slice(0, 2)
@@ -18,7 +19,7 @@ export function SalonPhotosGrid({ photos, onOpen }: { photos: string[]; onOpen: 
 
   return (
     <View style={styles.grid}>
-      <Tile uri={first} index={0} total={photos.length} onOpen={onOpen} style={styles.big} />
+      <Tile uri={first} index={0} total={photos.length} onOpen={onOpen} style={styles.big} displayWidth={width * 0.66} />
       {small.length > 0 ? (
         <View style={styles.side}>
           {small.map((uri, i) => (
@@ -30,6 +31,7 @@ export function SalonPhotosGrid({ photos, onOpen }: { photos: string[]; onOpen: 
               more={i === small.length - 1 && more > 0 ? more : 0}
               onOpen={onOpen}
               style={styles.small}
+              displayWidth={width * 0.33}
             />
           ))}
         </View>
@@ -45,8 +47,10 @@ function Tile({
   more = 0,
   onOpen,
   style,
+  displayWidth,
 }: {
   uri: string
+  displayWidth: number
   index: number
   total: number
   more?: number
@@ -60,7 +64,7 @@ function Tile({
       onPress={() => onOpen(index)}
       style={[styles.tile, style]}
     >
-      <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
+      <RemoteImage uri={uri} displayWidth={displayWidth} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} />
       {more > 0 ? (
         <View style={styles.moreScrim}>
           <Text style={styles.moreText}>+{more}</Text>

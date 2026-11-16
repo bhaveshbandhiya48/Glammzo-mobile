@@ -3,6 +3,7 @@ import { useCallback, useState } from "react"
 import { Linking, Pressable, StyleSheet, View } from "react-native"
 
 import { GradientFill } from "@/components/home/GradientFill"
+import { PayMethodSheet } from "@/components/payments/PayMethodSheet"
 import {
   Card,
   Field,
@@ -19,7 +20,9 @@ import { Icon } from "@/components/ui/Icon"
 import { SkeletonBone } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
-import { CRM_URL } from "@/lib/config"
+import { fetchPaymentKeyId, isInAppPaymentAvailable, loadPaymentOptions, type UpiApp } from "@/lib/advance-payment"
+import { giftCardWebPageUrl, payGiftCardByUpi } from "@/lib/gift-card-payment"
+import { loadSavedPayMethod, savePayMethod, type PaySelection, type SavedPayMethod } from "@/lib/pay-method-memory"
 import { formatRupees } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
 import { createGiftCard, fetchGiftCards, type GiftCardSummary } from "@/lib/wallet-api"
@@ -29,10 +32,6 @@ const AMOUNTS = [500, 1000, 2000, 5000]
 const MIN = 500
 const MAX = 10000
 const GREY_CARD = ["#f6f6f6", "#e9e9e9"]
-
-function payUrl(token: string) {
-  return `${CRM_URL}/pay/gift/${encodeURIComponent(token)}`
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
@@ -56,6 +55,12 @@ export default function GiftCardsScreen() {
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  /** The card being paid for while "Pay using" is open. */
+  const [payToken, setPayToken] = useState<string | null>(null)
+  const [optionsLoading, setOptionsLoading] = useState(false)
+  const [upiApps, setUpiApps] = useState<UpiApp[]>([])
+  const [lastUsed, setLastUsed] = useState<SavedPayMethod | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -87,22 +92,72 @@ export default function GiftCardsScreen() {
   const amountOk = Number.isFinite(chosen) && chosen >= MIN && chosen <= MAX
   const phoneOk = /^[6-9]\d{9}$/.test(digits)
 
+  /** UPI apps open straight on their PIN screen; cards, net banking and older builds use the web page. */
+  async function startPayment(token: string) {
+    setError(null)
+    setNotice(null)
+    if (!isInAppPaymentAvailable()) {
+      await Linking.openURL(giftCardWebPageUrl(token))
+      return
+    }
+    setPayToken(token)
+    if (upiApps.length > 0) return
+    setOptionsLoading(true)
+    try {
+      const [options, saved] = await Promise.all([fetchPaymentKeyId().then(loadPaymentOptions), loadSavedPayMethod()])
+      setUpiApps(options.upiApps)
+      setLastUsed(saved)
+    } catch {
+      // The sheet still offers the web page.
+    } finally {
+      setOptionsLoading(false)
+    }
+  }
+
+  async function pay(token: string, selection: PaySelection) {
+    setPayToken(null)
+    if (selection.kind !== "upi") {
+      await Linking.openURL(giftCardWebPageUrl(token))
+      return
+    }
+    setBusy(true)
+    try {
+      const outcome = await payGiftCardByUpi({ token, appCode: selection.app.packageName })
+      if (!outcome) {
+        await Linking.openURL(giftCardWebPageUrl(token))
+      } else if (outcome.kind === "paid") {
+        void savePayMethod(selection)
+        setNotice("Paid. The gift card is in their Glammzo wallet.")
+      } else if (outcome.kind === "not_paid") {
+        setError(outcome.message || "The payment wasn't completed. You can try again.")
+      } else {
+        setNotice("We're confirming your payment. The card will show as Active in a minute.")
+      }
+    } finally {
+      setBusy(false)
+      void load()
+    }
+  }
+
   async function buy() {
     setBusy(true)
     setError(null)
+    setNotice(null)
+    let token: string
     try {
-      const token = await createGiftCard({ amountRupees: chosen, recipientPhone: digits, recipientName: name, message })
-      await Linking.openURL(payUrl(token))
-      setPhone("")
-      setName("")
-      setMessage("")
-      setCustom("")
-      void load()
+      token = await createGiftCard({ amountRupees: chosen, recipientPhone: digits, recipientName: name, message })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't start the gift card.")
-    } finally {
       setBusy(false)
+      return
     }
+    setPhone("")
+    setName("")
+    setMessage("")
+    setCustom("")
+    setBusy(false)
+    void load()
+    await startPayment(token)
   }
 
   const hero = (
@@ -165,7 +220,7 @@ export default function GiftCardsScreen() {
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Pay ${formatRupees(card.amountRupees)} for this gift card`}
-                        onPress={() => void Linking.openURL(payUrl(card.token!))}
+                        onPress={() => void startPayment(card.token!)}
                         style={({ pressed }) => [ui.blackPill, styles.payPill, pressed && ui.pressed]}
                       >
                         <Text style={ui.blackPillText}>Pay</Text>
@@ -229,6 +284,7 @@ export default function GiftCardsScreen() {
           multiline
         />
         {error ? <Text style={styles.error}>{error}</Text> : null}
+        {notice ? <Text style={styles.notice}>{notice}</Text> : null}
         <PrimaryPill
           label={amountOk ? `Pay ${formatRupees(chosen)}` : "Pay"}
           loading={busy}
@@ -236,10 +292,22 @@ export default function GiftCardsScreen() {
           onPress={() => void buy()}
         />
         <Text style={styles.note}>
-          You&apos;ll pay on Glammzo&apos;s secure page (UPI, card or net banking). Gift cards can&apos;t be refunded once
-          paid.
+          Pay in your UPI app, or by card or net banking on Glammzo&apos;s secure page. Gift cards can&apos;t be refunded
+          once paid.
         </Text>
       </Card>
+      <PayMethodSheet
+        visible={payToken != null}
+        loading={optionsLoading}
+        upiApps={upiApps}
+        banks={[]}
+        selected={null}
+        lastUsed={lastUsed}
+        onPick={(selection) => {
+          if (payToken) void pay(payToken, selection)
+        }}
+        onClose={() => setPayToken(null)}
+      />
     </ProfileSubScreen>
   )
 }
@@ -269,6 +337,7 @@ const styles = StyleSheet.create({
   fieldLabel: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 17, color: sp.text, marginBottom: -6 },
   amounts: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   amount: { height: 36, flexGrow: 1, minWidth: "22%" },
+  notice: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#1e7b4a" },
   error: { fontFamily: fontFamily.medium, fontSize: 13, lineHeight: 18, color: "#c0392b" },
   note: { fontFamily: fontFamily.regular, fontSize: 12, lineHeight: 17, color: MUTED },
 })

@@ -411,17 +411,20 @@ export function iosUpiLink(link: string, appCode: string) {
 
 type IntentStart = { kind: "link"; link: string } | { kind: "unsupported" } | { kind: "error"; message: string }
 
-/** Asks the server for a `upi://pay` link for this order. Servers without the route answer "unsupported". */
-async function startUpiIntent(token: string, orderId: string): Promise<IntentStart> {
+/**
+ * Asks the server for a `upi://pay` link for this order. Servers without the route answer "unsupported".
+ * `url` is the POST endpoint that takes { orderId }.
+ */
+async function startUpiIntent(url: string, orderId: string): Promise<IntentStart> {
   try {
-    const response = await fetch(`${advanceEndpoint(token)}/upi`, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/json" },
       body: JSON.stringify({ orderId }),
     })
     const data = (await response.json().catch(() => ({}))) as { link?: string; error?: string }
     if (response.ok && data.link?.startsWith("upi://")) return { kind: "link", link: data.link }
-    // A booking problem (hold ended, already paid) is the client's answer; anything else falls back.
+    // An order problem (hold ended, already paid) is the client's answer; anything else falls back.
     if (response.status === 400 && data.error) return { kind: "error", message: data.error }
     return { kind: "unsupported" }
   } catch {
@@ -445,32 +448,40 @@ function waitForReturn(): Promise<void> {
   })
 }
 
+/** True when this phone can open a chosen UPI app directly (our Android launcher, or iOS with a known app). */
+export function canPayByUpiIntent(appCode: string) {
+  if (Platform.OS === "ios") return Boolean(IOS_UPI_PREFIXES[appCode])
+  return upiLauncher() != null
+}
+
 /**
  * Opens the client's UPI app straight on the PIN screen, with no Razorpay screen first. The server
  * then confirms the payment with Razorpay. Returns null when this can't be done here, so the caller
- * uses Razorpay's payment screen instead.
+ * uses another way to pay instead. Shared by advances and gift cards.
  */
-async function payByUpiIntent(
-  token: string,
-  order: AdvanceOrder,
-  appCode: string,
-  onConfirming?: () => void,
-): Promise<PayOutcome | null> {
+export async function payWithUpiIntent(input: {
+  /** The server's POST endpoint that turns { orderId } into a `upi://pay` link. */
+  upiUrl: string
+  orderId: string
+  appCode: string
+  /** Polls the server (which asks Razorpay) every 2 seconds, up to `attempts` times. */
+  waitForStatus: (attempts: number) => Promise<AdvanceStatus>
+  onConfirming?: () => void
+}): Promise<PayOutcome | null> {
+  if (!canPayByUpiIntent(input.appCode)) return null
   const android = upiLauncher()
-  if (!android && Platform.OS !== "ios") return null
-  if (Platform.OS === "ios" && !IOS_UPI_PREFIXES[appCode]) return null
 
-  const started = await startUpiIntent(token, order.orderId)
+  const started = await startUpiIntent(input.upiUrl, input.orderId)
   if (started.kind === "unsupported") return null
   if (started.kind === "error") return { kind: "not_paid", message: started.message }
 
   let clientGaveUp = false
   try {
     if (android) {
-      const result = await android.openUpiApp(started.link, appCode)
+      const result = await android.openUpiApp(started.link, input.appCode)
       clientGaveUp = upiAppSaysNotPaid(result)
     } else {
-      const url = iosUpiLink(started.link, appCode)
+      const url = iosUpiLink(started.link, input.appCode)
       if (!url) return null
       const back = waitForReturn()
       await Linking.openURL(url)
@@ -484,14 +495,24 @@ async function payByUpiIntent(
     }
   }
 
-  onConfirming?.()
+  input.onConfirming?.()
   // UPI apps hand back before the bank has always answered, so give it up to about 30 seconds.
   // If the app says the client backed out, a short check is enough before letting them try again.
-  const status = await waitForAdvanceStatus(token, clientGaveUp ? 2 : 15)
+  const status = await input.waitForStatus(clientGaveUp ? 2 : 15)
   if (status === "failed" || (clientGaveUp && status === "pending")) {
     return { kind: "not_paid", message: "The payment wasn't completed. You can try again." }
   }
   return fromStatus(status) ?? { kind: "checking" }
+}
+
+function payByUpiIntent(token: string, order: AdvanceOrder, appCode: string, onConfirming?: () => void) {
+  return payWithUpiIntent({
+    upiUrl: `${advanceEndpoint(token)}/upi`,
+    orderId: order.orderId,
+    appCode,
+    waitForStatus: (attempts) => waitForAdvanceStatus(token, attempts),
+    onConfirming,
+  })
 }
 
 /**

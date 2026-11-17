@@ -1,5 +1,5 @@
 import type { Salon } from "@/data/types"
-import { isUnisexSalonBusiness } from "@/lib/gender-audience"
+import { isUnisexSalonBusiness, salonMatchesGenderAudience } from "@/lib/gender-audience"
 import { matchesTile, tilesMatching, type HomeAudience, type ServiceTile } from "@/lib/service-tiles"
 
 /**
@@ -62,6 +62,7 @@ export function salonsForTile(
     )
     if (matching.length === 0) return false
     if (!audience) return true
+    if (!salonMatchesGenderAudience(salon, audience)) return false
     return matching.some((service) => !service.genderAudience || service.genderAudience === audience)
   })
 }

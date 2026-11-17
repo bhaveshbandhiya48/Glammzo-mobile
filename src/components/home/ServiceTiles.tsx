@@ -6,7 +6,7 @@ import { GradientFill } from "@/components/home/GradientFill"
 import { BottomSheet } from "@/components/ui/BottomSheet"
 import { Text } from "@/components/ui/Text"
 import { fontFamily } from "@/theme/tokens"
-import { SERVICE_TILES, homeTiles, type HomeAudience, type ServiceTile } from "@/lib/service-tiles"
+import { audienceTiles, homeTiles, type HomeAudience, type ServiceTile } from "@/lib/service-tiles"
 
 const TILE = 72
 
@@ -85,17 +85,20 @@ export function ServiceTilesSection({
 /** Sheet with all 12 tiles. */
 export function AllServicesSheet({
   visible,
+  audience,
   onClose,
   onPressTile,
 }: {
   visible: boolean
+  /** Only this audience's services are listed. */
+  audience: HomeAudience
   onClose: () => void
   onPressTile: (tile: ServiceTile) => void
 }) {
   return (
     <BottomSheet visible={visible} title="All services" onClose={onClose}>
       <View style={[styles.grid, styles.sheetGrid]}>
-        {SERVICE_TILES.map((tile) => (
+        {audienceTiles(audience).map((tile) => (
           <ServiceTileButton
             key={tile.key}
             tile={tile}

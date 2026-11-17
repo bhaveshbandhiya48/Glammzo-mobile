@@ -140,7 +140,7 @@ export function HomeV4({
         </>
       ) : null}
 
-      <AllServicesSheet visible={allOpen} onClose={() => setAllOpen(false)} onPressTile={openTile} />
+      <AllServicesSheet visible={allOpen} audience={audience} onClose={() => setAllOpen(false)} onPressTile={openTile} />
     </View>
   )
 }

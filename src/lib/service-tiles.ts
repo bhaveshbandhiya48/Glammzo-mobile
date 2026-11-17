@@ -165,10 +165,22 @@ export function getServiceTile(key: string | null | undefined): ServiceTile | un
   return BY_KEY.get(key as ServiceTileKey)
 }
 
-/** Home grid order (7 tiles, then "All services"). */
+/** Home grid order (7 tiles, then "All services"). Each list holds only that audience's services. */
 export const HOME_TILE_ORDER: Record<HomeAudience, ServiceTileKey[]> = {
   women: ["haircut", "hair-colour", "facial", "makeup", "bridal", "nails", "spa"],
-  men: ["haircut", "beard", "hair-colour", "facial", "spa", "waxing", "nails"],
+  men: ["haircut", "beard", "hair-colour", "facial", "spa", "waxing", "threading"],
+}
+
+/** "All services" sheet per audience, in SERVICE_TILES order. Men never see makeup, bridal, nails, mehendi or lashes; women never see beard. */
+export const AUDIENCE_TILE_KEYS: Record<HomeAudience, ServiceTileKey[]> = {
+  women: ["haircut", "hair-colour", "facial", "makeup", "bridal", "waxing", "threading", "nails", "mehendi", "spa", "lashes"],
+  men: ["haircut", "hair-colour", "facial", "waxing", "threading", "spa", "beard"],
+}
+
+export function audienceTiles(audience: HomeAudience): ServiceTile[] {
+  return AUDIENCE_TILE_KEYS[audience]
+    .map((key) => BY_KEY.get(key))
+    .filter((tile): tile is ServiceTile => tile != null)
 }
 
 export function homeTiles(audience: HomeAudience): ServiceTile[] {

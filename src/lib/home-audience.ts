@@ -7,6 +7,8 @@ import { getConsumerProfile } from "@/lib/user"
 const STORAGE_KEY = "glammzo_home_audience_v1"
 
 let memo: HomeAudience | null = null
+/** Every mounted switch and list, so a change on Home also narrows Explore lists right away. */
+const listeners = new Set<(value: HomeAudience) => void>()
 
 export function parseHomeAudience(value: unknown): HomeAudience | null {
   return value === "women" || value === "men" ? value : null
@@ -35,11 +37,18 @@ export function useHomeAudience(): [HomeAudience, (next: HomeAudience) => void] 
   const [audience, setAudience] = useState<HomeAudience>(memo ?? "women")
 
   useEffect(() => {
+    listeners.add(setAudience)
+    return () => {
+      listeners.delete(setAudience)
+    }
+  }, [])
+
+  useEffect(() => {
     if (memo) return
     let cancelled = false
     void loadHomeAudience().then((value) => {
       memo = value
-      if (!cancelled) setAudience(value)
+      if (!cancelled) listeners.forEach((listener) => listener(value))
     })
     return () => {
       cancelled = true
@@ -48,7 +57,7 @@ export function useHomeAudience(): [HomeAudience, (next: HomeAudience) => void] 
 
   function update(next: HomeAudience) {
     memo = next
-    setAudience(next)
+    listeners.forEach((listener) => listener(next))
     void AsyncStorage.setItem(STORAGE_KEY, next).catch(() => undefined)
   }
 

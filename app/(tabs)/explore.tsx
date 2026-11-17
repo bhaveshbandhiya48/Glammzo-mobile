@@ -112,6 +112,8 @@ import {
   markSessionLocationManual,
   subscribeLaunchLocation,
 } from "@/lib/launch-permissions"
+import { salonMatchesGenderAudience } from "@/lib/gender-audience"
+import { useHomeAudience } from "@/lib/home-audience"
 import { registerPushTokenWithServer } from "@/lib/push"
 import {
   fetchGlammzoOfferBanners,
@@ -426,11 +428,15 @@ export default function ExploreScreen() {
     [catalog, savedLocation, locationMode],
   )
 
+  // The Home Women / Men switch narrows every salon list and the map.
+  const [audience] = useHomeAudience()
   const scopedFiltered = useMemo(() => {
-    return filterExploreSalons(locationResult.salons, filters, {
-      query: searchQuery,
-    })
-  }, [filters, locationResult.salons, searchQuery])
+    return filterExploreSalons(
+      locationResult.salons.filter((salon) => salonMatchesGenderAudience(salon, audience)),
+      filters,
+      { query: searchQuery },
+    )
+  }, [audience, filters, locationResult.salons, searchQuery])
 
   const salons = useMemo(
     () => sortExploreSalons(scopedFiltered, filters.sort),
@@ -442,11 +448,13 @@ export default function ExploreScreen() {
     const withDistance = catalog.map((salon) =>
       withSalonDistanceFromLocation(salon, savedLocation),
     )
-    const filtered = filterExploreSalons(withDistance, filters, {
-      query: searchQuery,
-    })
+    const filtered = filterExploreSalons(
+      withDistance.filter((salon) => salonMatchesGenderAudience(salon, audience)),
+      filters,
+      { query: searchQuery },
+    )
     return sortExploreSalons(filtered, filters.sort)
-  }, [catalog, filters, savedLocation, searchQuery])
+  }, [audience, catalog, filters, savedLocation, searchQuery])
 
   const mapArtists = useMemo(
     () =>

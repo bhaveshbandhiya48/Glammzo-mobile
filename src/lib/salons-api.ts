@@ -46,6 +46,7 @@ type WebSalon = {
   isFeatured?: unknown
   is_featured?: unknown
   businessType?: unknown
+  salonAudience?: unknown
   isOpenNow?: unknown
   priceFrom?: unknown
   shortDescription?: unknown
@@ -373,6 +374,10 @@ export function mapWebSalonToMobile(raw: WebSalon): Salon | null {
       raw.isFeatured === true ||
       raw.is_featured === true,
     businessType,
+    salonAudience:
+      raw.salonAudience === "men" || raw.salonAudience === "women" || raw.salonAudience === "unisex"
+        ? raw.salonAudience
+        : undefined,
     isOpenNow: asBoolean(raw.isOpenNow, true),
     priceFrom: asNumber(raw.priceFrom, services[0]?.price ?? 0),
     shortDescription,

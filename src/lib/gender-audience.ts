@@ -1,4 +1,4 @@
-import type { SalonPackage, SalonService } from "@/data/types"
+import type { Salon, SalonPackage, SalonService } from "@/data/types"
 
 export const SERVICE_GENDER_AUDIENCES = ["men", "women"] as const
 export type ServiceGenderAudience = (typeof SERVICE_GENDER_AUDIENCES)[number]
@@ -69,4 +69,28 @@ export function filterPackagesByGenderAudience(
       serviceMatchesGenderAudience(byId.get(item.serviceId)?.genderAudience, selected),
     )
   })
+}
+
+/** Business types whose customers are women (no men's menu). */
+const WOMEN_ONLY_BUSINESS_TYPES = new Set(["beauty parlour", "nail art studio"])
+
+/**
+ * Whether a salon belongs under the Women or Men switch (same rule as Glammzo-web).
+ * The salon's own Men / Women / Unisex choice wins when set. Otherwise unisex salons count
+ * when at least one service is for that audience, parlours and nail studios are for women,
+ * and every other type shows for both.
+ */
+export function salonMatchesGenderAudience(
+  salon: Pick<Salon, "businessType" | "salonAudience" | "services">,
+  selected: ServiceGenderAudience,
+) {
+  if (salon.salonAudience === "unisex") return true
+  if (salon.salonAudience === "men" || salon.salonAudience === "women") return salon.salonAudience === selected
+  const type = normalizeBusinessType(salon.businessType)
+  if (WOMEN_ONLY_BUSINESS_TYPES.has(type)) return selected === "women"
+  if (isUnisexSalonBusiness(type)) {
+    if (salon.services.length === 0) return true
+    return salon.services.some((service) => serviceMatchesGenderAudience(service.genderAudience, selected))
+  }
+  return true
 }

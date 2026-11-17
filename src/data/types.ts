@@ -102,6 +102,8 @@ export type Salon = {
   longitude?: number
   isFeatured?: boolean
   businessType?: string
+  /** Who the salon serves, chosen at CRM onboarding. Undefined = not set yet. */
+  salonAudience?: "men" | "women" | "unisex"
   isOpenNow: boolean
   priceFrom: number
   shortDescription: string

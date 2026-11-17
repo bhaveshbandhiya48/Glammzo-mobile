@@ -26,6 +26,7 @@ import {
 } from "@/lib/explore-filters"
 import { browseModeFor, currentAreaLabel, resolveExploreLocationSalons } from "@/lib/explore-location"
 import { salonsForTile } from "@/lib/home-salon-info"
+import { salonMatchesGenderAudience } from "@/lib/gender-audience"
 import { fetchSalons, getCatalogSnapshot } from "@/lib/salons-api"
 import { parseSalonsSeeAllParams } from "@/lib/see-all-params"
 import { getServiceTile, type HomeAudience, type ServiceTileKey } from "@/lib/service-tiles"
@@ -119,8 +120,12 @@ export default function SalonsScreen() {
   const nearby = useMemo(() => scoped?.salons ?? [], [scoped])
   const tile = service ? getServiceTile(service) : undefined
   const salons = useMemo(() => {
-    // Audience only narrows a service pick, like the Home tiles and the Service page.
-    const forService = tile ? salonsForTile(nearby, tile, audience) : nearby
+    // Audience narrows salons by who they serve, and a service pick by that service's tags.
+    const forService = tile
+      ? salonsForTile(nearby, tile, audience)
+      : audience
+        ? nearby.filter((salon) => salonMatchesGenderAudience(salon, audience))
+        : nearby
     return sortExploreSalons(filterExploreSalons(forService, filters, { query: search }), filters.sort)
   }, [audience, filters, nearby, search, tile])
 

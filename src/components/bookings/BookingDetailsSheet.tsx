@@ -27,7 +27,7 @@ import {
   CUSTOMER_CANCEL_MIN_NOTICE_HOURS,
   getCancelBlockedReason,
 } from "@/lib/cancel-policy"
-import { canRescheduleWithNotice, getRescheduleBlockedReason } from "@/lib/reschedule-policy"
+import { canOpenReschedule, getRescheduleBlockedReason, hasPendingArtistReschedule } from "@/lib/reschedule-policy"
 import { formatRupees } from "@/lib/service-pricing"
 import { openDirections } from "@/lib/visit-links"
 import { fontFamily } from "@/theme/tokens"
@@ -167,9 +167,11 @@ export function BookingDetailsSheet({
   const hasBreakdown = Boolean(booking.travelFee) || extras > 0
 
   const cancelAllowed = upcoming && canCustomerCancelBooking(booking).allowed
-  const rescheduleAllowed = !artist && upcoming && canRescheduleWithNotice(booking.startsAt).allowed
+  const rescheduleAllowed = upcoming && canOpenReschedule(booking)
+  const pendingMove = hasPendingArtistReschedule(booking)
   const policyLines: (string | null)[] = []
   if (upcoming && !artist && !rescheduleAllowed) policyLines.push(getRescheduleBlockedReason(booking.startsAt))
+  if (pendingMove) policyLines.push("You asked the artist for a new time. They'll reply soon; until then your booking stays as it is.")
   if (upcoming && !cancelAllowed) {
     const hours = booking.cancelNoticeHours ?? CUSTOMER_CANCEL_MIN_NOTICE_HOURS
     policyLines.push(artist ? getCancelBlockedReason(booking.startsAt, hours, "artist") : getCancelBlockedReason(booking.startsAt, hours))
@@ -331,7 +333,9 @@ export function BookingDetailsSheet({
 
       <View style={styles.actions}>
         {!visitDone && providerSlug ? <SheetButton label={viewLabel} onPress={onViewProvider} /> : null}
-        {rescheduleAllowed ? <SheetButton label="Reschedule" tone="outline" onPress={onReschedule} /> : null}
+        {rescheduleAllowed ? (
+          <SheetButton label={pendingMove ? "View time request" : "Reschedule"} tone="outline" onPress={onReschedule} />
+        ) : null}
         {canReview ? <SheetButton label="Leave a review" onPress={onReview} /> : null}
         {bookAgainShown ? (
           <SheetButton label="Book again" tone={bookAgainPrimary ? "primary" : "outline"} onPress={onBookAgain} />

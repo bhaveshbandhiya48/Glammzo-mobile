@@ -20,6 +20,7 @@ import {
   bookingStyles,
   displayTime,
 } from "@/components/book/BookingUi"
+import { ArtistReschedule } from "@/components/bookings/ArtistReschedule"
 import { SEE_ALL_EMPTY_COLORS, SeeAllEmpty } from "@/components/list/SeeAllParts"
 import { Field } from "@/components/profile/ProfileScreenParts"
 import { pastels } from "@/components/salon-page/theme"
@@ -99,7 +100,8 @@ export default function RescheduleScreen() {
 
   useEffect(() => {
     let active = true
-    if (!booking || serviceIds.length === 0) return
+    // Artist bookings load their own times (ArtistReschedule).
+    if (!booking || isArtistBooking(booking) || serviceIds.length === 0) return
 
     setSlotsLoading(true)
     setSlotsMessage(null)
@@ -165,6 +167,10 @@ export default function RescheduleScreen() {
         />
       </View>
     )
+  }
+
+  if (isArtistBooking(booking)) {
+    return <ArtistReschedule booking={booking} onBack={goBack} />
   }
 
   if (!canRescheduleWithNotice(booking.startsAt).allowed) {

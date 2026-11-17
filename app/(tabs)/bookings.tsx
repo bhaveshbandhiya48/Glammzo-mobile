@@ -27,7 +27,7 @@ import { cancelArtistPublicBooking } from "@/lib/artists-api"
 import { cancelBooking, fetchBookings, withPaymentStatus } from "@/lib/bookings-api"
 import { useCart } from "@/context/CartContext"
 import { bookingPhotoUrl } from "@/lib/booking-photo"
-import { canRescheduleWithNotice } from "@/lib/reschedule-policy"
+import { canOpenReschedule, hasPendingArtistReschedule } from "@/lib/reschedule-policy"
 import { openDirections } from "@/lib/visit-links"
 import { getAccessToken } from "@/lib/session"
 import { fontFamily } from "@/theme/tokens"
@@ -276,7 +276,8 @@ export default function BookingsScreen() {
 
   function heroActions(booking: Booking) {
     const artist = isArtistBooking(booking)
-    const canReschedule = !artist && canRescheduleWithNotice(booking.startsAt).allowed
+    const canReschedule = canOpenReschedule(booking)
+    const pendingMove = hasPendingArtistReschedule(booking)
     // Same rule as Home's next-booking card: salon visits with nothing left to pay.
     const canDirect = !artist && !advanceDueToken(booking)
     return (
@@ -294,7 +295,7 @@ export default function BookingsScreen() {
         ) : null}
         {canReschedule ? (
           <ActionPill
-            label="Reschedule"
+            label={pendingMove ? "New time requested" : "Reschedule"}
             outline
             onPress={() => router.push({ pathname: "/bookings/[id]/reschedule", params: { id: booking.id } })}
           />

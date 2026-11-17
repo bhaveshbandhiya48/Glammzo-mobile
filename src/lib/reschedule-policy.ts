@@ -36,3 +36,32 @@ export function getRescheduleBlockedReason(startsAtIso?: string | null) {
   }
   return "This booking can no longer be rescheduled online."
 }
+
+type ReschedulableBooking = {
+  kind?: string
+  id: string
+  status: string
+  startsAt?: string
+  artistRescheduleEnabled?: boolean
+  rescheduleRequest?: { status: string; requestedStartsAt: string }
+}
+
+function isArtist(booking: ReschedulableBooking) {
+  return booking.kind === "artist" || booking.id.startsWith("artist:")
+}
+
+/** Artist booking with a new-time request the artist hasn't answered. */
+export function hasPendingArtistReschedule(booking: ReschedulableBooking) {
+  return isArtist(booking) && booking.rescheduleRequest?.status === "pending"
+}
+
+/**
+ * Show a Reschedule action: salons by notice; solo artists once the artist can take
+ * requests (the artist approves), or to see / withdraw an open request.
+ */
+export function canOpenReschedule(booking: ReschedulableBooking) {
+  if (!isArtist(booking)) return canRescheduleWithNotice(booking.startsAt).allowed
+  if (!booking.artistRescheduleEnabled || booking.status !== "confirmed") return false
+  if (hasPendingArtistReschedule(booking)) return true
+  return canRescheduleWithNotice(booking.startsAt).allowed
+}

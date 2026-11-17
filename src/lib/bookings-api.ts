@@ -89,6 +89,44 @@ export async function rescheduleBooking(
   )
 }
 
+export type ArtistRescheduleInfo = {
+  canRequest: boolean
+  reason: string | null
+  code: string | null
+  noticeHours: number
+  timezone: string
+  startsAt: string
+  durationMinutes: number
+  pending: { requestedStartsAt: string; previousStartsAt: string; note?: string | null } | null
+}
+
+/** Solo artist booking: can the client ask for a new time, and any open request. */
+export async function fetchArtistRescheduleInfo(id: string) {
+  return apiFetch<ArtistRescheduleInfo>(`/api/mobile/bookings/${encodeURIComponent(id)}/artist-reschedule`)
+}
+
+/** Free start times (ISO) that day for this artist booking. */
+export async function fetchArtistRescheduleSlots(id: string, date: string) {
+  return apiFetch<{ slots?: string[]; message?: string }>(
+    `/api/mobile/bookings/${encodeURIComponent(id)}/artist-reschedule?date=${encodeURIComponent(date)}`,
+  )
+}
+
+/** Ask the artist to move the booking. It stays as it is until they approve. */
+export async function requestArtistReschedule(id: string, input: { startAt: string; note?: string }) {
+  return apiFetch<{ ok: boolean }>(`/api/mobile/bookings/${encodeURIComponent(id)}/artist-reschedule`, {
+    method: "POST",
+    body: input,
+  })
+}
+
+/** Take back a request the artist hasn't answered. */
+export async function withdrawArtistReschedule(id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/mobile/bookings/${encodeURIComponent(id)}/artist-reschedule`, {
+    method: "DELETE",
+  })
+}
+
 export type BookingInvoicePdf = {
   bytes: Uint8Array
   fileName: string

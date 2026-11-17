@@ -180,6 +180,15 @@ export type Booking = {
   advanceToken?: string
   /** Solo artist moved this booking to a new time: when they last did. */
   rescheduledAt?: string
+  /** Solo artist booking: the client can ask the artist for a new time (the artist approves). */
+  artistRescheduleEnabled?: boolean
+  /** Solo artist booking: the client's latest ask to move it. */
+  rescheduleRequest?: {
+    status: "pending" | "approved" | "declined" | "withdrawn" | "expired"
+    previousStartsAt: string
+    requestedStartsAt: string
+    declineReason?: string
+  }
   /** Paid advance on an active artist booking: refund if cancelled now, and when it next drops. */
   cancelRefund?: {
     advance: number

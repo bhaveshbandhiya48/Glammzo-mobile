@@ -475,6 +475,23 @@ function dayParts(dateKey: string) {
 }
 
 /** Horizontal row of day chips: weekday (or Today / Tmrw), date, month. */
+/** Day-strip placeholder with the same tile size, so the row does not jump when days arrive. */
+export function DayStripSkeleton({ count = 7 }: { count?: number }) {
+  return (
+    <ScrollView
+      horizontal
+      scrollEnabled={false}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.hScroll}
+      accessibilityLabel="Loading available days"
+    >
+      {Array.from({ length: count }).map((_, index) => (
+        <View key={index} style={[styles.day, styles.dayGhost]} />
+      ))}
+    </ScrollView>
+  )
+}
+
 export function DayStrip({
   options,
   value,
@@ -560,10 +577,13 @@ export function TimeGrid({
 }) {
   if (loading) {
     return (
-      <View style={styles.timeSkeleton} accessibilityLabel="Loading available times">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <View key={index} style={styles.timeGhost} />
-        ))}
+      <View style={styles.timeGroup} accessibilityLabel="Loading available times">
+        <View style={styles.timeGhostHead} />
+        <View style={styles.timeSkeleton}>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <View key={index} style={styles.timeGhost} />
+          ))}
+        </View>
       </View>
     )
   }
@@ -931,6 +951,8 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   dayActive: { backgroundColor: bk.text, borderColor: bk.text },
+  /** Matches a real tile: 10 + 14 + 1 + 26 + 1 + 14 + 10 + 2 (border). */
+  dayGhost: { height: 78, backgroundColor: bk.grey, borderColor: bk.grey },
   dayDisabled: { backgroundColor: "#f7f7f7", borderColor: "#efefef" },
   dayTop: { fontFamily: fontFamily.medium, fontSize: 11, lineHeight: 14, color: bk.secondary },
   dayNum: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 26, color: bk.text },
@@ -961,6 +983,7 @@ const styles = StyleSheet.create({
   slotEarliest: { fontFamily: fontFamily.medium, fontSize: 10, lineHeight: 12, color: bk.green },
   slotEarliestActive: { color: "#bfe8cf" },
   timeSkeleton: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  timeGhostHead: { width: 84, height: 17, borderRadius: 6, backgroundColor: bk.grey },
   timeGhost: { width: "31.5%", height: 44, borderRadius: 12, backgroundColor: bk.grey },
   timeEmpty: {
     flexDirection: "row",

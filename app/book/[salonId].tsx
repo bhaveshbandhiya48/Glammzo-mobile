@@ -21,6 +21,7 @@ import {
   bookingStyles,
   CheckRow,
   DayStrip,
+  DayStripSkeleton,
   Hairline,
   Notice,
   PlaceRow,
@@ -187,6 +188,14 @@ export default function BookingScreen() {
   const [timeSheetOpen, setTimeSheetOpen] = useState(false)
   const [confirmSheetOpen, setConfirmSheetOpen] = useState(false)
   const [staffId, setStaffId] = useState<string | null>(staffParam || null)
+  /**
+   * Stylist we picked for the customer because only one can do these services.
+   * Slots for "any available" already cover that stylist, so picking them must
+   * not trigger a second availability request (that refetch made times show up
+   * seconds after the days).
+   */
+  const [autoStaffId, setAutoStaffId] = useState<string | null>(null)
+  const availabilityStaffId = staffId && staffId === autoStaffId ? null : staffId
   const [useWallet, setUseWallet] = useState(false)
   const [useLoyalty, setUseLoyalty] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -367,7 +376,7 @@ export default function BookingScreen() {
 
   useEffect(() => {
     setDateOverride(null)
-  }, [serviceIdsForAvailability.join(","), selectedPackage?.id, staffId])
+  }, [serviceIdsForAvailability.join(","), selectedPackage?.id, availabilityStaffId])
 
   useEffect(() => {
     let active = true
@@ -389,7 +398,7 @@ export default function BookingScreen() {
       date: dateOverride ?? undefined,
       serviceIds: serviceIdsForAvailability,
       packageId: selectedPackage?.id,
-      staffId,
+      staffId: availabilityStaffId,
     })
       .then((result) => {
         if (!active) return
@@ -439,20 +448,31 @@ export default function BookingScreen() {
     salon,
     serviceIdsForAvailability,
     selectedPackage?.id,
-    staffId,
+    availabilityStaffId,
     dateOverride,
   ])
 
   useEffect(() => {
     if (bookableStaff.length === 1) {
       const onlyId = bookableStaff[0]!.id
-      if (staffId !== onlyId) setStaffId(onlyId)
+      if (staffId !== onlyId) {
+        setStaffId(onlyId)
+        setAutoStaffId(onlyId)
+      }
       return
+    }
+    if (autoStaffId) {
+      // More stylists now fit: drop the one we picked so the choice is the customer's.
+      setAutoStaffId(null)
+      if (staffId === autoStaffId) {
+        setStaffId(null)
+        return
+      }
     }
     if (staffId && bookableStaff.length > 0 && !bookableStaff.some((member) => member.id === staffId)) {
       setStaffId(null)
     }
-  }, [bookableStaff, staffId])
+  }, [bookableStaff, staffId, autoStaffId])
 
   const selectedSlotLabel =
     slots.find((slot) => slot.value === slotValue)?.label ?? slotValue ?? "—"
@@ -1003,7 +1023,10 @@ export default function BookingScreen() {
                     <StylistPicker
                       staff={bookableStaff}
                       value={staffId}
-                      onSelect={setStaffId}
+                      onSelect={(id) => {
+                        setAutoStaffId(null)
+                        setStaffId(id)
+                      }}
                       showAny={bookableStaff.length > 1}
                     />
                   ) : (
@@ -1026,19 +1049,27 @@ export default function BookingScreen() {
                   <Notice tone="grey">Dates aren’t available for these services.</Notice>
                 </View>
               ) : dateOptions.length === 0 ? (
-                <View style={styles.pad}>
-                  {slotsLoading ? (
-                    <View style={styles.ghostRow} />
-                  ) : (
+                slotsLoading ? (
+                  <DayStripSkeleton />
+                ) : (
+                  <View style={styles.pad}>
                     <Notice tone="grey">No dates available for this booking yet.</Notice>
-                  )}
-                </View>
+                  </View>
+                )
               ) : (
                 <DayStrip
                   options={dateOptions}
                   value={selectedDate}
                   onSelect={(date) => {
+                    // Same day, or a request for it is already on its way.
+                    if (date === selectedDate || date === dateOverride) return
+                    // Show the new day and the time placeholder in the same frame,
+                    // instead of the old times lingering until the effect runs.
+                    setSelectedDate(date)
                     setSlotValue(null)
+                    setSlots([])
+                    setSlotsMessage(null)
+                    setSlotsLoading(true)
                     setDateOverride(date)
                   }}
                 />

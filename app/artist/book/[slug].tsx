@@ -90,6 +90,12 @@ import { fontFamily } from "@/theme/tokens"
 import { formatDuration } from "@/lib/booking-display"
 
 const STEPS = ["Services", "When & where", "Confirm"]
+/** How long a day's free times are reused before asking the server again. */
+const SLOT_CACHE_MS = 60_000
+/** Days checked in parallel while skipping ahead past fully booked days. */
+const LOOKAHEAD_BATCH = 4
+
+type ArtistSlotsResult = Awaited<ReturnType<typeof fetchArtistSlots>>
 
 function dayKeys(from: Date, count: number, timeZone: string) {
   const keys: string[] = []
@@ -196,6 +202,8 @@ export default function ArtistBookScreen() {
   const days = useMemo(() => dayKeys(new Date(), 14, timezone), [timezone])
   // Until the client picks a date, skip ahead past days with no free times.
   const autoDate = useRef(true)
+  /** Recent slot answers by request, so going back to a day shows its times at once. */
+  const slotCache = useRef(new Map<string, { at: number; data: ArtistSlotsResult }>())
   const dateOptions = useMemo(
     () => days.map((key) => ({ date: key, label: formatDayChip(key) })),
     [days],
@@ -447,47 +455,96 @@ export default function ArtistBookScreen() {
     setSlot(null)
   }
 
+  const slotBaseKey = [
+    artist?.slug ?? "",
+    selectedIds.join(","),
+    choicesKey,
+    locationType,
+    pin?.lat ?? "",
+    pin?.lng ?? "",
+  ].join("|")
+  function cachedSlots(day: string): ArtistSlotsResult | null {
+    const hit = slotCache.current.get(`${slotBaseKey}|${day}`)
+    return hit && Date.now() - hit.at < SLOT_CACHE_MS ? hit.data : null
+  }
+
   // Slots + quote for the chosen visit location (date/time step).
   useEffect(() => {
     if (!artist || selectedIds.length === 0 || !date || homeIncompatible) {
       setSlots(null)
       setQuote(null)
       setSlotMessage(null)
+      setSlotsLoading(false)
       return
     }
     const controller = new AbortController()
+    const baseKey = slotBaseKey
+    const load = (day: string): Promise<ArtistSlotsResult> => {
+      const key = `${baseKey}|${day}`
+      const hit = cachedSlots(day)
+      if (hit) return Promise.resolve(hit)
+      return fetchArtistSlots({
+        slug: artist.slug,
+        serviceIds: selectedIds,
+        date: day,
+        locationType,
+        lat: pin?.lat,
+        lng: pin?.lng,
+        choices: choicesKey || undefined,
+        signal: controller.signal,
+      }).then((data) => {
+        slotCache.current.set(key, { at: Date.now(), data })
+        return data
+      })
+    }
+    const show = (data: ArtistSlotsResult) => {
+      setSlots(data.slots)
+      setQuote(needsHome && !pin ? null : data.quote)
+      setSlotMessage(data.message)
+      setSlot((prev) => (prev && !data.slots.includes(prev) ? null : prev))
+      setSlotsLoading(false)
+    }
+
+    // A cached day renders in the same pass, with no placeholder flash.
+    const cached = cachedSlots(date)
+    if (cached && !(autoDate.current && cached.slots.length === 0)) {
+      show(cached)
+      return
+    }
+
     setSlotsLoading(true)
     setSlotMessage(null)
-    void fetchArtistSlots({
-      slug: artist.slug,
-      serviceIds: selectedIds,
-      date,
-      locationType,
-      lat: pin?.lat,
-      lng: pin?.lng,
-      choices: choicesKey || undefined,
-      signal: controller.signal,
-    })
-      .then((data) => {
-        if (autoDate.current && data.slots.length === 0) {
-          const next = days[days.indexOf(date) + 1]
-          if (next) {
-            setDate(next)
-            return
+    void (async () => {
+      try {
+        const first = await load(date)
+        if (controller.signal.aborted) return
+        if (autoDate.current && first.slots.length === 0) {
+          // Until the client picks a day, skip past full days. Check the next
+          // days a few at a time in parallel instead of one request per render.
+          const rest = days.slice(days.indexOf(date) + 1)
+          for (let i = 0; i < rest.length; i += LOOKAHEAD_BATCH) {
+            const batch = rest.slice(i, i + LOOKAHEAD_BATCH)
+            const results = await Promise.all(
+              batch.map((day) => load(day).catch(() => null)),
+            )
+            if (controller.signal.aborted) return
+            const found = batch.findIndex((_, index) => (results[index]?.slots.length ?? 0) > 0)
+            if (found >= 0) {
+              // The effect for the new day reads it from the cache.
+              setDate(batch[found]!)
+              return
+            }
           }
         }
-        setSlots(data.slots)
-        setQuote(needsHome && !pin ? null : data.quote)
-        setSlotMessage(data.message)
-        if (slot && !data.slots.includes(slot)) setSlot(null)
-      })
-      .catch((err) => {
-        if (err?.name === "AbortError") return
+        show(first)
+      } catch (err) {
+        if (controller.signal.aborted || (err as Error)?.name === "AbortError") return
         setSlots([])
         setQuote(null)
         setSlotMessage(err instanceof Error ? err.message : "Couldn't load times.")
-      })
-      .finally(() => setSlotsLoading(false))
+        setSlotsLoading(false)
+      }
+    })()
     return () => controller.abort()
   }, [
     artist,
@@ -499,6 +556,7 @@ export default function ArtistBookScreen() {
     pin?.lng,
     needsHome,
     homeIncompatible,
+    days,
   ])
 
   async function ensureVerifiedSession() {
@@ -1033,8 +1091,20 @@ export default function ArtistBookScreen() {
                   value={date || null}
                   onSelect={(next) => {
                     autoDate.current = false
+                    if (next === date) return
                     setDate(next)
                     setSlot(null)
+                    // Swap to the placeholder (or the cached times) in this same
+                    // frame, so the old day's times never flash under the new day.
+                    const cached = cachedSlots(next)
+                    if (cached) {
+                      setSlots(cached.slots)
+                      setSlotMessage(cached.message)
+                      setSlotsLoading(false)
+                    } else {
+                      setSlotMessage(null)
+                      setSlotsLoading(true)
+                    }
                   }}
                 />
               )}

@@ -31,7 +31,6 @@ import { Text } from "@/components/ui/Text"
 import type { Salon } from "@/data/types"
 import type { ArtistCardData } from "@/lib/artists-api"
 import { getDeviceCoordinatesDetailed } from "@/lib/device-location"
-import { useBlockTabSwipe } from "@/components/tabs/SwipeTabs"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
 import { GLAMMZO_MAP_STYLE } from "@/lib/map-styles"
 import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
@@ -453,8 +452,6 @@ export function MapOverlay({
   onSelectArtist,
   initialKind = "all",
 }: Props) {
-  // The map pans horizontally; tab swiping stays off while it is open.
-  useBlockTabSwipe(visible)
   const insets = useSafeAreaInsets()
   const mapRef = useRef<MapView | null>(null)
   const carouselRef = useRef<ScrollViewInstance | null>(null)

@@ -23,7 +23,7 @@ const googleServicesFile = fs.existsSync(googleServicesPath)
 const config = {
   name: "Glammzo",
   slug: "glammzo-mobile",
-  version: "1.0.0",
+  version: "1.0.1",
   orientation: "portrait",
   icon: "./assets/icon.png",
   scheme: "glammzo",
@@ -38,7 +38,10 @@ const config = {
     supportsTablet: true,
     bundleIdentifier: "com.glammzo.mobile",
     buildNumber: "1",
-    associatedDomains: ["applinks:glammzo.com", "applinks:www.glammzo.com"],
+    // Associated Domains need the capability on the Apple App ID + a matching
+    // provisioning profile. Enable "Associated Domains" for com.glammzo.mobile
+    // at developer.apple.com, regenerate the App Store profile, then restore:
+    // associatedDomains: ["applinks:glammzo.com", "applinks:www.glammzo.com"],
     infoPlist: {
       // HTTPS + Keychain only — skips App Store Connect export-compliance prompt.
       ITSAppUsesNonExemptEncryption: false,

@@ -281,7 +281,7 @@ export function AllSalonsSection({
 }: Props) {
   const router = useRouter()
   const [audience] = useHomeAudience()
-  const [mode, setModeState] = useState<AllNearMode>(lastMode)
+  const [pickedMode, setModeState] = useState<AllNearMode>(lastMode)
   const [artistChips, setArtistChips] = useState<ArtistChipState>(DEFAULT_ARTIST_CHIPS)
   const nearbyArtists = useNearbyArtists()
   // With location off, Home falls back to the recommended query, which has no distances.
@@ -295,8 +295,23 @@ export function AllSalonsSection({
     [artistChips, hasDistances, nearbyArtists.artists],
   )
 
+  // Until the person taps a tab here, never open on an empty list when the other tab has results:
+  // no salons opens Artists, no artists opens Salons. Active salon filters count as a choice, so
+  // narrowing the salon list to nothing keeps them on Salons with the "Clear filters" card.
+  const [tapped, setTapped] = useState(false)
+  const salonsEmpty = salons.length === 0 && countActiveExploreFilters(chipProps.filters) === 0
+  const artistsEmpty = nearbyArtists.status !== "loading" && (nearbyArtists.artists ?? []).length === 0
+  const mode: AllNearMode = tapped
+    ? pickedMode
+    : pickedMode === "salons" && salonsEmpty && !artistsEmpty
+      ? "artists"
+      : pickedMode === "artists" && artistsEmpty && !salonsEmpty
+        ? "salons"
+        : pickedMode
+
   function setMode(next: AllNearMode) {
     lastMode = next
+    setTapped(true)
     setModeState(next)
   }
 

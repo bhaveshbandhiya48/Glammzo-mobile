@@ -404,9 +404,6 @@ export default function ExploreScreen() {
     }
   }, [loadCatalog, loadOfferBanners])
 
-  /** Solo artists near the saved location; null until the carousel has loaded them. */
-  const [nearbyArtistCount, setNearbyArtistCount] = useState<number | null>(null)
-
   const locationResult = useMemo(
     () => {
       if (!savedLocation) {
@@ -991,22 +988,31 @@ export default function ExploreScreen() {
               onRetry={() => void loadCatalog(true)}
             />
           ) : showLocationEmpty && locationResult.emptyKind !== "none" ? (
-            // No salons here, but solo artists may still cover this area: list them too.
-            <>
-              <ArtistsCarousel
-                latitude={savedLocation?.latitude}
-                longitude={savedLocation?.longitude}
-                refreshKey={homeRefreshKey}
-                onCount={setNearbyArtistCount}
-              />
-              <LocationEmptyState
-                kind={locationResult.emptyKind}
-                cityLabel={locationResult.cityLabel}
-                onBrowseCity={() => void browseCity()}
-                onChangeLocation={openLocationSheet}
-                artistsShown={(nearbyArtistCount ?? 0) > 0}
-              />
-            </>
+            // No salons here: same Salons / Artists tabs as always. The section opens on Artists when
+            // there are any, and the Salons tab shows the location empty state.
+            <AllSalonsSection
+              salons={[]}
+              location={savedLocation}
+              areaLabel={areaName ?? locationResult.cityLabel}
+              filters={filters}
+              onChange={setFilters}
+              onOpenFilters={openFilterSheet}
+              onOpenSort={() => setSortOpen(true)}
+              onClearAll={clearFilters}
+              onOpenMap={(mode) => {
+                setMapKind(mode === "artists" ? "artist" : "all")
+                setMapOpen(true)
+              }}
+              emptyState={
+                <LocationEmptyState
+                  kind={locationResult.emptyKind}
+                  cityLabel={locationResult.cityLabel}
+                  onBrowseCity={() => void browseCity()}
+                  onChangeLocation={openLocationSheet}
+                  artistsShown={false}
+                />
+              }
+            />
           ) : searchQuery.trim() && activeFilterCount === 0 && gridSalons.length === 0 ? (
             <View style={styles.bleed}>
               <SeeAllEmpty

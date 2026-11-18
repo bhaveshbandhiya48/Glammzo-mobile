@@ -1,7 +1,6 @@
 import { StyleSheet, View } from "react-native"
 import { Tabs } from "expo-router"
 
-import { SwipeableTabScreen } from "@/components/tabs/SwipeTabs"
 import { FloatingTabBar } from "@/components/ui/FloatingTabBar"
 import {
   BookingsTabIcon,
@@ -14,15 +13,6 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}
-      screenLayout={({ route, navigation, children }) => (
-        <SwipeableTabScreen
-          routeName={route.name}
-          navigate={(name) => navigation.navigate(name)}
-          isFocused={() => navigation.isFocused()}
-        >
-          {children}
-        </SwipeableTabScreen>
-      )}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,

@@ -3,6 +3,7 @@ import { useCallback, useState } from "react"
 import { Linking, Pressable, StyleSheet, View } from "react-native"
 
 import { GradientFill } from "@/components/home/GradientFill"
+import { FALLBACK_EMAIL } from "@/components/payments/AdvancePaymentSheet"
 import { PayMethodSheet } from "@/components/payments/PayMethodSheet"
 import {
   Card,
@@ -20,11 +21,19 @@ import { Icon } from "@/components/ui/Icon"
 import { SkeletonBone } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { ApiError } from "@/lib/api"
-import { fetchPaymentKeyId, isInAppPaymentAvailable, loadPaymentOptions, type UpiApp } from "@/lib/advance-payment"
-import { giftCardWebPageUrl, payGiftCardByUpi } from "@/lib/gift-card-payment"
+import {
+  fetchPaymentKeyId,
+  isInAppPaymentAvailable,
+  loadPaymentOptions,
+  type Bank,
+  type PayMethod,
+  type UpiApp,
+} from "@/lib/advance-payment"
+import { giftCardWebPageUrl, payGiftCard } from "@/lib/gift-card-payment"
 import { loadSavedPayMethod, savePayMethod, type PaySelection, type SavedPayMethod } from "@/lib/pay-method-memory"
 import { formatRupees } from "@/lib/service-pricing"
 import { getAccessToken } from "@/lib/session"
+import { getConsumerProfile } from "@/lib/user"
 import { createGiftCard, fetchGiftCards, type GiftCardSummary } from "@/lib/wallet-api"
 import { fontFamily } from "@/theme/tokens"
 
@@ -60,6 +69,7 @@ export default function GiftCardsScreen() {
   const [payToken, setPayToken] = useState<string | null>(null)
   const [optionsLoading, setOptionsLoading] = useState(false)
   const [upiApps, setUpiApps] = useState<UpiApp[]>([])
+  const [banks, setBanks] = useState<Bank[]>([])
   const [lastUsed, setLastUsed] = useState<SavedPayMethod | null>(null)
 
   const load = useCallback(async () => {
@@ -92,7 +102,7 @@ export default function GiftCardsScreen() {
   const amountOk = Number.isFinite(chosen) && chosen >= MIN && chosen <= MAX
   const phoneOk = /^[6-9]\d{9}$/.test(digits)
 
-  /** UPI apps open straight on their PIN screen; cards, net banking and older builds use the web page. */
+  /** Same checkout as booking advances: UPI and net banking stay in the app; only cards use the web page. */
   async function startPayment(token: string) {
     setError(null)
     setNotice(null)
@@ -101,11 +111,12 @@ export default function GiftCardsScreen() {
       return
     }
     setPayToken(token)
-    if (upiApps.length > 0) return
+    if (upiApps.length > 0 || banks.length > 0) return
     setOptionsLoading(true)
     try {
       const [options, saved] = await Promise.all([fetchPaymentKeyId().then(loadPaymentOptions), loadSavedPayMethod()])
       setUpiApps(options.upiApps)
+      setBanks(options.banks)
       setLastUsed(saved)
     } catch {
       // The sheet still offers the web page.
@@ -116,16 +127,21 @@ export default function GiftCardsScreen() {
 
   async function pay(token: string, selection: PaySelection) {
     setPayToken(null)
-    if (selection.kind !== "upi") {
+    if (selection.kind === "card") {
       await Linking.openURL(giftCardWebPageUrl(token))
       return
     }
     setBusy(true)
+    setError(null)
+    setNotice(null)
     try {
-      const outcome = await payGiftCardByUpi({ token, appCode: selection.app.packageName })
-      if (!outcome) {
-        await Linking.openURL(giftCardWebPageUrl(token))
-      } else if (outcome.kind === "paid") {
+      const method: PayMethod =
+        selection.kind === "upi"
+          ? { method: "upi", packageName: selection.app.packageName }
+          : { method: "netbanking", bank: selection.bank.code }
+      const profile = await getConsumerProfile().catch(() => null)
+      const outcome = await payGiftCard({ token, method, email: profile?.email?.trim() || FALLBACK_EMAIL })
+      if (outcome.kind === "paid") {
         void savePayMethod(selection)
         setNotice("Paid. The gift card is in their Glammzo wallet.")
       } else if (outcome.kind === "not_paid") {
@@ -292,7 +308,7 @@ export default function GiftCardsScreen() {
           onPress={() => void buy()}
         />
         <Text style={styles.note}>
-          Pay in your UPI app, or by card or net banking on Glammzo&apos;s secure page. Gift cards can&apos;t be refunded
+          Pay in your UPI app or by net banking right here, or by card on Glammzo&apos;s secure page. Gift cards can&apos;t be refunded
           once paid.
         </Text>
       </Card>
@@ -300,7 +316,7 @@ export default function GiftCardsScreen() {
         visible={payToken != null}
         loading={optionsLoading}
         upiApps={upiApps}
-        banks={[]}
+        banks={banks}
         selected={null}
         lastUsed={lastUsed}
         onPick={(selection) => {

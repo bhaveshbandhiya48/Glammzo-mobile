@@ -343,20 +343,75 @@ export async function payAdvance(input: {
   /** Called once the payment screen has closed and we are confirming with the server. */
   onConfirming?: () => void
 }): Promise<PayOutcome> {
+  if (!razorpay()) return { kind: "not_paid", message: null }
+  const { token, order } = input
+
+  await savePendingPayment({ token, orderId: order.orderId, amountPaise: order.amountPaise })
+  const outcome = await payRazorpayOrder({
+    order: {
+      keyId: order.keyId,
+      orderId: order.orderId,
+      amountPaise: order.amountPaise,
+      description: `Advance · ${order.serviceName}`,
+      contact: order.customerPhone,
+    },
+    method: input.method,
+    email: input.email,
+    upiUrl: `${advanceEndpoint(token)}/upi`,
+    waitForStatus: (attempts) => waitForAdvanceStatus(token, attempts),
+    confirm: async (proof) => {
+      const done = await post<{ needsRefund?: boolean }>(token, proof)
+      return done.needsRefund ? { kind: "refunding" } : { kind: "paid" }
+    },
+    onConfirming: input.onConfirming,
+  })
+  // Keep the record while we still don't know, so the next app start checks it again.
+  if (outcome.kind === "paid" || outcome.kind === "refunding") await clearPendingPayment(token)
+  return outcome
+}
+
+/** What Razorpay's payment screen needs for one order. */
+export type CheckoutOrder = {
+  keyId: string
+  orderId: string
+  amountPaise: number
+  description: string
+  contact: string
+}
+
+/**
+ * Pays one Razorpay order inside the app: UPI opens the chosen UPI app straight on its PIN screen
+ * when it can, otherwise Razorpay's own payment screen (UPI or net banking). Shared by booking
+ * advances and gift cards; only the server endpoints differ.
+ */
+export async function payRazorpayOrder(input: {
+  order: CheckoutOrder
+  method: PayMethod
+  email: string
+  /** The server's POST endpoint that turns { orderId } into a `upi://pay` link. */
+  upiUrl: string
+  /** Polls the server (which asks Razorpay) every 2 seconds, up to `attempts` times. */
+  waitForStatus: (attempts: number) => Promise<AdvanceStatus>
+  /** Sends Razorpay's success proof to the server. Throwing means "ask the server again later". */
+  confirm: (proof: { orderId: string; paymentId: string; signature: string }) => Promise<PayOutcome>
+  onConfirming?: () => void
+}): Promise<PayOutcome> {
   const sdk = razorpay()
   if (!sdk) return { kind: "not_paid", message: null }
   const { order, method } = input
 
-  await savePendingPayment({ token: input.token, orderId: order.orderId, amountPaise: order.amountPaise })
   paymentInFlight = true
   try {
     if (method.method === "upi") {
-      const direct = await payByUpiIntent(input.token, order, method.packageName, input.onConfirming)
-      if (direct) {
-        if (direct.kind === "paid" || direct.kind === "refunding") await clearPendingPayment(input.token)
-        return direct
-      }
-      // The server or this phone can't do UPI intent: use Razorpay's payment screen as before.
+      const direct = await payWithUpiIntent({
+        upiUrl: input.upiUrl,
+        orderId: order.orderId,
+        appCode: method.packageName,
+        waitForStatus: input.waitForStatus,
+        onConfirming: input.onConfirming,
+      })
+      if (direct) return direct
+      // The server or this phone can't do UPI intent: use Razorpay's payment screen instead.
     }
 
     const opened = await openPaymentScreen(sdk, {
@@ -364,19 +419,15 @@ export async function payAdvance(input: {
       order_id: order.orderId,
       amount: order.amountPaise,
       currency: "INR",
-      description: `Advance · ${order.serviceName}`,
-      contact: order.customerPhone,
+      description: order.description,
+      contact: order.contact,
       email: input.email,
       ...(method.method === "upi"
         ? { method: "upi", upi_app_package_name: method.packageName, "_[flow]": "intent" }
         : { method: "netbanking", bank: method.bank }),
     })
     input.onConfirming?.()
-
-    const outcome = await settle(input.token, order, opened)
-    // Keep the record while we still don't know, so the next app start checks it again.
-    if (outcome.kind === "paid" || outcome.kind === "refunding") await clearPendingPayment(input.token)
-    return outcome
+    return await settle(order.orderId, opened, input.waitForStatus, input.confirm)
   } finally {
     paymentInFlight = false
   }
@@ -505,16 +556,6 @@ export async function payWithUpiIntent(input: {
   return fromStatus(status) ?? { kind: "checking" }
 }
 
-function payByUpiIntent(token: string, order: AdvanceOrder, appCode: string, onConfirming?: () => void) {
-  return payWithUpiIntent({
-    upiUrl: `${advanceEndpoint(token)}/upi`,
-    orderId: order.orderId,
-    appCode,
-    waitForStatus: (attempts) => waitForAdvanceStatus(token, attempts),
-    onConfirming,
-  })
-}
-
 /**
  * What the UPI app said when it handed back (Android). Only used to shorten the wait: the server
  * still decides, and a payment that did go through is confirmed later by the server.
@@ -539,15 +580,19 @@ function fromStatus(status: AdvanceStatus): PayOutcome | null {
 /** Our Android patch's code for "the payment screen lost its payment", not a real failure. */
 const SCREEN_LOST_CODE = 1001
 
-async function settle(token: string, order: AdvanceOrder, opened: Opened): Promise<PayOutcome> {
+async function settle(
+  orderId: string,
+  opened: Opened,
+  waitForStatus: (attempts: number) => Promise<AdvanceStatus>,
+  confirm: (proof: { orderId: string; paymentId: string; signature: string }) => Promise<PayOutcome>,
+): Promise<PayOutcome> {
   if (opened.kind === "vanished" || (opened.kind === "error" && RECORD(opened.error).code === SCREEN_LOST_CODE)) {
-    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
+    return fromStatus(await waitForStatus(5)) ?? { kind: "checking" }
   }
 
   if (opened.kind === "error") {
     // A UPI app can report a failure after the money has moved, so check before saying so.
-    const status = await waitForAdvanceStatus(token, 2)
-    const known = fromStatus(status)
+    const known = fromStatus(await waitForStatus(2))
     if (known) return known
     const description = RECORD(opened.error).description
     return { kind: "not_paid", message: typeof description === "string" ? description : null }
@@ -555,13 +600,12 @@ async function settle(token: string, order: AdvanceOrder, opened: Opened): Promi
 
   const { razorpay_payment_id: paymentId, razorpay_signature: signature } = opened.result
   if (!paymentId || !signature) {
-    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
+    return fromStatus(await waitForStatus(5)) ?? { kind: "checking" }
   }
   try {
-    const done = await post<{ needsRefund?: boolean }>(token, { orderId: order.orderId, paymentId, signature })
-    return done.needsRefund ? { kind: "refunding" } : { kind: "paid" }
+    return await confirm({ orderId, paymentId, signature })
   } catch {
-    // The money is in; the server confirms the booking if this call failed.
-    return fromStatus(await waitForAdvanceStatus(token, 5)) ?? { kind: "checking" }
+    // The money is in; the server confirms it (webhook or status check) if this call failed.
+    return fromStatus(await waitForStatus(5)) ?? { kind: "checking" }
   }
 }

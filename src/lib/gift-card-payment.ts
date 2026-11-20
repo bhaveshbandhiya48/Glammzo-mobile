@@ -1,32 +1,44 @@
 import { CRM_URL } from "@/lib/config"
-import { canPayByUpiIntent, payWithUpiIntent, type AdvanceStatus, type PayOutcome } from "@/lib/advance-payment"
+import { payRazorpayOrder, type AdvanceStatus, type PayMethod, type PayOutcome } from "@/lib/advance-payment"
 
 /**
- * Gift cards paid straight in the buyer's UPI app, the same way as booking advances: the server
- * makes the UPI payment, the app opens the UPI app on its PIN screen, and the server confirms it
- * with Razorpay. Cards and net banking still use the secure web page.
+ * Gift cards are paid inside the app, exactly like booking advances: UPI opens the buyer's UPI app
+ * on its PIN screen (or Razorpay's in-app screen where that can't be done), net banking uses
+ * Razorpay's in-app screen, and the server confirms the payment with Razorpay. Only cards, and
+ * builds without the payment module, use the secure web page.
  */
 
 function giftCardEndpoint(token: string) {
   return `${CRM_URL}/api/public/gift-cards/${encodeURIComponent(token)}`
 }
 
-/** The secure web page: cards, net banking, and phones that can't open a UPI app directly. */
+/** The secure web page: cards, and builds without in-app payments. */
 export function giftCardWebPageUrl(token: string) {
   return `${CRM_URL}/pay/gift/${encodeURIComponent(token)}`
 }
 
-type GiftCardOrder = { orderId: string; amountPaise: number }
+type GiftCardOrder = { keyId: string; orderId: string; amountPaise: number; buyerPhone: string }
 
-async function createGiftCardOrder(token: string): Promise<GiftCardOrder> {
+async function postGiftCard<T>(token: string, body: unknown): Promise<T> {
   const response = await fetch(`${giftCardEndpoint(token)}/pay`, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: "{}",
+    body: JSON.stringify(body),
   })
-  const data = (await response.json().catch(() => ({}))) as Partial<GiftCardOrder> & { error?: string }
-  if (!response.ok || !data.orderId) throw new Error(data.error || "Could not start the payment.")
-  return { orderId: data.orderId, amountPaise: Number(data.amountPaise) }
+  const data = (await response.json().catch(() => ({}))) as T & { error?: string }
+  if (!response.ok) throw new Error(data.error || "Could not start the payment.")
+  return data
+}
+
+async function createGiftCardOrder(token: string): Promise<GiftCardOrder> {
+  const data = await postGiftCard<Partial<GiftCardOrder>>(token, {})
+  if (!data.orderId || !data.keyId) throw new Error("Could not start the payment.")
+  return {
+    keyId: data.keyId,
+    orderId: data.orderId,
+    amountPaise: Number(data.amountPaise),
+    buyerPhone: String(data.buyerPhone ?? ""),
+  }
 }
 
 /** Asks the server, which asks Razorpay, whether the card is paid. */
@@ -51,27 +63,35 @@ async function waitForGiftCardStatus(token: string, attempts: number): Promise<A
   return status
 }
 
-/**
- * Pays for the gift card in the chosen UPI app. Returns null when this phone or server can't open
- * the UPI app directly, so the caller opens the web page instead.
- */
-export async function payGiftCardByUpi(input: {
+/** Pays for the gift card with UPI or net banking, inside the app. */
+export async function payGiftCard(input: {
   token: string
-  appCode: string
+  method: PayMethod
+  email: string
   onConfirming?: () => void
-}): Promise<PayOutcome | null> {
-  if (!canPayByUpiIntent(input.appCode)) return null
+}): Promise<PayOutcome> {
   let order: GiftCardOrder
   try {
     order = await createGiftCardOrder(input.token)
   } catch (error) {
     return { kind: "not_paid", message: error instanceof Error ? error.message : null }
   }
-  return payWithUpiIntent({
+  return payRazorpayOrder({
+    order: {
+      keyId: order.keyId,
+      orderId: order.orderId,
+      amountPaise: order.amountPaise,
+      description: "Glammzo gift card",
+      contact: order.buyerPhone,
+    },
+    method: input.method,
+    email: input.email,
     upiUrl: `${giftCardEndpoint(input.token)}/upi`,
-    orderId: order.orderId,
-    appCode: input.appCode,
     waitForStatus: (attempts) => waitForGiftCardStatus(input.token, attempts),
+    confirm: async (proof) => {
+      await postGiftCard(input.token, proof)
+      return { kind: "paid" }
+    },
     onConfirming: input.onConfirming,
   })
 }

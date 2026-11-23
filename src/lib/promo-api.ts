@@ -11,15 +11,7 @@ export type AppliedOfferDiscount = {
   finalTotal: number
 }
 
-export type PromoCashbackClaim = {
-  code: string
-  cashbackRupees: number
-  message: string
-}
-
-export type ValidatePromoResult =
-  | { kind: "discount"; discount: AppliedOfferDiscount }
-  | { kind: "cashback"; cashback: PromoCashbackClaim }
+export type ValidatePromoResult = { kind: "discount"; discount: AppliedOfferDiscount }
 
 export async function validatePromoCode(input: {
   salonId: string
@@ -33,9 +25,6 @@ export async function validatePromoCode(input: {
     ok: boolean
     kind?: string
     discount?: AppliedOfferDiscount
-    code?: string
-    cashbackRupees?: number
-    message?: string
   }>("/api/mobile/promo/validate", {
     method: "POST",
     body: {
@@ -51,7 +40,7 @@ export async function validatePromoCode(input: {
   return parsePromoValidateResponse(data)
 }
 
-/** Artist checkout codes (instant discount) + Glammzo cashback codes. */
+/** Artist checkout codes (instant discount). Glammzo offer codes go through app-offers-api. */
 export async function validateArtistPromoCode(input: {
   code: string
   subtotal: number
@@ -62,9 +51,6 @@ export async function validateArtistPromoCode(input: {
     ok: boolean
     kind?: string
     discount?: AppliedOfferDiscount
-    code?: string
-    cashbackRupees?: number
-    message?: string
   }>("/api/mobile/promo/validate", {
     method: "POST",
     body: {
@@ -79,32 +65,9 @@ export async function validateArtistPromoCode(input: {
   return parsePromoValidateResponse(data)
 }
 
-function parsePromoValidateResponse(data: {
-  kind?: string
-  discount?: AppliedOfferDiscount
-  code?: string
-  cashbackRupees?: number
-  message?: string
-}): ValidatePromoResult {
+function parsePromoValidateResponse(data: { kind?: string; discount?: AppliedOfferDiscount }): ValidatePromoResult {
   if (data.kind === "discount" && data.discount) {
     return { kind: "discount", discount: data.discount }
   }
-
-  if (
-    data.kind === "cashback" &&
-    typeof data.code === "string" &&
-    typeof data.cashbackRupees === "number" &&
-    typeof data.message === "string"
-  ) {
-    return {
-      kind: "cashback",
-      cashback: {
-        code: data.code,
-        cashbackRupees: data.cashbackRupees,
-        message: data.message,
-      },
-    }
-  }
-
   throw new Error("Unexpected promo validation response.")
 }

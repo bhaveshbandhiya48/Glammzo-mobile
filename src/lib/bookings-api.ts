@@ -1,3 +1,4 @@
+import type { AppOfferSelection } from "@/lib/app-offers-api"
 import type { Booking } from "@/data/types"
 import { ApiError, apiFetch, networkFailure, TIMED_OUT_MESSAGE } from "@/lib/api"
 import { API_URL } from "@/lib/config"
@@ -16,6 +17,8 @@ export type CreateBookingInput = {
   preferredStaffId?: string
   packageId?: string
   promoCode?: string
+  /** Glammzo offer: picked, typed, or let the server apply the best automatic one. */
+  appOffer?: AppOfferSelection
   useWallet?: boolean
   useFreeService?: boolean
   marketingOptIn?: boolean

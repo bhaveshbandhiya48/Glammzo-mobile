@@ -16,12 +16,13 @@ import { PrimaryPill } from "@/components/profile/ProfileScreenParts"
 import { pastels, ui } from "@/components/salon-page/theme"
 import { Icon } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
-import type { AppliedOfferDiscount, PromoCashbackClaim } from "@/lib/promo-api"
+import type { CheckoutAppOffer } from "@/lib/app-offers-api"
+import type { AppliedOfferDiscount } from "@/lib/promo-api"
 import { colors, fontFamily, spacing } from "@/theme/tokens"
 
 export type PromoCelebrationPayload =
   | { kind: "discount"; discount: AppliedOfferDiscount }
-  | { kind: "cashback"; cashback: PromoCashbackClaim }
+  | { kind: "app_offer"; offer: CheckoutAppOffer }
 
 type Props = {
   visible: boolean
@@ -180,18 +181,18 @@ export function PromoSuccessCelebration({ visible, payload, onClose }: Props) {
   const isDiscount = payload.kind === "discount"
   const headline = isDiscount
     ? `You got ${formatRupees(payload.discount.discountAmount)} off`
-    : `You got ₹${payload.cashback.cashbackRupees} cashback`
-  const title = isDiscount ? payload.discount.title : "Wallet cashback unlocked"
-  const code = isDiscount ? payload.discount.code : payload.cashback.code
+    : `You got ${formatRupees(payload.offer.discountRupees)} off`
+  const title = isDiscount ? payload.discount.title : payload.offer.title
+  const code = isDiscount ? payload.discount.code : (payload.offer.code ?? "Glammzo offer")
   const detail = isDiscount
     ? `${formatDiscountLabel(payload.discount)} · Code ${code}`
-    : payload.cashback.message
+    : `${payload.offer.headline} · paid by Glammzo`
   const subdetail = isDiscount
     ? `New total ${formatRupees(payload.discount.finalTotal)} (was ${formatRupees(payload.discount.subtotal)})`
-    : `Code ${code} · credited after your visit`
+    : "Taken off your bill now"
   const burstKey = isDiscount
     ? `${payload.discount.code}-${Math.round(payload.discount.discountAmount)}`
-    : `${payload.cashback.code}-${payload.cashback.cashbackRupees}`
+    : `${payload.offer.id}-${payload.offer.discountRupees}`
 
   return (
     <Modal

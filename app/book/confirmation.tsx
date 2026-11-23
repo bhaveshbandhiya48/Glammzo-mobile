@@ -368,14 +368,9 @@ export default function BookingConfirmationScreen() {
       : isArtist
         ? "Pay artist directly"
         : "Pay at salon"
-  const cashbackRupees = booking?.glammzoCashbackRupees ?? 0
   const discountRupees = booking?.glammzoDiscountRupees ?? 0
   const payLabelWithCashback =
-    cashbackRupees > 0
-      ? `${payLabel} · ${formatRupees(cashbackRupees)} Glammzo cashback after the visit`
-      : discountRupees > 0
-        ? `${payLabel} · ${formatRupees(discountRupees)} Glammzo offer discount included`
-        : payLabel
+    discountRupees > 0 ? `${payLabel} · ${formatRupees(discountRupees)} Glammzo offer discount included` : payLabel
 
   return (
     <View style={styles.page}>

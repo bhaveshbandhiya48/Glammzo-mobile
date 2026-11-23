@@ -46,7 +46,7 @@ import {
   type PublicArtistService,
 } from "@/lib/artists-api"
 import { isGetQuotesEnabled, isQuoteCategory } from "@/lib/get-quotes"
-import { fetchGlammzoOffersForArtist, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
+import { fetchArtistAppOffers, type AppOffer } from "@/lib/app-offers-api"
 import { LEGAL } from "@/lib/legal"
 import { formatRupees } from "@/lib/service-pricing"
 import { fontFamily, spacing } from "@/theme/tokens"
@@ -84,7 +84,7 @@ export default function ArtistDetailScreen() {
   const { isFavorite, toggle } = useArtistFavorites()
   const cart = useCart()
   const [artist, setArtist] = useState<PublicArtist | null>(null)
-  const [offers, setOffers] = useState<GlammzoOfferCard[]>([])
+  const [offers, setOffers] = useState<AppOffer[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -131,10 +131,7 @@ export default function ArtistDetailScreen() {
       .then((data) => {
         if (!cancelled) {
           setArtist(data)
-          void fetchGlammzoOffersForArtist({
-            city: data.city,
-            area: data.area,
-          }).then((next) => {
+          void fetchArtistAppOffers(safeSlug).then((next) => {
             if (!cancelled) setOffers(next)
           })
         }
@@ -530,7 +527,12 @@ export default function ArtistDetailScreen() {
         />
 
         <View style={styles.offers}>
-          <ArtistOffersStrip artistOffers={artist.offers ?? []} services={artist.services} glammzoOffers={offers} />
+          <ArtistOffersStrip
+            artistOffers={artist.offers ?? []}
+            services={artist.services}
+            appOffers={offers}
+            onBook={() => scrollToTab("services")}
+          />
         </View>
 
         <View

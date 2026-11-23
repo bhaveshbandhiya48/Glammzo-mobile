@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Keyboard,
-  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -24,7 +23,8 @@ import { LocationEmptyState } from "@/components/explore/LocationEmptyState"
 import { LocationPickerSheet } from "@/components/explore/LocationPickerSheet"
 import { MapOverlay, type KindFilter as MapKindFilter } from "@/components/explore/MapOverlay"
 import { ArtistsCarousel } from "@/components/explore/ArtistsCarousel"
-import { PromoBannerCarousel, type PromoBannerItem } from "@/components/explore/PromoBannerCarousel"
+import { AppOfferBanners } from "@/components/app-offers/AppOfferBanners"
+import { AppOfferDetailsSheet } from "@/components/app-offers/AppOfferDetailsSheet"
 import { SalonCarousel } from "@/components/explore/SalonCarousel"
 import { SearchSuggestionsPanel } from "@/components/explore/SearchSuggestionsPanel"
 import { SalonListRow } from "@/components/home/SalonListRow"
@@ -115,11 +115,7 @@ import {
 import { salonMatchesGenderAudience } from "@/lib/gender-audience"
 import { useHomeAudience } from "@/lib/home-audience"
 import { registerPushTokenWithServer } from "@/lib/push"
-import {
-  fetchGlammzoOfferBanners,
-  trackOfferClick,
-  trackOfferViews,
-} from "@/lib/glammzo-offers-api"
+import { fetchHomeAppOffers, type AppOffer } from "@/lib/app-offers-api"
 import { colors, fontFamily, radii, spacing } from "@/theme/tokens"
 
 type FilterSectionId =
@@ -184,7 +180,8 @@ export default function ExploreScreen() {
   const [catalogReady, setCatalogReady] = useState(false)
   const [catalogError, setCatalogError] = useState<string | null>(null)
   const [launchSettled, setLaunchSettled] = useState(false)
-  const [offerBanners, setOfferBanners] = useState<PromoBannerItem[]>([])
+  const [offerBanners, setOfferBanners] = useState<AppOffer[]>([])
+  const [openOffer, setOpenOffer] = useState<AppOffer | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [homeRefreshKey, setHomeRefreshKey] = useState(0)
   const catalogRequest = useRef(0)
@@ -347,25 +344,12 @@ export default function ExploreScreen() {
   }, [isOffline, loadCatalog])
 
   const loadOfferBanners = useCallback(async () => {
-    const offers = await fetchGlammzoOfferBanners({
-      city: savedLocation?.city,
-      area: savedLocation?.area,
-    })
-    const next: PromoBannerItem[] = offers.map((offer) => ({
-      id: offer.id,
-      eyebrow: offer.eyebrow || "Glammzo offer",
-      title: offer.title,
-      subtitle:
-        offer.subtitle ||
-        (offer.promoCode ? `Use code ${offer.promoCode}` : offer.description),
-      tone: "coral",
-      imageUrl: offer.mobileBannerUrl,
-      promoCode: offer.promoCode,
-      ctaLabel: offer.ctaLabel || "Book now",
-      href: offer.mobileHref,
-    }))
-    setOfferBanners(next)
-    trackOfferViews(next.filter((item) => item.imageUrl).map((item) => item.id))
+    setOfferBanners(
+      await fetchHomeAppOffers({
+        city: savedLocation?.city,
+        area: savedLocation?.area,
+      }),
+    )
   }, [savedLocation?.city, savedLocation?.area])
 
   useEffect(() => {
@@ -946,23 +930,17 @@ export default function ExploreScreen() {
 
           {homeReady &&
           !searchQuery.trim() &&
-          offerBanners.some((item) => Boolean(item.imageUrl?.trim())) ? (
+          offerBanners.some((item) => Boolean(item.bannerUrl)) ? (
             <OffersLabel />
           ) : null}
 
           {homeReady && !searchQuery.trim() ? (
-            <PromoBannerCarousel
-              items={offerBanners}
-              onPressItem={(item) => {
-                trackOfferClick(item.id)
-                const href = item.href?.trim()
-                // No tap target: keep browse context; the offer applies at checkout.
-                if (!href) return
-                if (href.startsWith("https://")) {
-                  void Linking.openURL(href)
-                  return
-                }
-                router.push(href as Href)
+            <AppOfferBanners
+              offers={offerBanners}
+              onPressOffer={(offer) => {
+                if (offer.tapTarget === "salons") router.push("/salons" as Href)
+                else if (offer.tapTarget === "artists") router.push("/artists" as Href)
+                else setOpenOffer(offer)
               }}
             />
           ) : null}
@@ -1441,6 +1419,13 @@ export default function ExploreScreen() {
           </ScrollView>
         </View>
       </BottomSheet>
+
+      <AppOfferDetailsSheet
+        offer={openOffer}
+        onClose={() => setOpenOffer(null)}
+        ctaLabel="Find a salon"
+        onPressCta={() => router.push("/salons" as Href)}
+      />
     </View>
   )
 }

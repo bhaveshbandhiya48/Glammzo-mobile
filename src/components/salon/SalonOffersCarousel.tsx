@@ -17,23 +17,15 @@ import { CodeChip } from "@/components/ui/CodeChip"
 import { type IconName } from "@/components/ui/Icon"
 import { Text } from "@/components/ui/Text"
 import type { SalonOffer } from "@/data/types"
-import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
 import { fontFamily } from "@/theme/tokens"
 
-type DisplayOffer =
-  | {
-      key: string
-      kind: "glammzo"
-      offer: GlammzoOfferCard
-    }
-  | {
-      key: string
-      kind: "salon"
-      offer: SalonOffer
-    }
+type DisplayOffer = {
+  key: string
+  kind: "salon"
+  offer: SalonOffer
+}
 
 type Props = {
-  glammzoOffers: GlammzoOfferCard[]
   salonOffers: SalonOffer[]
   /** Left / right inset of the first and last card (the page gutter). */
   contentInset?: number
@@ -41,9 +33,7 @@ type Props = {
 }
 
 function salonDiscountLabel(offer: SalonOffer) {
-  return offer.discountType === "percent"
-    ? `${offer.discountValue}% OFF`
-    : `₹${offer.discountValue} OFF`
+  return offer.discountType === "percent" ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} OFF`
 }
 
 function formatExpiry(endsAt?: string | null) {
@@ -78,35 +68,15 @@ function servicesLine(offer: SalonOffer) {
   return "Salon offer"
 }
 
-function glammzoCaption(offer: GlammzoOfferCard) {
-  if (offer.cashbackRupees > 0) {
-    return `${offerCashbackText(offer)}${offer.benefitType === "instant" ? " at checkout" : " after visit"}${
-      offer.minOrderRupees > 0 ? ` (min ₹${offer.minOrderRupees})` : ""
-    }`
-  }
-  return offer.subtitle || "Glammzo offer"
-}
-
-const GLAMMZO_PASTEL: Pastel = pastels.lavender
 const SALON_PASTEL: Pastel = pastels.peach
 
-export function SalonOffersCarousel({
-  glammzoOffers,
-  salonOffers,
-  contentInset = sp.gutter,
-  onPressCta,
-}: Props) {
+export function SalonOffersCarousel({ salonOffers, contentInset = sp.gutter, onPressCta }: Props) {
   const { width: windowWidth } = useWindowDimensions()
   const [index, setIndex] = useState(0)
   const [activeOfferKey, setActiveOfferKey] = useState<string | null>(null)
 
   const items = useMemo<DisplayOffer[]>(() => {
     const next: DisplayOffer[] = [
-      ...glammzoOffers.map((offer) => ({
-        key: `g-${offer.id}`,
-        kind: "glammzo" as const,
-        offer,
-      })),
       ...salonOffers.map((offer) => ({
         key: `s-${offer.id}`,
         kind: "salon" as const,
@@ -114,7 +84,7 @@ export function SalonOffersCarousel({
       })),
     ]
     return next
-  }, [glammzoOffers, salonOffers])
+  }, [salonOffers])
 
   const gap = 12
   // A second card peeks in when there is more than one.
@@ -145,40 +115,25 @@ export function SalonOffersCarousel({
         contentContainerStyle={[styles.row, { paddingHorizontal: contentInset }]}
         onMomentumScrollEnd={onMomentumEnd}
       >
-        {items.map((item) =>
-          item.kind === "glammzo" ? (
-            <OfferCard
-              key={item.key}
-              width={cardWidth}
-              pastel={GLAMMZO_PASTEL}
-              icon="sparkles"
-              eyebrow={item.offer.eyebrow || "Glammzo offer"}
-              title={item.offer.title}
-              lines={[glammzoCaption(item.offer)]}
-              accessibilityLabel={`${item.offer.eyebrow || "Glammzo offer"}. ${item.offer.title}. ${glammzoCaption(item.offer)}. Opens offer details`}
-              onPress={() => setActiveOfferKey(item.key)}
-              footer={item.offer.promoCode ? <CodeChip code={item.offer.promoCode} label="Code" /> : null}
-            />
-          ) : (
-            <OfferCard
-              key={item.key}
-              width={cardWidth}
-              pastel={SALON_PASTEL}
-              glyph={item.offer.discountType === "percent" ? "%" : undefined}
-              icon="pricetag"
-              eyebrow="Salon offer"
-              badge={salonDiscountLabel(item.offer)}
-              title={item.offer.title}
-              lines={[
-                servicesLine(item.offer),
-                formatExpiry(item.offer.endsAt) ? `Valid till ${formatExpiry(item.offer.endsAt)}` : null,
-              ]}
-              accessibilityLabel={`${salonOfferCaption(item.offer)}. ${item.offer.title}. Opens offer details`}
-              onPress={() => setActiveOfferKey(item.key)}
-              footer={item.offer.code ? <CodeChip code={item.offer.code} label="Code" /> : null}
-            />
-          ),
-        )}
+        {items.map((item) => (
+          <OfferCard
+            key={item.key}
+            width={cardWidth}
+            pastel={SALON_PASTEL}
+            glyph={item.offer.discountType === "percent" ? "%" : undefined}
+            icon="pricetag"
+            eyebrow="Salon offer"
+            badge={salonDiscountLabel(item.offer)}
+            title={item.offer.title}
+            lines={[
+              servicesLine(item.offer),
+              formatExpiry(item.offer.endsAt) ? `Valid till ${formatExpiry(item.offer.endsAt)}` : null,
+            ]}
+            accessibilityLabel={`${salonOfferCaption(item.offer)}. ${item.offer.title}. Opens offer details`}
+            onPress={() => setActiveOfferKey(item.key)}
+            footer={item.offer.code ? <CodeChip code={item.offer.code} label="Code" /> : null}
+          />
+        ))}
       </ScrollView>
 
       <OfferDots count={items.length} index={index} />
@@ -190,7 +145,7 @@ export function SalonOffersCarousel({
         footer={
           activeOffer ? (
             <PrimaryPill
-              label={activeOffer.offer.ctaLabel?.trim() || "Book now"}
+              label="Book now"
               onPress={() => {
                 setActiveOfferKey(null)
                 onPressCta?.()
@@ -200,82 +155,48 @@ export function SalonOffersCarousel({
         }
       >
         {activeOffer ? (
-          activeOffer.kind === "glammzo" ? (
-            <View style={styles.sheetBody}>
-              <PastelIcon pastel={GLAMMZO_PASTEL} name="sparkles" size={52} />
-              <Text style={ui.sectionLabel}>{activeOffer.offer.eyebrow || "Glammzo offer"}</Text>
-              <Text style={styles.sheetTitle}>{activeOffer.offer.title}</Text>
-              {activeOffer.offer.description ? (
-                <Text style={styles.sheetText}>{activeOffer.offer.description}</Text>
-              ) : activeOffer.offer.subtitle ? (
-                <Text style={styles.sheetText}>{activeOffer.offer.subtitle}</Text>
-              ) : null}
-              {activeOffer.offer.promoCode ? (
-                <CodeBlock code={activeOffer.offer.promoCode} />
-              ) : null}
-              <View style={styles.sheetFacts}>
-                {activeOffer.offer.cashbackRupees > 0 ? (
-                  <Fact
-                    pastel={pastels.mint}
-                    icon="wallet-outline"
-                    text={`${offerCashbackText(activeOffer.offer)}${
-                      activeOffer.offer.benefitType === "instant" ? " at checkout" : " after visit"
-                    }${activeOffer.offer.autoApply ? " · applied automatically" : ""}`}
-                  />
-                ) : null}
-                {activeOffer.offer.minOrderRupees > 0 ? (
-                  <Fact
-                    pastel={pastels.gold}
-                    icon="pricetag-outline"
-                    text={`Minimum booking ₹${activeOffer.offer.minOrderRupees}`}
-                  />
-                ) : null}
-              </View>
-            </View>
-          ) : (
-            <View style={styles.sheetBody}>
-              <PastelIcon pastel={SALON_PASTEL} name="pricetag" size={52} />
-              <Text style={ui.sectionLabel}>{salonDiscountLabel(activeOffer.offer)}</Text>
-              <Text style={styles.sheetTitle}>{activeOffer.offer.title}</Text>
-              {activeOffer.offer.description ? (
-                <Text style={styles.sheetText}>{activeOffer.offer.description}</Text>
-              ) : null}
-              {activeOffer.offer.code ? <CodeBlock code={activeOffer.offer.code} /> : null}
-              <View style={styles.sheetFacts}>
-                <Fact pastel={pastels.peach} icon="cut-outline" text={servicesLine(activeOffer.offer)} />
+          <View style={styles.sheetBody}>
+            <PastelIcon pastel={SALON_PASTEL} name="pricetag" size={52} />
+            <Text style={ui.sectionLabel}>{salonDiscountLabel(activeOffer.offer)}</Text>
+            <Text style={styles.sheetTitle}>{activeOffer.offer.title}</Text>
+            {activeOffer.offer.description ? (
+              <Text style={styles.sheetText}>{activeOffer.offer.description}</Text>
+            ) : null}
+            {activeOffer.offer.code ? <CodeBlock code={activeOffer.offer.code} /> : null}
+            <View style={styles.sheetFacts}>
+              <Fact pastel={pastels.peach} icon="cut-outline" text={servicesLine(activeOffer.offer)} />
+              <Fact
+                pastel={pastels.lavender}
+                icon="repeat-outline"
+                text={
+                  activeOffer.offer.customerEligibility === "new_customers_only"
+                    ? "New customers only"
+                    : "Available to all customers"
+                }
+              />
+              <Fact pastel={pastels.mint} icon="checkmark-circle-outline" text="Once per customer" />
+              {activeOffer.offer.minOrderRupees != null && activeOffer.offer.minOrderRupees > 0 ? (
                 <Fact
-                  pastel={pastels.lavender}
-                  icon="repeat-outline"
-                  text={
-                    activeOffer.offer.customerEligibility === "new_customers_only"
-                      ? "New customers only"
-                      : "Available to all customers"
-                  }
+                  pastel={pastels.gold}
+                  icon="cash-outline"
+                  text={`Minimum booking ₹${activeOffer.offer.minOrderRupees}`}
                 />
-                <Fact pastel={pastels.mint} icon="checkmark-circle-outline" text="Once per customer" />
-                {activeOffer.offer.minOrderRupees != null && activeOffer.offer.minOrderRupees > 0 ? (
-                  <Fact
-                    pastel={pastels.gold}
-                    icon="cash-outline"
-                    text={`Minimum booking ₹${activeOffer.offer.minOrderRupees}`}
-                  />
-                ) : null}
-                {formatExpiry(activeOffer.offer.endsAt) ? (
-                  <Fact
-                    pastel={pastels.sky}
-                    icon="time-outline"
-                    text={`Valid till ${formatExpiry(activeOffer.offer.endsAt)}`}
-                  />
-                ) : null}
-              </View>
-              {activeOffer.offer.terms ? (
-                <>
-                  <Text style={[ui.sectionLabel, styles.termsLabel]}>Terms</Text>
-                  <Text style={styles.sheetText}>{activeOffer.offer.terms}</Text>
-                </>
+              ) : null}
+              {formatExpiry(activeOffer.offer.endsAt) ? (
+                <Fact
+                  pastel={pastels.sky}
+                  icon="time-outline"
+                  text={`Valid till ${formatExpiry(activeOffer.offer.endsAt)}`}
+                />
               ) : null}
             </View>
-          )
+            {activeOffer.offer.terms ? (
+              <>
+                <Text style={[ui.sectionLabel, styles.termsLabel]}>Terms</Text>
+                <Text style={styles.sheetText}>{activeOffer.offer.terms}</Text>
+              </>
+            ) : null}
+          </View>
         ) : null}
       </BottomSheet>
     </View>

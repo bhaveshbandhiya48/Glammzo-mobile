@@ -70,8 +70,9 @@ import { loadProfilePreferApi } from "@/lib/profile-api"
 import {
   validateArtistPromoCode,
   type AppliedOfferDiscount,
-  type PromoCashbackClaim,
 } from "@/lib/promo-api"
+import { CheckoutOffers } from "@/components/app-offers/CheckoutOffers"
+import { useCheckoutAppOffers } from "@/components/app-offers/useCheckoutAppOffers"
 import { formatRupees } from "@/lib/service-pricing"
 import {
   artistPriceLine,
@@ -192,7 +193,6 @@ export default function ArtistBookScreen() {
   const [promoError, setPromoError] = useState<string | null>(null)
   const [promoApplying, setPromoApplying] = useState(false)
   const [appliedDiscount, setAppliedDiscount] = useState<AppliedOfferDiscount | null>(null)
-  const [cashbackClaim, setCashbackClaim] = useState<PromoCashbackClaim | null>(null)
   const [useWallet, setUseWallet] = useState(false)
   const [useLoyalty, setUseLoyalty] = useState(false)
   const [loyalty, setLoyalty] = useState<LoyaltySummary>(EMPTY_LOYALTY_SUMMARY)
@@ -578,11 +578,23 @@ export default function ArtistBookScreen() {
     Math.max(0, serviceSubtotal),
     Math.max(0, Math.round(appliedDiscount?.discountAmount ?? 0)),
   )
+  const appOffers = useCheckoutAppOffers(
+    artist && !quoteMode && selectedIds.length > 0 && quoteTotal > 0
+      ? {
+          scope: "artist",
+          artistSlug: artist.slug,
+          serviceIds: selectedIds,
+          subtotal: quoteTotal,
+          partnerCode: appliedDiscount?.code ?? null,
+        }
+      : null,
+  )
+  const appOfferDiscount = Math.min(appOffers.discountRupees, Math.max(quoteTotal - promoDiscount, 0))
   const loyaltyCredit =
     useLoyalty && loyaltyAvailable
       ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(serviceSubtotal - promoDiscount, 0))
       : 0
-  const amountBeforeWallet = Math.max(0, quoteTotal - promoDiscount - loyaltyCredit)
+  const amountBeforeWallet = Math.max(0, quoteTotal - promoDiscount - appOfferDiscount - loyaltyCredit)
   const walletCredit = useWallet
     ? Math.min(Math.max(0, Math.round(walletBalance)), amountBeforeWallet)
     : 0
@@ -592,7 +604,7 @@ export default function ArtistBookScreen() {
   const advanceDue = quoteMode
     ? (heldQuote?.advance ?? 0)
     : Math.min(quote?.advance ?? 0, payableTotal)
-  const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
+  const appliedPromoCode = appliedDiscount?.code ?? null
 
   async function applyPromo() {
     const code = promoInput.trim().toUpperCase()
@@ -611,24 +623,26 @@ export default function ArtistBookScreen() {
     setPromoApplying(true)
     setPromoError(null)
     try {
+      // Glammzo offer codes first; anything else is the artist's own code.
+      const glammzo = await appOffers.tryCode(code)
+      if (glammzo.ok) {
+        setPromoInput("")
+        return
+      }
+      if (glammzo.error !== "not_found") {
+        setPromoError(glammzo.error)
+        return
+      }
       const result = await validateArtistPromoCode({
         code,
         subtotal: quoteTotal,
         artistSlug: artist.slug,
         serviceIds: selectedIds,
       })
-      if (result.kind === "discount") {
-        setAppliedDiscount(result.discount)
-        setCashbackClaim(null)
-        setPromoInput(result.discount.code)
-        return
-      }
-      setAppliedDiscount(null)
-      setCashbackClaim(result.cashback)
-      setPromoInput(result.cashback.code)
+      setAppliedDiscount(result.discount)
+      setPromoInput(result.discount.code)
     } catch (err) {
       setAppliedDiscount(null)
-      setCashbackClaim(null)
       setPromoError(
         err instanceof ApiError ? err.message : "Could not apply promo code.",
       )
@@ -639,7 +653,6 @@ export default function ArtistBookScreen() {
 
   function clearPromo() {
     setAppliedDiscount(null)
-    setCashbackClaim(null)
     setPromoInput("")
     setPromoError(null)
   }
@@ -723,6 +736,7 @@ export default function ArtistBookScreen() {
         lng: pin?.lng,
         fullName: name.trim(),
         promoCode: quoteMode ? undefined : appliedPromoCode || undefined,
+        appOffer: quoteMode ? undefined : appOffers.selection,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
         leadResponseId: quoteMode ? leadResponseId : undefined,
@@ -794,12 +808,8 @@ export default function ArtistBookScreen() {
     })
       .then((result) => {
         if (!active) return
-        if (result.kind === "discount") {
-          setAppliedDiscount(result.discount)
-          setPromoError(null)
-          return
-        }
-        setAppliedDiscount(null)
+        setAppliedDiscount(result.discount)
+        setPromoError(null)
       })
       .catch(() => {
         if (active) setAppliedDiscount(null)
@@ -1171,6 +1181,7 @@ export default function ArtistBookScreen() {
               <BookingCard>
                 {quoteMode ? null : (
                   <>
+                    <CheckoutOffers state={appOffers} />
                     {appliedPromoCode ? (
                       <View style={styles.appliedPromo}>
                         <PastelIcon pastel={pastels.mint} name="pricetag-outline" />
@@ -1179,11 +1190,6 @@ export default function ArtistBookScreen() {
                           {appliedDiscount ? (
                             <Text style={styles.success}>
                               {appliedDiscount.title} · save {formatRupees(appliedDiscount.discountAmount)}
-                            </Text>
-                          ) : null}
-                          {cashbackClaim ? (
-                            <Text style={styles.success}>
-                              ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
                             </Text>
                           ) : null}
                         </View>
@@ -1238,14 +1244,10 @@ export default function ArtistBookScreen() {
                     {promoError ? (
                       <Text style={styles.error}>{promoError}</Text>
                     ) : null}
-                    {cashbackClaim && !promoError ? (
-                      <Text style={styles.muted}>{cashbackClaim.message}</Text>
-                    ) : appliedDiscount && !promoError ? (
+                    {appliedDiscount && !promoError ? (
                       <Text style={styles.muted}>Artist offer applied on service price.</Text>
                     ) : (
-                      <Text style={styles.muted}>
-                        Artist offer codes and Glammzo cashback codes work here.
-                      </Text>
+                      <Text style={styles.muted}>Artist codes and Glammzo offer codes work here.</Text>
                     )}
                     <Hairline />
                   </>
@@ -1305,11 +1307,11 @@ export default function ArtistBookScreen() {
                     tone="success"
                   />
                 ) : null}
-                {cashbackClaim ? (
+                {appOfferDiscount > 0 && appOffers.applied ? (
                   <ReceiptRow
-                    label={`Cashback (${cashbackClaim.code})`}
-                    value={`+₹${cashbackClaim.cashbackRupees} later`}
-                    tone="muted"
+                    label={`Glammzo offer (${appOffers.applied.headline})`}
+                    value={`−${formatRupees(appOfferDiscount)}`}
+                    tone="success"
                   />
                 ) : null}
                 {loyaltyCredit > 0 ? (

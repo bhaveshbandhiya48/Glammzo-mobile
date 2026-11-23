@@ -23,6 +23,7 @@ import { SalonDetailSkeleton } from "@/components/ui/Skeleton"
 import { Text } from "@/components/ui/Text"
 import { SalonGalleryLightbox } from "@/components/salon/SalonGalleryLightbox"
 import { SalonOffersCarousel } from "@/components/salon/SalonOffersCarousel"
+import { AppOffersOnPage } from "@/components/app-offers/AppOffersOnPage"
 import { SalonAboutCard, type AboutRow } from "@/components/salon-page/SalonAboutCard"
 import { CART_BAR_GAP, CART_BAR_HEIGHT, SalonCartBar } from "@/components/salon-page/SalonCartBar"
 import { SalonPackageSheet, SalonServiceSheet } from "@/components/salon-page/SalonDetailSheets"
@@ -48,7 +49,7 @@ import { flattenAmenities, getSalonHeroSlides, salonProfileImageUrl } from "@/da
 import type { Salon, SalonPackage, SalonService } from "@/data/types"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import { openDirections } from "@/lib/visit-links"
-import { fetchGlammzoOffersForSalon, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
+import { fetchSalonAppOffers, type AppOffer } from "@/lib/app-offers-api"
 import { withSalonDistanceFromLocation } from "@/lib/explore-location"
 import {
   filterPackagesByGenderAudience,
@@ -87,7 +88,7 @@ export default function SalonDetailScreen() {
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [galleryIndex, setGalleryIndex] = useState(0)
   const [reviewsOpen, setReviewsOpen] = useState(false)
-  const [glammzoOffers, setGlammzoOffers] = useState<GlammzoOfferCard[]>([])
+  const [glammzoOffers, setGlammzoOffers] = useState<AppOffer[]>([])
 
   // Scroll-driven UI.
   const [headerSolid, setHeaderSolid] = useState(false)
@@ -128,10 +129,7 @@ export default function SalonDetailScreen() {
         return
       }
 
-      void fetchGlammzoOffersForSalon({
-        city: withDistance.city,
-        area: withDistance.area,
-      }).then((offers) => {
+      void fetchSalonAppOffers(withDistance.id).then((offers) => {
         if (active) setGlammzoOffers(offers)
       })
     })
@@ -538,11 +536,12 @@ export default function SalonDetailScreen() {
             <View style={ui.sectionHead}>
               <Text style={ui.sectionLabel}>Offers</Text>
             </View>
-            <SalonOffersCarousel
-              glammzoOffers={glammzoOffers}
-              salonOffers={salon.offers}
-              onPressCta={() => scrollToTab("services")}
-            />
+            {glammzoOffers.length > 0 ? (
+              <View style={styles.appOffers}>
+                <AppOffersOnPage offers={glammzoOffers} onBook={() => scrollToTab("services")} />
+              </View>
+            ) : null}
+            <SalonOffersCarousel salonOffers={salon.offers} onPressCta={() => scrollToTab("services")} />
           </>
         ) : null}
 
@@ -786,6 +785,10 @@ const CATEGORY_BAND = "#f7f5f2"
 const CATEGORY_TOP_GAP = 24
 
 const styles = StyleSheet.create({
+  appOffers: {
+    paddingHorizontal: sp.gutter,
+    marginBottom: 12,
+  },
   root: {
     flex: 1,
     backgroundColor: "#ffffff",

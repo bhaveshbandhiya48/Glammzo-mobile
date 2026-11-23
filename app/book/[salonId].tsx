@@ -68,8 +68,9 @@ import { loadProfilePreferApi, syncProfileEmailFromBooking } from "@/lib/profile
 import {
   validatePromoCode,
   type AppliedOfferDiscount,
-  type PromoCashbackClaim,
 } from "@/lib/promo-api"
+import { CheckoutOffers } from "@/components/app-offers/CheckoutOffers"
+import { useCheckoutAppOffers } from "@/components/app-offers/useCheckoutAppOffers"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import {
   cartServicesSubtotal,
@@ -170,7 +171,6 @@ export default function BookingScreen() {
   const [appliedDiscount, setAppliedDiscount] = useState<AppliedOfferDiscount | null>(
     null,
   )
-  const [cashbackClaim, setCashbackClaim] = useState<PromoCashbackClaim | null>(null)
   const [promoError, setPromoError] = useState<string | null>(null)
   const [promoApplying, setPromoApplying] = useState(false)
   const [promoCelebration, setPromoCelebration] =
@@ -487,15 +487,34 @@ export default function BookingScreen() {
       )
     : 0
 
+  const appOffersServicePriceOptionIds =
+    salon && selectedPackage
+      ? withDefaultPriceOptionIds(salon.services, serviceIdsForAvailability, salonCart?.priceOptionIds)
+      : salonCart?.priceOptionIds
+  const appOffers = useCheckoutAppOffers(
+    salon && serviceIdsForAvailability.length > 0
+      ? {
+          scope: "salon",
+          salonId: salon.id,
+          serviceIds: serviceIdsForAvailability,
+          packageId: selectedPackage?.id ?? null,
+          serviceQuantities: salonCart?.quantities,
+          servicePriceOptionIds: appOffersServicePriceOptionIds,
+          partnerCode: appliedDiscount?.code ?? null,
+        }
+      : null,
+  )
+
   const loyaltyAvailable = canApplyLoyalty(loyalty)
   const afterPromo = appliedDiscount?.finalTotal ?? subtotal
   const promoDiscount = appliedDiscount?.discountAmount ?? 0
-  const appliedPromoCode = appliedDiscount?.code ?? cashbackClaim?.code ?? null
+  const appliedPromoCode = appliedDiscount?.code ?? null
+  const appOfferDiscount = Math.min(appOffers.discountRupees, Math.max(afterPromo, 0))
   const loyaltyCredit =
     useLoyalty && loyaltyAvailable && !selectedPackage
       ? Math.min(LOYALTY_DISCOUNT_CAP_RUPEES, Math.max(afterPromo, 0))
       : 0
-  const taxableAmount = Math.max(0, afterPromo - loyaltyCredit)
+  const taxableAmount = Math.max(0, afterPromo - appOfferDiscount - loyaltyCredit)
   const salonTax =
     salon?.tax &&
     salon.tax.enabled &&
@@ -528,6 +547,17 @@ export default function BookingScreen() {
     setPromoApplying(true)
     setPromoError(null)
     try {
+      // Glammzo offer codes first; anything else is the salon's own code.
+      const glammzo = await appOffers.tryCode(code)
+      if (glammzo.ok) {
+        setPromoInput("")
+        setPromoCelebration({ kind: "app_offer", offer: glammzo.offer })
+        return
+      }
+      if (glammzo.error !== "not_found") {
+        setPromoError(glammzo.error)
+        return
+      }
       const servicePriceOptionIds = selectedPackage
         ? withDefaultPriceOptionIds(
             salon.services,
@@ -544,21 +574,11 @@ export default function BookingScreen() {
         servicePriceOptionIds,
       })
 
-      if (result.kind === "discount") {
-        setAppliedDiscount(result.discount)
-        setCashbackClaim(null)
-        setPromoInput(result.discount.code)
-        setPromoCelebration({ kind: "discount", discount: result.discount })
-        return
-      }
-
-      setAppliedDiscount(null)
-      setCashbackClaim(result.cashback)
-      setPromoInput(result.cashback.code)
-      setPromoCelebration({ kind: "cashback", cashback: result.cashback })
+      setAppliedDiscount(result.discount)
+      setPromoInput(result.discount.code)
+      setPromoCelebration({ kind: "discount", discount: result.discount })
     } catch (err) {
       setAppliedDiscount(null)
-      setCashbackClaim(null)
       setPromoError(err instanceof ApiError ? err.message : "Could not apply promo code.")
     } finally {
       setPromoApplying(false)
@@ -567,15 +587,14 @@ export default function BookingScreen() {
 
   function clearPromo() {
     setAppliedDiscount(null)
-    setCashbackClaim(null)
     setPromoInput("")
     setPromoError(null)
   }
 
   // Keep applied promo in sync when cart services/package change (match web).
   useEffect(() => {
-    if (!salon || (!appliedDiscount && !cashbackClaim)) return
-    const code = appliedDiscount?.code ?? cashbackClaim?.code
+    if (!salon || !appliedDiscount) return
+    const code = appliedDiscount.code
     if (!code || serviceIdsForAvailability.length === 0) {
       clearPromo()
       return
@@ -599,20 +618,12 @@ export default function BookingScreen() {
     })
       .then((result) => {
         if (!active) return
-        if (result.kind === "discount") {
-          setAppliedDiscount(result.discount)
-          setCashbackClaim(null)
-          setPromoError(null)
-          return
-        }
-        setAppliedDiscount(null)
-        setCashbackClaim(result.cashback)
+        setAppliedDiscount(result.discount)
         setPromoError(null)
       })
       .catch((err) => {
         if (!active) return
         setAppliedDiscount(null)
-        setCashbackClaim(null)
         setPromoError(
           err instanceof ApiError
             ? err.message
@@ -706,12 +717,12 @@ export default function BookingScreen() {
           },
         ]
       : []),
-    ...(cashbackClaim
+    ...(appOfferDiscount > 0 && appOffers.applied
       ? [
           {
-            label: `Cashback (${cashbackClaim.code})`,
-            value: `+₹${cashbackClaim.cashbackRupees} later`,
-            muted: true,
+            label: `Glammzo offer (${appOffers.applied.headline})`,
+            value: `−${formatRupees(appOfferDiscount)}`,
+            success: true,
           },
         ]
       : []),
@@ -788,6 +799,7 @@ export default function BookingScreen() {
         preferredStaffId: selectedPackage ? undefined : staffId || undefined,
         packageId: selectedPackage?.id,
         promoCode: appliedPromoCode || undefined,
+        appOffer: appOffers.selection,
         useWallet: useWallet && walletBalance > 0,
         useFreeService: useLoyalty && loyaltyAvailable,
         marketingOptIn,
@@ -1218,6 +1230,7 @@ export default function BookingScreen() {
 
               <BookingSectionLabel>Offers</BookingSectionLabel>
               <BookingCard>
+                <CheckoutOffers state={appOffers} />
                 {appliedPromoCode ? (
                   <View style={styles.appliedPromo}>
                     <PastelIcon pastel={pastels.mint} name="pricetag-outline" />
@@ -1226,10 +1239,6 @@ export default function BookingScreen() {
                       {appliedDiscount ? (
                         <Text style={styles.success}>
                           {appliedDiscount.title} · −{formatRupees(promoDiscount)}
-                        </Text>
-                      ) : cashbackClaim ? (
-                        <Text style={styles.success}>
-                          ₹{cashbackClaim.cashbackRupees} wallet cashback after visit
                         </Text>
                       ) : null}
                     </View>
@@ -1284,9 +1293,6 @@ export default function BookingScreen() {
                 )}
                 {promoError && appliedPromoCode ? (
                   <Text style={styles.error}>{promoError}</Text>
-                ) : null}
-                {cashbackClaim && !promoError ? (
-                  <Text style={styles.muted}>{cashbackClaim.message}</Text>
                 ) : null}
                 <Hairline />
                 <ToggleRow

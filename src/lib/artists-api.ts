@@ -1,3 +1,4 @@
+import type { AppOfferSelection } from "@/lib/app-offers-api"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 import { apiFetch } from "@/lib/api"
@@ -512,7 +513,7 @@ export async function cancelArtistPublicBooking(input: {
   )
 }
 
-/** Create artist booking via Glammzo-web so wallet / loyalty / cashback promos apply. */
+/** Create artist booking via Glammzo-web so wallet, loyalty and Glammzo offers apply. */
 export async function createArtistBookingWithRewards(input: {
   slug: string
   serviceIds: string[]
@@ -527,6 +528,8 @@ export async function createArtistBookingWithRewards(input: {
   fullName: string
   notes?: string | null
   promoCode?: string
+  /** Glammzo offer: picked, typed, or let the server apply the best automatic one. */
+  appOffer?: AppOfferSelection
   useWallet?: boolean
   useFreeService?: boolean
   /** Accepted Get quotes response: the server books at the quoted price. */
@@ -540,7 +543,7 @@ export async function createArtistBookingWithRewards(input: {
     loyaltyDiscount: number
     walletUsed: number
     promoCode: string | null
-    cashbackRupees: number
+    appOfferDiscount?: number
     awaitingPayment: boolean
     /** Glammzo payment page for the artist's advance (Pro Plus), when one is due. */
     payUrl?: string | null

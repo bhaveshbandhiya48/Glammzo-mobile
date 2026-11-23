@@ -14,20 +14,22 @@ import { CodeChip } from "@/components/ui/CodeChip"
 import { Text } from "@/components/ui/Text"
 import type { PublicArtistOffer, PublicArtistService } from "@/lib/artists-api"
 import { copyCode } from "@/lib/copy-code"
-import { offerCashbackText, type GlammzoOfferCard } from "@/lib/glammzo-offers-api"
+import { AppOffersOnPage } from "@/components/app-offers/AppOffersOnPage"
+import type { AppOffer } from "@/lib/app-offers-api"
 import { fontFamily } from "@/theme/tokens"
 
 type Props = {
   artistOffers: PublicArtistOffer[]
   services: PublicArtistService[]
-  glammzoOffers?: GlammzoOfferCard[]
+  /** Glammzo offers that work with this artist, shown first as tickets. */
+  appOffers?: AppOffer[]
+  /** Opens the services list from an offer's details. */
+  onBook?: () => void
   /** Horizontal inset already applied by parent screen padding. */
   contentInset?: number
 }
 
-type SliderItem =
-  | { key: string; kind: "artist"; offer: PublicArtistOffer }
-  | { key: string; kind: "glammzo"; offer: GlammzoOfferCard }
+type SliderItem = { key: string; kind: "artist"; offer: PublicArtistOffer }
 
 function appliesLabel(offer: PublicArtistOffer, services: PublicArtistService[]) {
   if (offer.appliesTo === "all_services") return "Applies to all services"
@@ -50,11 +52,12 @@ function endsLabel(endsAt: string | null) {
   })}`
 }
 
-/** Artist + Glammzo offers on the solo-artist detail page (slider when multiple). */
+/** Glammzo offers (tickets) and the artist's own offers (slider) on the artist page. */
 export function ArtistOffersStrip({
   artistOffers,
   services,
-  glammzoOffers = [],
+  appOffers = [],
+  onBook,
   contentInset = 16,
 }: Props) {
   const { width: windowWidth } = useWindowDimensions()
@@ -67,15 +70,10 @@ export function ArtistOffersStrip({
         kind: "artist" as const,
         offer,
       })),
-      ...glammzoOffers.map((offer) => ({
-        key: `g-${offer.id}`,
-        kind: "glammzo" as const,
-        offer,
-      })),
     ]
-  }, [artistOffers, glammzoOffers])
+  }, [artistOffers])
 
-  if (items.length === 0) return null
+  if (items.length === 0 && appOffers.length === 0) return null
 
   const gap = 12
   const cardWidth =
@@ -95,20 +93,22 @@ export function ArtistOffersStrip({
         Offers
       </Text>
 
-      <ScrollView
-        horizontal
-        nestedScrollEnabled
-        showsHorizontalScrollIndicator={false}
-        decelerationRate="fast"
-        snapToInterval={items.length > 1 ? snap : undefined}
-        snapToAlignment="start"
-        disableIntervalMomentum={items.length > 1}
-        style={{ marginHorizontal: -contentInset }}
-        contentContainerStyle={[styles.row, { paddingHorizontal: contentInset }]}
-        onMomentumScrollEnd={items.length > 1 ? onMomentumEnd : undefined}
-      >
-        {items.map((item) => {
-          if (item.kind === "artist") {
+      <AppOffersOnPage offers={appOffers} onBook={onBook} />
+
+      {items.length > 0 ? (
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          snapToInterval={items.length > 1 ? snap : undefined}
+          snapToAlignment="start"
+          disableIntervalMomentum={items.length > 1}
+          style={{ marginHorizontal: -contentInset }}
+          contentContainerStyle={[styles.row, { paddingHorizontal: contentInset }]}
+          onMomentumScrollEnd={items.length > 1 ? onMomentumEnd : undefined}
+        >
+          {items.map((item) => {
             const offer = item.offer
             const till = endsLabel(offer.endsAt)
             const how =
@@ -128,7 +128,9 @@ export function ArtistOffersStrip({
                 lines={[`${appliesLabel(offer, services)}${till ? ` · ${till}` : ""}`]}
                 accessible
                 accessibilityLabel={`${offer.dealLabel} ${offer.title}. ${appliesLabel(offer, services)}${till ? `, ${till}` : ""}. ${how}`}
-                accessibilityActions={offer.code ? [{ name: "copy", label: `Copy code ${offer.code}` }] : undefined}
+                accessibilityActions={
+                  offer.code ? [{ name: "copy", label: `Copy code ${offer.code}` }] : undefined
+                }
                 onAccessibilityAction={(event) => {
                   if (event.nativeEvent.actionName === "copy" && offer.code) copyCode(offer.code)
                 }}
@@ -141,35 +143,11 @@ export function ArtistOffersStrip({
                 }
               />
             )
-          }
+          })}
+        </ScrollView>
+      ) : null}
 
-          const offer = item.offer
-          return (
-            <OfferCard
-              key={item.key}
-              width={cardWidth}
-              pastel={pastels.lavender}
-              icon="sparkles"
-              eyebrow={offer.eyebrow || "Glammzo offer"}
-              title={offer.title}
-              lines={[
-                offer.cashbackRupees > 0
-                  ? `${offerCashbackText(offer)}${offer.minOrderRupees > 0 ? ` · min ₹${offer.minOrderRupees}` : ""}`
-                  : null,
-              ]}
-              footer={
-                offer.promoCode ? (
-                  <CodeChip code={offer.promoCode} label="Code" />
-                ) : (
-                  <Text style={styles.auto}>Cashback after your visit</Text>
-                )
-              }
-            />
-          )
-        })}
-      </ScrollView>
-
-      <OfferDots count={items.length} index={index} />
+      {items.length > 1 ? <OfferDots count={items.length} index={index} /> : null}
     </View>
   )
 }

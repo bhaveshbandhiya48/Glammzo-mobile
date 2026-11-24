@@ -48,6 +48,8 @@ export type ArtistCardData = {
   profilePhotoUrl: string | null
   categories: string[]
   primaryCategory: string | null
+  /** Who the artist serves, for the Women / Men switch. Unisex shows under both. */
+  clientAudience?: "women" | "men" | "unisex" | null
   startingPrice: number | null
   offersHomeVisits: boolean
   hasStudio: boolean
@@ -82,6 +84,8 @@ export type ArtistQuery = {
   longitude?: number
   /** Only artists within this distance of the location. */
   radiusKm?: number
+  /** The Women / Men switch: hides artists who only serve the other side. */
+  audience?: "women" | "men" | null
   sort?: ArtistSort
   offset?: number
   limit?: number
@@ -257,6 +261,7 @@ export async function fetchArtists(query: ArtistQuery, signal?: AbortSignal) {
   if (query.occasion) params.set("occasion", query.occasion)
   if (query.where && query.where !== "any") params.set("where", query.where)
   if (query.q?.trim()) params.set("q", query.q.trim())
+  if (query.audience) params.set("audience", query.audience)
   if (query.latitude !== undefined && query.longitude !== undefined) {
     params.set("lat", String(query.latitude))
     params.set("lng", String(query.longitude))

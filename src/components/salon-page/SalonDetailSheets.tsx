@@ -149,14 +149,14 @@ export function SalonServiceSheet({
 
 type PackageSheetProps = {
   pkg: SalonPackage | null
-  fallbackImage: string
   selected: boolean
   onClose: () => void
   onToggle: (pkg: SalonPackage) => void
 }
 
-export function SalonPackageSheet({ pkg, fallbackImage, selected, onClose, onToggle }: PackageSheetProps) {
-  const image = pkg?.imageUrl?.trim() || fallbackImage
+export function SalonPackageSheet({ pkg, selected, onClose, onToggle }: PackageSheetProps) {
+  // The package's own photo only; without one the sheet opens straight on the details.
+  const image = pkg?.imageUrl?.trim() || ""
   return (
     <BottomSheet visible={pkg != null} title="Package summary" onClose={onClose}>
       {pkg ? (

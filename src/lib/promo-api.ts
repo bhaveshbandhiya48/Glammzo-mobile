@@ -20,6 +20,8 @@ export async function validatePromoCode(input: {
   packageId?: string | null
   serviceQuantities?: Record<string, number>
   servicePriceOptionIds?: Record<string, string>
+  /** Professional picked: Pro staff levels change the prices the code applies to. */
+  staffId?: string | null
 }): Promise<ValidatePromoResult> {
   const data = await apiFetch<{
     ok: boolean
@@ -34,6 +36,7 @@ export async function validatePromoCode(input: {
       packageId: input.packageId ?? null,
       serviceQuantities: input.serviceQuantities,
       servicePriceOptionIds: input.servicePriceOptionIds,
+      staffId: input.staffId ?? null,
     },
   })
 

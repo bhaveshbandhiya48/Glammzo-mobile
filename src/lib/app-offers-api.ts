@@ -122,6 +122,8 @@ export async function fetchCheckoutAppOffers(
         packageId?: string | null
         serviceQuantities?: Record<string, number>
         servicePriceOptionIds?: Record<string, string>
+        /** Professional picked (Pro staff level markup). */
+        staffId?: string | null
         partnerCode?: string | null
         code?: string | null
       }

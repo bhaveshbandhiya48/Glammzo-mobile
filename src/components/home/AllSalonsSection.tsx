@@ -18,6 +18,7 @@ import {
 } from "@/lib/explore-filters"
 import { NEARBY_RADIUS_KM, partitionSalonsByCurrentArea } from "@/lib/explore-location"
 import { pickFeaturedSectionSalons, pickNearbyAfterFeatured } from "@/lib/featured-nearby"
+import { artistMatchesGenderAudience } from "@/lib/gender-audience"
 import { useHomeAudience } from "@/lib/home-audience"
 import { artistsSeeAllParams, salonsSeeAllParams } from "@/lib/see-all-params"
 import type { SavedLocation } from "@/lib/user"
@@ -289,10 +290,11 @@ export function AllSalonsSection({
   const shownArtists = useMemo(
     () =>
       filterArtists(
-        nearbyArtists.artists ?? [],
+        // The Home Women / Men switch: unisex artists show for both.
+        (nearbyArtists.artists ?? []).filter((artist) => artistMatchesGenderAudience(artist, audience)),
         hasDistances ? artistChips : { ...artistChips, sort: "rating" },
       ),
-    [artistChips, hasDistances, nearbyArtists.artists],
+    [artistChips, audience, hasDistances, nearbyArtists.artists],
   )
 
   // Until the person taps a tab here, never open on an empty list when the other tab has results:

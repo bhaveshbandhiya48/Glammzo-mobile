@@ -69,6 +69,7 @@ import {
   validatePromoCode,
   type AppliedOfferDiscount,
 } from "@/lib/promo-api"
+import { formatStaffMarkup, hasStaffMarkup, servicesWithStaffMarkup } from "@/lib/staff-markup"
 import { CheckoutOffers } from "@/components/app-offers/CheckoutOffers"
 import { useCheckoutAppOffers } from "@/components/app-offers/useCheckoutAppOffers"
 import { getSalonByIdLive } from "@/lib/salons-api"
@@ -367,6 +368,23 @@ export default function BookingScreen() {
     return salon.packages.find((item) => item.id === salonCart.packageId)
   }, [salon, salonCart])
 
+  // Pro staff levels: picking a professional with a level prices each service with their markup.
+  // "Any stylist" and packages keep normal prices. The server prices the booking the same way.
+  const staffMarkup = useMemo(() => {
+    if (selectedPackage || !staffId) return null
+    const markup = bookableStaff.find((member) => member.id === staffId)?.markup
+    return hasStaffMarkup(markup) ? markup : null
+  }, [bookableStaff, selectedPackage, staffId])
+  const pricedServices = useMemo(
+    () => (salon ? servicesWithStaffMarkup(salon.services, staffMarkup, salonCart?.quantities) : []),
+    [salon, salonCart?.quantities, staffMarkup],
+  )
+  const pricedSelectedServices = useMemo(() => {
+    if (!salonCart) return []
+    return pricedServices.filter((service) => salonCart.serviceIds.includes(service.id))
+  }, [pricedServices, salonCart])
+  const promoStaffId = selectedPackage ? null : staffId
+
   const serviceIdsForAvailability = useMemo(() => {
     if (selectedPackage) {
       return selectedPackage.items.map((item) => item.serviceId)
@@ -479,7 +497,7 @@ export default function BookingScreen() {
 
   const subtotal = salon
     ? cartServicesSubtotal(
-        salon.services,
+        pricedServices,
         salonCart?.serviceIds ?? [],
         selectedPackage ?? null,
         salonCart?.quantities,
@@ -500,6 +518,7 @@ export default function BookingScreen() {
           packageId: selectedPackage?.id ?? null,
           serviceQuantities: salonCart?.quantities,
           servicePriceOptionIds: appOffersServicePriceOptionIds,
+          staffId: promoStaffId,
           partnerCode: appliedDiscount?.code ?? null,
         }
       : null,
@@ -572,6 +591,7 @@ export default function BookingScreen() {
         packageId: selectedPackage?.id,
         serviceQuantities: salonCart?.quantities,
         servicePriceOptionIds,
+        staffId: promoStaffId,
       })
 
       setAppliedDiscount(result.discount)
@@ -615,6 +635,7 @@ export default function BookingScreen() {
       packageId: selectedPackage?.id,
       serviceQuantities: salonCart?.quantities,
       servicePriceOptionIds,
+      staffId: promoStaffId,
     })
       .then((result) => {
         if (!active) return
@@ -641,6 +662,7 @@ export default function BookingScreen() {
     selectedPackage?.id,
     JSON.stringify(salonCart?.quantities ?? {}),
     JSON.stringify(salonCart?.priceOptionIds ?? {}),
+    promoStaffId,
   ])
 
   if (salonLoading) {
@@ -695,7 +717,7 @@ export default function BookingScreen() {
           priceLabel: `₹${selectedPackage.packagePrice}`,
         },
       ]
-    : selectedServices.map((service) => {
+    : pricedSelectedServices.map((service) => {
         const optionId = salonCart?.priceOptionIds[service.id] ?? null
         return {
           title: service.name,
@@ -968,7 +990,8 @@ export default function BookingScreen() {
                 <BookingCard>
                   {selectedPackage ? (
                     <ServiceLine
-                      imageUrl={selectedPackage.imageUrl || salon.imageUrl}
+                      imageUrl={selectedPackage.imageUrl || null}
+                      placeholderIcon="gift-outline"
                       tag="Package"
                       title={selectedPackage.name}
                       caption={
@@ -980,7 +1003,7 @@ export default function BookingScreen() {
                       onRemove={() => cart.setPackage(salon.id, null)}
                     />
                   ) : null}
-                  {selectedServices.map((service, index) => {
+                  {pricedSelectedServices.map((service, index) => {
                     const optionId = salonCart?.priceOptionIds[service.id] ?? null
                     return (
                       <View key={service.id} style={styles.lineGap}>
@@ -1032,15 +1055,29 @@ export default function BookingScreen() {
                       </Notice>
                     </View>
                   ) : bookableStaff.length > 0 ? (
-                    <StylistPicker
-                      staff={bookableStaff}
-                      value={staffId}
-                      onSelect={(id) => {
-                        setAutoStaffId(null)
-                        setStaffId(id)
-                      }}
-                      showAny={bookableStaff.length > 1}
-                    />
+                    <>
+                      <StylistPicker
+                        staff={bookableStaff.map((member) => ({
+                          ...member,
+                          badge: hasStaffMarkup(member.markup) ? formatStaffMarkup(member.markup) : null,
+                        }))}
+                        value={staffId}
+                        onSelect={(id) => {
+                          setAutoStaffId(null)
+                          setStaffId(id)
+                        }}
+                        showAny={bookableStaff.length > 1}
+                      />
+                      {staffMarkup ? (
+                        <View style={styles.pad}>
+                          <Notice tone="grey" icon="pricetag-outline">
+                            {`${staffMarkup.levelName} stylist: prices include ${formatStaffMarkup(staffMarkup)} per service.${
+                              bookableStaff.length > 1 ? " Pick “Any stylist” for standard prices." : ""
+                            }`}
+                          </Notice>
+                        </View>
+                      ) : null}
+                    </>
                   ) : (
                     <View style={styles.pad}>
                       <View style={styles.ghostRow} />

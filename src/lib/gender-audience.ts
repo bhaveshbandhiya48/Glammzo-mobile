@@ -94,3 +94,18 @@ export function salonMatchesGenderAudience(
   }
   return true
 }
+
+/**
+ * Whether a solo artist belongs under the Women or Men switch (same rule as salons and
+ * Glammzo-web). CRM sends the artist's own choice, or a guess from their categories when
+ * they signed up before it was asked. A missing value (older CRM) shows for both.
+ */
+export function artistMatchesGenderAudience(
+  artist: { clientAudience?: "women" | "men" | "unisex" | null },
+  selected: ServiceGenderAudience,
+) {
+  if (artist.clientAudience === "men" || artist.clientAudience === "women") {
+    return artist.clientAudience === selected
+  }
+  return true
+}

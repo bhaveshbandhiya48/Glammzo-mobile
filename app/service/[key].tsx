@@ -24,6 +24,7 @@ import {
   withSalonDistanceFromLocation,
 } from "@/lib/explore-location"
 import { sortExploreSalons } from "@/lib/explore-filters"
+import { artistMatchesGenderAudience } from "@/lib/gender-audience"
 import { parseHomeAudience } from "@/lib/home-audience"
 import { salonsForTile } from "@/lib/home-salon-info"
 import { bootstrapLaunchLocation } from "@/lib/launch-permissions"
@@ -160,7 +161,11 @@ export default function ServiceScreen() {
   }
 
   const emptyTitle = `No ${tile.label.toLowerCase()} near you yet`
-  const artists = artistsState.status === "ready" ? artistsState.artists : []
+  // Same Women / Men switch as the salons above: unisex artists show for both.
+  const artists =
+    artistsState.status === "ready"
+      ? artistsState.artists.filter((artist) => artistMatchesGenderAudience(artist, audience))
+      : []
   const salonCount = loading ? null : salons.length
   const artistCount = artistsState.status === "ready" ? artists.length : null
   const subtitle =

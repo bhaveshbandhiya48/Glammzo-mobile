@@ -1,5 +1,6 @@
 import { apiFetch } from "@/lib/api"
 import { staffPhotoUrl } from "@/lib/staff-photo"
+import { parseStaffMarkup, type StaffLevelMarkup } from "@/lib/staff-markup"
 
 export type AvailabilitySlot = {
   value: string
@@ -17,6 +18,8 @@ export type AvailabilityStaff = {
   name: string
   role: string
   imageUrl?: string | null
+  /** Pro staff level: services cost more with this professional. Null = normal price. */
+  markup?: StaffLevelMarkup | null
 }
 
 export type AvailabilityResult = {
@@ -93,6 +96,7 @@ export async function fetchAvailability(params: {
               ? member.role.trim()
               : "Specialist",
           imageUrl: staffPhotoUrl(typeof member.imageUrl === "string" ? member.imageUrl : null),
+          markup: parseStaffMarkup((member as { markup?: unknown }).markup),
         }
         return [next]
       })

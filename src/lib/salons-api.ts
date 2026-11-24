@@ -137,7 +137,7 @@ function mapService(raw: unknown): SalonService | null {
   }
 }
 
-function mapPackage(raw: unknown, fallbackImage = ""): SalonPackage | null {
+function mapPackage(raw: unknown): SalonPackage | null {
   if (!raw || typeof raw !== "object") return null
   const p = raw as Record<string, unknown>
   const id = asString(p.id)
@@ -176,8 +176,8 @@ function mapPackage(raw: unknown, fallbackImage = ""): SalonPackage | null {
       asString(p.shortDescription) ||
       asString(p.short_description) ||
       asString(p.description),
-    imageUrl:
-      asString(p.imageUrl) || asString(p.image_url) || fallbackImage,
+    // Only the package's own photo; never the salon's (the UI shows a placeholder).
+    imageUrl: asString(p.imageUrl) || asString(p.image_url),
     packagePrice,
     comparePrice,
     totalDurationMin,
@@ -337,7 +337,7 @@ export function mapWebSalonToMobile(raw: WebSalon): Salon | null {
     : []
   const packages = Array.isArray(raw.packages)
     ? raw.packages
-        .map((pkg) => mapPackage(pkg, imageUrl || coverImageUrl))
+        .map((pkg) => mapPackage(pkg))
         .filter((p): p is SalonPackage => p != null)
     : []
   const offers = Array.isArray(raw.offers)

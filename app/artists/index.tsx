@@ -28,6 +28,7 @@ import {
   type ArtistWhere,
 } from "@/lib/artists-api"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
+import { parseHomeAudience } from "@/lib/home-audience"
 import { getServiceTile } from "@/lib/service-tiles"
 import { getSavedLocation, type SavedLocation } from "@/lib/user"
 import { fontFamily } from "@/theme/tokens"
@@ -66,7 +67,7 @@ export default function ArtistsScreen() {
   const navigation = useNavigation()
   const insets = useSafeAreaInsets()
   // From Home (see `artistsSeeAllParams`): ?where=home|studio, ?sort=nearest, ?service=<tile key>.
-  // ?audience is accepted too, but artists have no women / men data yet, so it doesn't filter.
+  // ?audience=women|men narrows to artists who serve them (unisex artists show for both).
   const params = useLocalSearchParams<{ where?: string; sort?: string; service?: string; audience?: string }>()
   const initialFilters = useMemo<ArtistsFilterDraft>(() => {
     const where = WHERE_OPTIONS.find((option) => option.id === params.where)?.id
@@ -89,6 +90,7 @@ export default function ArtistsScreen() {
   const [location, setLocation] = useState<SavedLocation | null>(null)
   const [filters, setFilters] = useState<ArtistsFilterDraft>(initialFilters)
   const [draft, setDraft] = useState<ArtistsFilterDraft>(initialFilters)
+  const [audience, setAudience] = useState(() => parseHomeAudience(params.audience))
   const [filterOpen, setFilterOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [debounced, setDebounced] = useState("")
@@ -140,8 +142,9 @@ export default function ArtistsScreen() {
       latitude: hasPin ? location!.latitude : undefined,
       longitude: hasPin ? location!.longitude : undefined,
       radiusKm: hasPin ? NEARBY_RADIUS_KM : undefined,
+      audience,
     }),
-    [filters, debounced, effectiveSort, hasPin, location],
+    [filters, debounced, effectiveSort, hasPin, location, audience],
   )
 
   useEffect(() => {
@@ -333,6 +336,13 @@ export default function ArtistsScreen() {
             ) : visibleCategories.length > 0 ? (
               <SeeAllChip label="Category" on={false} onPress={openFilters} trailing="chevron-down" />
             ) : null}
+            <SeeAllChip
+              icon="people-outline"
+              label={audience === "men" ? "Men" : audience === "women" ? "Women" : "Everyone"}
+              on={audience !== null}
+              onPress={() => setAudience(audience === "women" ? "men" : audience === "men" ? null : "women")}
+              a11y="For: tap to switch Women, Men or Everyone"
+            />
             <SeeAllChip
               icon="home-outline"
               label="At home"

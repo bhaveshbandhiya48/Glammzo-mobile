@@ -112,7 +112,7 @@ import {
   markSessionLocationManual,
   subscribeLaunchLocation,
 } from "@/lib/launch-permissions"
-import { salonMatchesGenderAudience } from "@/lib/gender-audience"
+import { artistMatchesGenderAudience, salonMatchesGenderAudience } from "@/lib/gender-audience"
 import { useHomeAudience } from "@/lib/home-audience"
 import { registerPushTokenWithServer } from "@/lib/push"
 import { fetchHomeAppOffers, type AppOffer } from "@/lib/app-offers-api"
@@ -439,10 +439,12 @@ export default function ExploreScreen() {
 
   const mapArtists = useMemo(
     () =>
-      filterExploreArtists(mapArtistsRaw, filters, {
-        query: searchQuery,
-      }),
-    [filters, mapArtistsRaw, searchQuery],
+      filterExploreArtists(
+        mapArtistsRaw.filter((artist) => artistMatchesGenderAudience(artist, audience)),
+        filters,
+        { query: searchQuery },
+      ),
+    [audience, filters, mapArtistsRaw, searchQuery],
   )
 
   const areaMapArtists = useMemo(() => {

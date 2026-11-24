@@ -1,5 +1,5 @@
 import { useRouter, type Href } from "expo-router"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Pressable,
   ScrollView,
@@ -18,6 +18,7 @@ import {
   getHomeArtistsSnapshot,
   type ArtistCardData,
 } from "@/lib/artists-api"
+import { artistMatchesGenderAudience } from "@/lib/gender-audience"
 import { useHomeAudience } from "@/lib/home-audience"
 import { artistsSeeAllParams } from "@/lib/see-all-params"
 import { NEARBY_RADIUS_KM } from "@/lib/explore-location"
@@ -94,11 +95,17 @@ export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0, on
     }
   }, [lat, lng, q, refreshKey, force])
 
-  useEffect(() => {
-    onCount?.(artists?.length ?? 0)
-  }, [artists, onCount])
+  // The Women / Men switch on Home: unisex artists show for both.
+  const shown = useMemo(
+    () => artists?.filter((artist) => artistMatchesGenderAudience(artist, audience)) ?? null,
+    [artists, audience],
+  )
 
-  if (!artists || artists.length === 0) return null
+  useEffect(() => {
+    onCount?.(shown?.length ?? 0)
+  }, [shown, onCount])
+
+  if (!shown || shown.length === 0) return null
 
   const gap = spacing.md
   const padLeft = spacing.lg
@@ -146,7 +153,7 @@ export function ArtistsCarousel({ latitude, longitude, query, refreshKey = 0, on
         snapToAlignment="start"
         disableIntervalMomentum
       >
-        {artists.map((artist) => (
+        {shown.map((artist) => (
           <View key={artist.slug} style={{ width: cardWidth }}>
             <ArtistCard
               artist={artist}

@@ -45,7 +45,7 @@ import { SalonTopBar } from "@/components/salon-page/SalonTopBar"
 import { dialablePhone, parseSalonHours, salonFullGallery, sp, ui } from "@/components/salon-page/theme"
 import { useCart } from "@/context/CartContext"
 import { useFavorites } from "@/context/FavoritesContext"
-import { flattenAmenities, getSalonHeroSlides, salonProfileImageUrl } from "@/data/mocks/salons"
+import { flattenAmenities, getSalonHeroSlides } from "@/data/mocks/salons"
 import type { Salon, SalonPackage, SalonService } from "@/data/types"
 import { getSalonByIdLive } from "@/lib/salons-api"
 import { openDirections } from "@/lib/visit-links"
@@ -719,7 +719,6 @@ export default function SalonDetailScreen() {
 
       <SalonPackageSheet
         pkg={detailPackage}
-        fallbackImage={salonProfileImageUrl(salon)}
         selected={detailPackage ? cart.isPackageSelected(salon.id, detailPackage.id) : false}
         onClose={() => setDetailPackage(null)}
         onToggle={togglePackage}

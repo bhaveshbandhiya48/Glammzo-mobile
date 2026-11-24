@@ -193,8 +193,11 @@ export function ServiceLine({
   onRemove,
   removeLabel,
   tag,
+  placeholderIcon = "sparkles-outline",
 }: {
   imageUrl?: string | null
+  /** Shown on the empty thumb when there is no photo. */
+  placeholderIcon?: IconName
   title: string
   caption?: string | null
   price: string
@@ -208,7 +211,7 @@ export function ServiceLine({
         <Image source={{ uri: imageUrl }} style={styles.serviceThumb} contentFit="cover" transition={200} />
       ) : (
         <View style={[styles.serviceThumb, styles.placePhotoEmpty]}>
-          <Icon name="sparkles-outline" size={18} color={bk.secondary} />
+          <Icon name={placeholderIcon} size={18} color={bk.secondary} />
         </View>
       )}
       <View style={styles.serviceCopy}>
@@ -380,6 +383,8 @@ export type StylistOption = {
   name: string
   role?: string | null
   imageUrl?: string | null
+  /** Small pill under the name, e.g. "+20%" for a Pro staff level. */
+  badge?: string | null
 }
 
 /** Horizontal avatar cards; "Any stylist" first when there's a choice. */
@@ -414,7 +419,9 @@ export function StylistPicker({
             key={member.id}
             accessibilityRole="radio"
             accessibilityState={{ selected: active }}
-            accessibilityLabel={member.role ? `${member.name}, ${member.role}` : member.name}
+            accessibilityLabel={[member.name, member.role, member.badge ? `${member.badge} price` : null]
+              .filter(Boolean)
+              .join(", ")}
             onPress={() => onSelect(member.any ? null : member.id)}
             style={({ pressed }) => [styles.stylist, active && styles.stylistActive, pressed && ui.pressed]}
           >
@@ -440,6 +447,13 @@ export function StylistPicker({
               <Text style={styles.stylistRole} numberOfLines={1}>
                 {member.role}
               </Text>
+            ) : null}
+            {member.badge ? (
+              <View style={styles.stylistBadge}>
+                <Text style={styles.stylistBadgeText} numberOfLines={1}>
+                  {member.badge}
+                </Text>
+              </View>
             ) : null}
             {active ? (
               <View style={styles.stylistCheck}>
@@ -928,6 +942,15 @@ const styles = StyleSheet.create({
   avatarInitial: { fontFamily: fontFamily.bold, fontSize: 20, lineHeight: 24, color: "#2e2440" },
   stylistName: { fontFamily: fontFamily.semibold, fontSize: 13, lineHeight: 17, color: bk.text, textAlign: "center" },
   stylistRole: { fontFamily: fontFamily.regular, fontSize: 11, lineHeight: 14, color: bk.secondary, textAlign: "center" },
+  stylistBadge: {
+    marginTop: 4,
+    alignSelf: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#f3eee9",
+  },
+  stylistBadgeText: { fontFamily: fontFamily.semibold, fontSize: 11, lineHeight: 14, color: bk.text },
   stylistCheck: {
     position: "absolute",
     top: 8,

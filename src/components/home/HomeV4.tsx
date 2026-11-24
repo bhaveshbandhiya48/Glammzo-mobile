@@ -17,6 +17,7 @@ import { useTopArtists } from "@/components/home/useTopArtists"
 import type { Salon } from "@/data/types"
 import { currentAreaLabel } from "@/lib/explore-location"
 import { haversineKm } from "@/lib/geo"
+import { artistMatchesGenderAudience } from "@/lib/gender-audience"
 import { useHomeAudience } from "@/lib/home-audience"
 import { topRatedSalons } from "@/lib/home-salon-info"
 import { resolveSalonById } from "@/lib/salons-api"
@@ -65,6 +66,15 @@ export function HomeV4({
   const bookAgain = useMemo(() => pickBookAgain(bookings), [bookings])
   const topRated = useMemo(() => topRatedSalons(salons), [salons])
   const topArtists = useTopArtists(location?.latitude, location?.longitude, refreshKey)
+  // The Women / Men switch narrows artists the same way as salons: unisex shows for both.
+  const topArtistList = useMemo(
+    () => topArtists.artists?.filter((artist) => artistMatchesGenderAudience(artist, audience)) ?? null,
+    [topArtists.artists, audience],
+  )
+  const topHomeArtistList = useMemo(
+    () => topArtists.homeArtists?.filter((artist) => artistMatchesGenderAudience(artist, audience)) ?? null,
+    [topArtists.homeArtists, audience],
+  )
 
   const nextSalon = useMemo(() => {
     if (!nextBooking || nextBooking.kind === "artist") return undefined
@@ -131,8 +141,8 @@ export function HomeV4({
           <BookAgainRow bookings={bookAgain} />
           <TopRatedRow
             salons={topRated}
-            artists={topArtists.artists}
-            homeArtists={topArtists.homeArtists}
+            artists={topArtistList}
+            homeArtists={topHomeArtistList}
             artistsStatus={topArtists.status}
             artistLabels={topArtists.labels}
             onSeeAll={seeAllTopRated}
